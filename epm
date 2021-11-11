@@ -314,25 +314,52 @@ def cmd_mark(series_config, args, opts, mark):
 	season = None
 	episode = None
 
+	ep_ptn = re.compile(r'^\s*(s\d+(-\d+)?)(e\d+(-\d+)?)\s*$')
+
+	# supported syntaxes:
+	#   nothing:                                (all seasons, all episodes)
+	#   single numbers:              1 2        (season 1, episode 2)
+	#   ranges:                      1-2 1-5    (season 1-2, episode 1-5)
+	#   season descriptor:           s1         (season 1, all episodes)
+	#   "descriptor":                s1e2       (season 1, episode 2)
+	#   "descriptor" spaces:         s1 e2      (season 1, episode 2)
+	#   "descriptor" ranges:         s1-3e1-4   (season 1-3, episode 1-4)
+	#   "descriptor" spaced ranges:  s1-3 e1-4  (season 1-3, episode 1-4)
+
+	if args:
+		arg = args.pop(0)
+
+		m = ep_ptn.search(arg)
+		if m:
+			print('matched:', m.groups())
+			args = [ m.group(1) ]
+			if m.group(3):
+				args.append(m.group(3))
+
+		else:
+			args.insert(0, arg)
+
 	if args:
 		season = args.pop(0)
+
 		try:
-			rng = [int(n) for n in season.split('-')]
+			rng = [int(n) for n in season.lower().lstrip('s').split('-')]
 			if len(rng) == 2:
 				season = range(min(rng), max(rng) + 1)
 			else:
-				season = (int(season), )
+				season = (int(rng[0]), )
 		except ValueError as ve:
 			return f'Bad season number/range: {season}'
 
 	if args:
 		episode = args.pop(0)
+
 		try:
-			rng = [int(n) for n in episode.split('-')]
+			rng = [int(n) for n in episode.lower().lstrip('e').split('-')]
 			if len(rng) == 2:
 				episode = range(min(rng), max(rng) + 1)
 			else:
-				episode = (int(episode), )
+				episode = (int(rng[0]), )
 		except:
 			return f'Bad episode number/range: {episode}'
 
@@ -435,8 +462,11 @@ def no_series(series_config):
 		return 'No series. Use: \x1b[1m%s add <title> [<year>]\x1b[m' % PRG
 
 
-def refresh_episodes(imdb_id, series_config):
-	print('\x1b[2mRefreshing episodes for %s...\x1b[m' % imdb_id, end='', flush=True)
+def refresh_episodes(imdb_id, series_config, progress=None):
+	if progress:
+		print('\x1b[2m(%d / %d) Refreshing episodes for %s...\x1b[m' % (progress[0], progress[1], imdb_id), end='', flush=True)
+	else:
+		print('\x1b[2mRefreshing episodes for %s...\x1b[m' % imdb_id, end='', flush=True)
 	episodes = omdb.episodes(imdb_id, details=True)
 	print('\r\x1b[J', end='', flush=True)
 
@@ -463,12 +493,16 @@ def refresh_all_episodes(series_config, opts):
 	updated = 0
 	downloaded = 0
 
-	for _, imdb_id, series in get_series(series_config):
+	# TODO: do this in parallel
+
+	all_series = get_series(series_config)
+
+	for idx, (_, imdb_id, series) in enumerate(all_series):
 		if series.get('hidden') == True:
 			continue
 		last_refresh = series.get(episodes_refreshed_key)
 		if not last_refresh or age(last_refresh) > max_age:
-			result = refresh_episodes(imdb_id, series_config)
+			result = refresh_episodes(imdb_id, series_config, progress=(idx + 1, len(all_series)))
 			if result:
 				updated += 1
 				downloaded += result

@@ -41,7 +41,10 @@ def search(search, type='series', year=None):
 		return []
 
 	data = json.loads(resp.content)
-	hits = data.get('Search', [])
+	if search_mode == 's':
+		hits = data.get('Search', [])
+	else:
+		hits = [data]
 
 	_lower_case_keys(hits)
 	_strip_keys(hits, ['type'])
