@@ -325,7 +325,7 @@ def cmd_add(series_config, args, opts):
 		if series_imdb_id == imdb_id:
 			break
 
-	print_series_title(index, {**hit, 'id': imdb_id})
+	print_series_title(index, {**hit, 'id': imdb_id}, imdb_id=imdb_id)
 
 
 def cmd_delete(series_config, args, options):
@@ -383,7 +383,6 @@ def cmd_mark(series_config, args, opts, mark):
 
 		m = ep_ptn.search(arg)
 		if m:
-			print('matched:', m.groups())
 			args = [ m.group(1) ]
 			if m.group(3):
 				args.append(m.group(3))
@@ -609,6 +608,7 @@ def print_series_title(num, info, title_width=0, imdb_id=None, gray=False, end=N
 		s += f'  \x1b[2m{imdb_id}\x1b[22;39m'
 
 	if gray:
+		# remove all escape sequences
 		s = '\x1b[2m%s\x1b[22;39m' % re.sub('\x1b\\[[^m]*m', '', s)
 
 	print(f'\x1b[48;5;234m\x1b[J\r{s}\x1b[m', end=end)
