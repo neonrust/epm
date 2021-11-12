@@ -10,7 +10,7 @@ from datetime import datetime, date
 
 import omdb
 
-VERSION = '0.2'
+VERSION = '0.3'
 VERSION_DATE = '2021-11-11'
 
 PRG = os.path.basename(sys.argv[0])
@@ -27,21 +27,46 @@ def main():
 		'max-age': default_max_episodes_refresh_age,
 	}
 
-	known_commands = ('unseen', 'list', 'add', 'remove', 'mark', 'unmark', 'remove', 'hide', 'unhide', 'refresh', 'help')
+	known_commands = (
+		'unseen',
+		('list', 'ls'),
+		'add',
+		'delete',
+		'mark',
+		('unmark', 'um'),
+		'archive',
+		'restore',
+		'refresh',
+		'help'
+	)
 	default_command = known_commands[0]
 
 	def resolve_cmd(name):
 		matching = []
-		for cmd in known_commands:
-			if cmd == name:
-				return cmd
-			if cmd.startswith(name):
-				matching.append(cmd)
+
+		if name.startswith('.'):
+			name = name[1:]
+
+			for cmd in known_commands:
+				if isinstance(cmd, str):
+					if name == cmd:
+						return cmd
+					if cmd.startswith(name):
+						matching.append(cmd)
+				elif isinstance(cmd, tuple):
+					if name in cmd:
+						return cmd[0]
+					if [c.startswith(name) for c in cmd].count(True):
+						return cmd[0]
+
 		if len(matching) == 1:
 			return matching[0]
 		if len(matching) > 1:
 			ambiguous_cmd(name, matching)
-		bad_cmd(name)
+
+		# no command matched, use it as argument to the default command
+		command_args.append(name)
+		return default_command
 
 
 	args = sys.argv[1: ]
@@ -55,7 +80,7 @@ def main():
 				print_usage()
 			elif not eat_option(command, arg, args, options):
 				bad_opt(arg)
-		if not command:
+		elif not command:
 			command = resolve_cmd(arg)
 		else:
 			command_args.append(arg)
@@ -64,6 +89,7 @@ def main():
 		command = default_command
 
 	series_config = load_series_config()
+
 
 	if command == 'help':
 		print_usage()
@@ -77,14 +103,14 @@ def main():
 	elif command == 'add':
 		err = cmd_add(series_config, command_args, options)
 
-	elif command == 'remove':
-		err = cmd_remove(series_config, command_args, options)
+	elif command == 'delete':
+		err = cmd_delete(series_config, command_args, options)
 
 	elif command in ('mark', 'unmark'):
 		err = cmd_mark(series_config, command_args, options, command == 'mark')
 
-	elif command in ('hide', 'unhide'):
-		err = cmd_hide(series_config, command_args, options, command == 'hide')
+	elif command in ('archive', 'restore'):
+		err = cmd_archive(series_config, command_args, options, command == 'archive')
 
 	elif command == 'refresh':
 		err = cmd_refresh(series_config, command_args, options)
@@ -106,13 +132,13 @@ def eat_option(command, option, args, options):
 	elif command:
 		print(f'\x1b[41;97;1mcommand {command} option config for {option} is not implemented: {opt_cfg}\x1b[m', file=sys.stderr)
 	else:
-		print(f'\x1b[41;97;global option config for {option} is not implemented: {opt_cfg}\x1b[m', file=sys.stderr)
+		print(f'\x1b[41;97;1mglobal option {option} is not implemented\x1b[m', file=sys.stderr)
 
 	return True
 
 
 def cmd_list_unseen(series_config, args, opts):
-	refresh_all_episodes(series_config, opts)
+	refresh_all_episodes(series_config, opts=opts)
 
 	series_list = get_series(series_config)
 	if not series_list:
@@ -121,69 +147,95 @@ def cmd_list_unseen(series_config, args, opts):
 	max_width = 0
 	series_unseen = []
 	for index, imdb_id, series in series_list:
-		_, unseen = seen_unseen_episodes(series)
+		_, unseen = seen_unseen_episodes(series)#, before=now_datetime())
 		if unseen:
 			series_unseen.append((index, imdb_id, series, unseen))
 			max_width = max(max_width, len(series['title']))
-		#else:
-		#	print_series_title(idx, series, imdb_id=imdb_id)
 
 	if not series_unseen:
 		return 'Everything has been seen, what to do?!?'
 
-	search = re.compile('.*?'.join(re.escape(a.casefold()) for a in ' '.join(args).split()))
-	def match_search(series):
-		return search.search(series['title'].casefold()) is not None
+	if args:
+		search = re.compile('.*?'.join(re.escape(a.casefold()) for a in ' '.join(args).split()))
+		def match_search(series):
+			return search.search(series['title'].casefold()) is not None
+
+	else:
+		search = None
+
+	# TODO: group by season
+	# TODO: sort by "earliest" episode in summary mode?
 
 	total = 0
 	total_duration = 0
 
+	ep_max_width = max(len(unseen[0]['title']) if unseen else 0 for _, _, _, unseen in series_unseen for ep in unseen)
+	ep_max_width = min(ep_max_width, 25)
+
+
 	for index, imdb_id, series, unseen in series_unseen:
+
 		if search and not match_search(series):
 			continue
 
-		print_series_title(index, series, imdb_id=imdb_id, title_width=max_width)
+		end = None
+		if not search:
+			end = ' \x1b[2m%3d episode%s\x1b[22;39m\n' % (len(unseen), plural(unseen))
+
+		print_series_title(index, series, title_width=max_width, end=end)
 
 		total += len(unseen)
 		total_duration += sum(ep.get('runtime', 0) for ep in unseen)
 
-		ep_max_width = max(len(ep['title']) for ep in unseen)
-		for ep in unseen:
-			if not print_episode_title('    ', ep, title_width=ep_max_width):
-				break
+		if search:
+			current_season = 0
+			for idx, ep in enumerate(unseen):
+				season = ep['season']
+				if season != current_season:
+					print('    S%d\r' % season, end='')
+					current_season = season
 
-	print(f'Total: \x1b[1m{total}\x1b[m episodes  \x1b[2m{fmt_duration(total_duration)}\x1b[m')
+				if not print_episode_title('\x1b[6C', ep, title_width=ep_max_width, remaining=len(unseen) - idx - 1):
+					break
+		else:
+			print(f'       Next: ', end='')
+			print_episode_title(None, unseen[0], title_width=ep_max_width)
+
+	print(f'\x1b[48;5;235m\x1b[J\rTotal unseen: \x1b[1m{total}\x1b[22;39m episodes  \x1b[2m{fmt_duration(total_duration)}\x1b[22;39m')
 
 
 def cmd_list(series_config, args, opts):
-	refresh_all_episodes(series_config, opts)
+	refresh_all_episodes(series_config, opts=opts)
 
 	series_list = get_series(series_config)
 
 	if not series_list:
 		return no_series(series_config)
 
-	max_width = max(map(lambda item: len(item[-1]['title']) if not item[-1].get('hidden') else 0, series_list))
+	max_width = max(map(lambda item: len(item[-1]['title']) if 'archived' not in item[-1] else 0, series_list))
 
 	# TODO: print header/columns
 
-	include_hidden = 'list:all' in opts
-	only_hidden = 'list:hidden' in opts
+	list_all = 'list:all' in opts
+	only_archived = 'list:archived' in opts
 
 	search = re.compile('.*?'.join(re.escape(a.casefold()) for a in ' '.join(args).split()))
 	def match_search(series):
 		return search.search(series['title'].casefold()) is not None
 
 	for index, imdb_id, series in series_list:
-		hidden = series.get('hidden') is True
-		if hidden and not (include_hidden or only_hidden):
+		archived = 'archived' in series
+		if archived and not (list_all or only_archived):
 			continue
-		if not hidden and only_hidden:
+		if not archived and only_archived:
 			continue
 		if search and not match_search(series):
 			continue
-		print_series_title(index, series, imdb_id=imdb_id, title_width=max_width, gray=hidden)
-		print_seen_status(series, gray=hidden)
+
+		print_series_title(index, series, imdb_id=imdb_id, title_width=max_width, gray=archived)
+		if archived:
+			print('\x1b[2m       Archived: %s\x1b[m' % series.get('archived'))
+		print_seen_status(series, gray=archived)
 
 
 def cmd_add(series_config, args, opts):
@@ -276,7 +328,7 @@ def cmd_add(series_config, args, opts):
 	print_series_title(index, {**hit, 'id': imdb_id})
 
 
-def cmd_remove(series_config, args, options):
+def cmd_delete(series_config, args, options):
 	if not args:
 		return 'Required argument missing: #/<IMDb ID>'
 
@@ -286,21 +338,21 @@ def cmd_remove(series_config, args, options):
 
 	del series_config[imdb_id]
 
-	print('\x1b[1mRemoving series:\x1b[m')
+	print('\x1b[1mDeleting series:\x1b[m')
 	print_series_title(None, series, imdb_id=imdb_id)
 
 	answer = input('\x1b[41;37;1mAre you sure? (can not be undone)\x1b[m [yes/No] ')
 	if answer.lower() not in ('y', 'yes'):
-		return 'Remove cancelled'
+		return 'Delete cancelled'
 
 	save_series_config(series_config)
 
-	print('\x1b[1mSeries removed:\x1b[m \x1b[2m(series renumbered)\x1b[m')
+	print('\x1b[1mSeries deleted:\x1b[m \x1b[2m(series renumbered)\x1b[m')
 	print_series_title(index, series, imdb_id=imdb_id)
 
 
 def cmd_mark(series_config, args, opts, mark):
-	refresh_all_episodes(series_config, opts)
+	refresh_all_episodes(series_config, opts=opts)
 
 	if not args:
 		return 'Required argument missing: #/<IMDb ID>'
@@ -391,8 +443,7 @@ def cmd_mark(series_config, args, opts, mark):
 	else:
 		print(f'\x1b[33;1m{len(marked)}\x1b[m', end='')
 
-	plural = '' if len(marked) == 1 else 's'
-	print(f' episode{plural} as seen:  \x1b[0;2m{fmt_duration(marked_duration)}\x1b[m')
+	print(f' episode{plural(marked)} as seen:  \x1b[0;2m{fmt_duration(marked_duration)}\x1b[m')
 
 	if marked:
 		max_width = max(len(ep['title']) for ep in marked)
@@ -403,7 +454,7 @@ def cmd_mark(series_config, args, opts, mark):
 	save_series_config(series_config)
 
 
-def cmd_hide(series_config, args, options, hidden):
+def cmd_archive(series_config, args, options, archiving):
 	if not args:
 		return 'Required argument missing: #/<IMDb ID>'
 
@@ -413,21 +464,21 @@ def cmd_hide(series_config, args, options, hidden):
 	if err is not None:
 		return err
 
-	currently_hidden = series.get('hidden', False) == True
+	currently_archived = series.get('archived', False) == True
 
-	if hidden == currently_hidden:
-		# TODO: better presentation
-		if hidden:
-			return 'Already hidden: %s' % series['title']
+	if archiving == currently_archived:
+		# TODO: better presentation of title
+		if archiving:
+			return 'Already archived: %s' % series['title']
 		else:
-			return 'Not hidden: %s' % series['title']
+			return 'Not archived: %s' % series['title']
 
-	series['hidden'] = hidden
-
-	if hidden:
-		print('\x1b[1mSeries hidden:\x1b[m')
+	if archiving:
+		print('\x1b[1mSeries archived:\x1b[m')
+		series['archived'] = True
 	else:
-		print('\x1b[1mSeries un-hidden:\x1b[m')
+		print('\x1b[1mSeries restored:\x1b[m')
+		del series['archived']
 
 	print_series_title(index, series, imdb_id=imdb_id)
 
@@ -435,7 +486,7 @@ def cmd_hide(series_config, args, options, hidden):
 
 
 def cmd_refresh(series_config, args, opts):
-	refresh_all_episodes(series_config, { **opts, 'max-age': 0 })
+	refresh_all_episodes(series_config, args, { **opts, 'max-age': 0 })
 
 
 def find_series(series_config, find_id):
@@ -455,9 +506,9 @@ def find_series(series_config, find_id):
 
 
 def no_series(series_config):
-	num_hidden = series_num_hidden(series_config)
-	if num_hidden:
-		return 'No series [%d hidden]. Use: \x1b[1m%s add <title> [<year>]\x1b[m' % (num_hidden, PRG)
+	num_archived = series_num_archived(series_config)
+	if num_archived:
+		return 'No series [%d archived]. Use: \x1b[1m%s add <title> [<year>]\x1b[m' % (num_archived, PRG)
 	else:
 		return 'No series. Use: \x1b[1m%s add <title> [<year>]\x1b[m' % PRG
 
@@ -481,7 +532,7 @@ def refresh_episodes(imdb_id, series_config, progress=None):
 	return len(episodes)
 
 
-def refresh_all_episodes(series_config, opts):
+def refresh_all_episodes(series_config, args=None, opts=None):
 	opts = opts or {}
 	max_age = opts.get('max-age', default_max_episodes_refresh_age)
 
@@ -493,13 +544,24 @@ def refresh_all_episodes(series_config, opts):
 	updated = 0
 	downloaded = 0
 
+	if args:
+		search = re.compile('.*?'.join(re.escape(a.casefold()) for a in ' '.join(args).split()))
+		def match_search(series):
+			return search.search(series['title'].casefold()) is not None
+	else:
+		search = None
+
+
 	# TODO: do this in parallel
 
 	all_series = get_series(series_config)
 
 	for idx, (_, imdb_id, series) in enumerate(all_series):
-		if series.get('hidden') == True:
+		if 'archived' in series:
 			continue
+		if search and not match_search(series):
+			continue
+
 		last_refresh = series.get(episodes_refreshed_key)
 		if not last_refresh or age(last_refresh) > max_age:
 			result = refresh_episodes(imdb_id, series_config, progress=(idx + 1, len(all_series)))
@@ -517,9 +579,10 @@ def transform_episode_info(episode):
 	episode.pop('imdbvotes', 0)
 
 
-def print_series_title(num, info, title_width=0, imdb_id=None, gray=False):
+def print_series_title(num, info, title_width=0, imdb_id=None, gray=False, end=None):
 	infop = {**info}
 
+	# pad title string if width is specified
 	if title_width > 0:
 		infop['title'] = f'%-{title_width}s' % infop['title']
 
@@ -536,33 +599,51 @@ def print_series_title(num, info, title_width=0, imdb_id=None, gray=False):
 	if num is not None:
 		infop['_num'] = '%5s' % f'#{num}'
 
-		s = '\x1b[33;1m%(_num)s \x1b[39;1m%(title)s\x1b[22;39m  \x1b[34;1m%(year)-9s\x1b[22;39m  \x1b[2m%(id)s\x1b[22;39m' % infop
+		s = '\x1b[33;1m%(_num)s \x1b[38;5;253m%(title)s\x1b[22;39m  \x1b[38;5;245m%(year)-9s\x1b[22;39m' % infop
 	else:
 		if 'added' in infop:
 			infop['added'] = infop['added'].split()[0]
-		s = ' \x1b[32;1m%(added)s\x1b[22;39m  \x1b[1m%(title)s\x1b[22;39m  \x1b[34;1m%(year)-9s\x1b[22;39m  \x1b[2m%(id)s\x1b[22;39m' % infop
+		s = ' \x1b[32;1m%(added)s\x1b[22;39m  \x1b[38;5;253m%(title)s\x1b[22;39m  \x1b[38;5;245m%(year)-9s\x1b[22;39m' % infop
+
+	if imdb_id is not None:
+		s += f'  \x1b[2m{imdb_id}\x1b[22;39m'
 
 	if gray:
 		s = '\x1b[2m%s\x1b[22;39m' % re.sub('\x1b\\[[^m]*m', '', s)
 
-	print(f'\x1b[48;5;234m\x1b[J\r{s}\x1b[m')
+	print(f'\x1b[48;5;234m\x1b[J\r{s}\x1b[m', end=end)
 
 
-def print_episode_title(series_title, episode, title_width=1, gray=False):
+def print_episode_title(series_title, episode, title_width=0, gray=False, remaining=0):
+	s = ''
+
+	ep = {**episode}
+
 	if series_title:
-		print(f'  {series_title} ', end='')
+		s += f'  {series_title} '
 
-	s = f'\x1b[33;1ms{episode["season"]}e{episode["episode"]:02}\x1b[m \x1b[34;1m{episode["title"]:{title_width}}\x1b[m  '
+	if title_width == 0:
+		title_width = len(ep['title'])
+	elif len(ep['title']) > title_width:
+		ep['title'] = ep['title'][:title_width - 1] + '…'
+
+	s += f'\x1b[33;1ms{ep["season"]}e{ep["episode"]:02}\x1b[m \x1b[34;1m{ep["title"]:{title_width}}\x1b[m  '
 
 	future = False
 	if 'date' in episode:
-		dt = date.fromisoformat(episode.get('date'))
-		future = dt > datetime.now().date()
+		dt = date.fromisoformat(ep.get('date'))
+		now_date = now_datetime().date()
+		diff = (dt - now_date).total_seconds()
+		future = diff > 0
 
 	if future:
 		s += f'\x1b[1m{dt}\x1b[m'
-	else:
-		s += f'\x1b[2m{fmt_duration(episode.get("runtime", 0))}\x1b[m'
+		if diff > 24*3600:
+			s += f'\x1b[38;5;244m/{fmt_duration(diff, roughly=True)}\x1b[m'
+		if remaining:
+			s += '  \x1b[32;1m+%d\x1b[m' % remaining
+	#else:
+	#	s += f'\x1b[2m{fmt_duration(episode.get("runtime", 0))}\x1b[m'
 
 	if gray:
 		s = '\x1b[2m%s\x1b[m' % re.sub('\x1b\\[[^m]*m', '', s)
@@ -572,7 +653,11 @@ def print_episode_title(series_title, episode, title_width=1, gray=False):
 	return not future
 
 
-def fmt_duration(seconds):
+def fmt_duration(seconds, roughly=False):
+	months = int(seconds//(3600*24*30.4366666))
+	seconds -= months*3600*24*30.4366666
+	weeks = int(seconds//(3600*24*7))
+	seconds -= weeks*3600*24*7
 	days = int(seconds//(3600*24))
 	seconds -= days*3600*24
 	hours = int(seconds//3600)
@@ -580,15 +665,31 @@ def fmt_duration(seconds):
 	minutes = int(seconds//60)
 	seconds = int(seconds%60)
 
+	units = {
+		'short': { 'm': 'm', 'w': 'w', 'd': 'd', 'h': 'h', 'min': 'min', 's': 's' },
+		'long': {'m': 'month', 'w': 'week', 'd': 'day', 'h': 'hour', 'min': 'minute', 's': 'second' },
+	}
+	unit = units['long' if roughly else 'short']
+	templ = '%d %s%s' if roughly else '%d%s%s'
+
 	parts = []
-	if days > 0:
-		parts.append('%dd' % days)
-	if hours > 0:
-		parts.append('%dh' % hours)
-	if minutes:
-		parts.append('%dm' % minutes)
-	if seconds:
-		parts.append('%ds' % seconds)
+
+	if months > 0:
+		parts.append(templ % (months, unit['m'], plural(months if roughly else 1)))
+	elif weeks > 0:
+		parts.append(templ % (weeks, unit['w'], plural(weeks if roughly else 1)))
+
+	if not roughly or (not months and not weeks):
+		if days > 0:
+			parts.append(templ % (days, unit['d'], plural(days if roughly else 1)))
+
+	if not roughly:
+		if hours > 0:
+			parts.append(templ % (hours, unit['h'], plural(hours if roughly else 1)))
+		if minutes:
+			parts.append(templ % (minutes, unit['min'], plural(minutes if roughly else 1)))
+		if seconds:
+			parts.append(templ % (seconds, unit['s'], plural(seconds if roughly else 1)))
 
 	return ' '.join(parts)
 
@@ -607,6 +708,9 @@ def print_seen_status(series, gray=False):
 
 	s = ''
 
+	if seen or unseen:
+		s += '\x1b[38;5;256mTotal: '
+
 	if seen:
 		seen_duration = sum(ep.get('runtime', 0) for ep in seen)
 		s += f'Seen: {len(seen)}  \x1b[2m{fmt_duration(seen_duration)}\x1b[m'
@@ -614,30 +718,40 @@ def print_seen_status(series, gray=False):
 			s += '  \x1b[32;1mALL\x1b[m'
 
 	if seen and unseen:
-		s += ' \x1b[1m-\x1b[m '
+		s += ' \x1b[34;1m-\x1b[m '
 
 	if unseen:
 		unseen_duration = sum(ep.get('runtime', 0) for ep in unseen)
 		s += f'Unseen: {len(unseen)}  \x1b[2m{fmt_duration(unseen_duration)}\x1b[m'
 
+	if seen or unseen:
+		s += '\x1b[m'
+
 	if gray:
 		s = '\x1b[2m%s\x1b[m' % re.sub('\x1b\\[[^m]*m', '', s)
 	print(s)
 
-	if seen and not all_seen:
+	title_width = 0
+	if seen and unseen:
+		title_width = max(len(seen[-1]['title']), len(unseen[0]['title']))
+
+	if seen:# and not all_seen:
 		# show the last *in sequence* episode marked as seen,
 		# NOT the episode last *marked* as seen
 		if gray:
 			print('\x1b[2m', end='')
-		print(f'{ind}Last seen: ', end='')
-		print_episode_title('', seen[-1], gray=gray)
+		print(f'{ind}Last: ', end='')
+		print_episode_title('', seen[-1], gray=gray, title_width=title_width)
 
-	# TODO: if latest available episode is seen, find next upcoming episode
-	#   else, just show next episode after last seen, if any
+	if unseen:
+		if gray:
+			print('\x1b[2m', end='')
+		print(f'{ind}Next: ', end='')
+		print_episode_title('', unseen[0], gray=gray, title_width=title_width)
 
 
-def series_num_hidden(series_config):
-	return sum(1 if series.get('hidden') else 0 for series in series_config.values())
+def series_num_archived(series_config):
+	return sum(1 if 'archived' in series else 0 for series in series_config.values())
 
 
 def get_series(series_config):
@@ -652,7 +766,7 @@ def get_series(series_config):
 	return series
 
 
-def seen_unseen_episodes(series):
+def seen_unseen_episodes(series, before=None):
 	episodes = series.get('episodes', [])
 	seen = series.get('seen', {})
 
@@ -663,6 +777,14 @@ def seen_unseen_episodes(series):
 		if _ep_key(ep) in seen:
 			seen_eps.append(ep)
 		else:
+			# only include episodes that are already available in 'unseen'
+			dt = ep.get('date')
+			if not dt:
+				continue
+			dt = datetime.fromisoformat(ep.get('date'))
+			if before and dt > before:
+				continue
+
 			unseen_eps.append(ep)
 
 	return seen_eps, unseen_eps
@@ -680,7 +802,7 @@ known_options = {
 	},
 	'list': {
 		'--all':    'list:all',
-		'--hidden': 'list:hidden',
+		'--archived': 'list:archived',
 	}
 }
 
@@ -692,39 +814,41 @@ def print_usage(exit_code=0):
 	n = '\x1b[m'
 	print(f'{b}%s{n} / Episode Manager / (c)2021 André Jonsson' % PRG)
 	print('Version %s (%s) ' % (VERSION, VERSION_DATE))
-	print(f'{b}Usage:{n} %s [<options>] [{c}<command>{n} [{o}<args>{n}]]' % PRG)
+	print(f'{b}Usage:{n} %s [<options>] [{c}.<command>{n} [{o}<args>{n}]]' % PRG)
 	print()
 	print(f'Where {c}<command>{n} is:')
-	print(f'   {c}add{n}     Add series')
+	print(f'   {c}.add{n}     Add series')
 	print(f'           {o}<title> [<year>]{n}')
 	print(f'           {o}<IMDb ID>{n}')
-	print(f'   {c}unseen{n}  Show unseen episodes of series')
-	print(f'           {o}[<pattern>]   Show only matching{n}')
-	print(f'   {c}list{n}    List configured series')
-	print(f'           {o}--all     Include also hidden series{n}')
-	print(f'           {o}--hidden  List only hidden series{n}')
-	print(f'           {o}[<pattern>]   Show only matching{n}')
-	print(f'   {c}mark{n}    Mark episode as seen')
+	print(f'   {c}.unseen{n}  Show unseen episodes of series')
+	print(f'           {o}[<pattern>]                     (show only matching){n}')
+	print(f'   {c}.list{n}    List configured series')
+	print(f'           {o}--all                           (include also archived series){n}')
+	print(f'           {o}--archived                      (list only archived series){n}')
+	print(f'           {o}[<pattern>]                     (show only matching){n}')
+	print(f'   {c}.mark{n}    Mark episode as seen')
+	print(f'           {o}#/<IMDb ID> <season> <episode>  (specific episodes){n}')
+	print(f'           {o}#/<IMDb ID> <season>            (whole seasons){n}')
+	print(f'           {o}#/<IMDb ID>                     (the whole series){n}')
+	print(f'   {c}.unmark{n}  Remove mark, as added by {c}mark{n}')
 	print(f'           {o}#/<IMDb ID> <season> <episode>  (single episode){n}')
 	print(f'           {o}#/<IMDb ID> <season>            (a whole season){n}')
 	print(f'           {o}#/<IMDb ID>                     (the whole series){n}')
-	print(f'   {c}unmark{n}  Remove mark, as added by {c}mark{n}')
-	print(f'           {o}#/<IMDb ID> <season> <episode>  (single episode){n}')
-	print(f'           {o}#/<IMDb ID> <season>            (a whole season){n}')
-	print(f'           {o}#/<IMDb ID>                     (the whole series){n}')
-	print(f'   {c}remove{n}  Remove series (completely remove from config)')
+	print(f'   {c}.delete{n}  Delete series (completely remove from config)')
 	print(f'           {o}#/<IMDb ID>{n}')
-	print(f'   {c}hide{n}    Hide series (still in config, but not normally shown)')
+	print(f'   {c}.archive{n} Archive series (still in config, but not normally shown)')
 	print(f'           {o}#/<IMDb ID>{n}')
-	print(f'   {c}unhide{n}  Hide series')
-	print(f'           {o}<IMDb ID>{n}')
-	print(f'   {c}refresh{n} Refresh episode data (forcibly)')
+	print(f'   {c}.restore{n} Restore previously archived series')
+	print(f'           {o}#/<IMDb ID>{n}')
+	print(f'   {c}.refresh{n} Refresh episode data (forcibly)')
+	print(f'           {o}[#/<IMDb ID>]                    (only specified series){n}')
+	print(f'           {o}[<pattern>]                      (only matching series){n}')
 	print()
 	print('Remarks:')
-	print(f'  # = Series number, as listed by the {c}list{n} or {c}unseen{n} commands.')
-	print('  <season> and <episode> allows ranges, e.g.: \x1b[1m2-4\x1b[m.')
+	print(f'  # = Series number, as listed by e.g. the {c}list{n} or {c}unseen{n} commands.')
+	print(f'  Marking/unmarking also supports ranges, e.g. {b}%s mark 1 2 1-10{n}' % PRG)
+	print(f'  If the given command is not found, it is used as a pattern to the {b}unseen{n} command.')
 	sys.exit(exit_code)
-
 
 def bad_opt(opt):
 	print('Unknown option: \x1b[41;97;1m%s\x1b[m' % opt, file=sys.stderr)
@@ -763,6 +887,12 @@ def save_series_config(config):
 
 	with open(series_config_file, 'w') as fp:
 		json.dump(config, fp, indent=2, sort_keys=True)
+
+
+def plural(n):
+	if isinstance(n, (list, tuple, dict)):
+		n = len(n)
+	return '' if n == 1 else 's'
 
 
 if __name__ == '__main__':
