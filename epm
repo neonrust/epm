@@ -180,7 +180,7 @@ def cmd_list_unseen(series_config, args, opts):
 
 		end = None
 		if not search:
-			end = ' \x1b[2m%3d episode%s\x1b[22;39m\n' % (len(unseen), plural(unseen))
+			end = ' \x1b[2m%3d episode%s\x1b[22;39m' % (len(unseen), plural(unseen))
 
 		print_series_title(index, series, title_width=max_width, end=end)
 
@@ -611,7 +611,10 @@ def print_series_title(num, info, title_width=0, imdb_id=None, gray=False, end=N
 		# remove all escape sequences
 		s = '\x1b[2m%s\x1b[22;39m' % re.sub('\x1b\\[[^m]*m', '', s)
 
-	print(f'\x1b[48;5;234m\x1b[J\r{s}\x1b[m', end=end)
+	if end:
+		s += end
+
+	print(f'\x1b[48;5;234m\x1b[J\r{s}\x1b[m')
 
 
 def print_episode_title(series_title, episode, title_width=0, gray=False, remaining=0):
@@ -625,16 +628,19 @@ def print_episode_title(series_title, episode, title_width=0, gray=False, remain
 	if title_width == 0:
 		title_width = len(ep['title'])
 	elif len(ep['title']) > title_width:
-		ep['title'] = ep['title'][:title_width - 1] + '…'
+		title_width -= 2
+		ep['title'] = ep['title'][:title_width] + '…'
 
 	s += f'\x1b[33;1ms{ep["season"]}e{ep["episode"]:02}\x1b[m \x1b[34;1m{ep["title"]:{title_width}}\x1b[m  '
 
 	future = False
+	today = False
 	if 'date' in episode:
 		dt = date.fromisoformat(ep.get('date'))
 		now_date = now_datetime().date()
 		diff = (dt - now_date).total_seconds()
 		future = diff > 0
+		today = diff == 0
 
 	if future:
 		s += f'\x1b[1m{dt}\x1b[m'
@@ -642,6 +648,8 @@ def print_episode_title(series_title, episode, title_width=0, gray=False, remain
 			s += f'\x1b[38;5;244m/{fmt_duration(diff, roughly=True)}\x1b[m'
 		if remaining:
 			s += '  \x1b[32;1m+%d\x1b[m' % remaining
+	elif today:
+		s += '\x1b[32;1mTODAY\x1b[m'
 	#else:
 	#	s += f'\x1b[2m{fmt_duration(episode.get("runtime", 0))}\x1b[m'
 
