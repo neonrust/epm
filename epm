@@ -11,8 +11,8 @@ import concurrent.futures
 
 import omdb
 
-VERSION = '0.3'
-VERSION_DATE = '2021-11-11'
+VERSION = '0.4'
+VERSION_DATE = '2021-11-16'
 
 PRG = os.path.basename(sys.argv[0])
 
@@ -938,6 +938,7 @@ def print_usage(exit_code=0):
 	print(f'  # = Series number, as listed by e.g. the {c}list{n} or {c}unseen{n} commands.')
 	print(f'  Marking/unmarking also supports ranges, e.g. {b}%s mark 1 2 1-10{n}' % PRG)
 	print(f'  If the given command is not found, it is used as a pattern to the {b}unseen{n} command.')
+	print(f'  Only "shortest unique" part of the commands is required, e.g. ".ar"  for "archive".')
 	sys.exit(exit_code)
 
 def bad_opt(opt):
