@@ -22,48 +22,49 @@ Key is read from the environment:
 
 ## Usage
 
-epm / Episode Manager / (c)2021 André Jonsson
-Version 0.4 (2021-11-16) 
-Usage: epm [<options>] [.<command> [<args>]]
-
-Where <command> is:
-   .add     Add series
-           <title> [<year>]
-           <IMDb ID>
-   .unseen  Show unseen episodes of series
-           #/<IMDb ID>                     (show only specific)
-           [<pattern>]                     (show only matching)
-           --future                        (also unreleased, max 1)
-   .list    List configured series
-           --all                           (include also archived series)
-           --archived                      (list only archived series)
-           [<pattern>]                     (show only matching)
-   .mark    Mark episode as seen
-           #/<IMDb ID> <season> <episode>  (specific episodes)
-           #/<IMDb ID> <season>            (whole seasons)
-           #/<IMDb ID>                     (the whole series)
-   .unmark  Remove mark, as added by mark
-           #/<IMDb ID> <season> <episode>  (single episode)
-           #/<IMDb ID> <season>            (a whole season)
-           #/<IMDb ID>                     (the whole series)
-   .delete  Delete series (completely remove from config)
-           #/<IMDb ID>
-   .archive Archive series (still in config, but not normally shown)
-           #/<IMDb ID>
-   .restore Restore previously archived series
-           #/<IMDb ID>
-   .refresh Refresh episode data (forcibly)
-           [#/<IMDb ID>]                    (only specified series)
-           [<pattern>]                      (only matching series)
-
-Remarks:
-  # = Series number, as listed by e.g. the list or unseen commands.
-  Marking/unmarking also supports ranges, e.g. epm mark 1 2 1-10
-  If the given command is not found, it is used as a pattern to the unseen command.
-  Only "shortest unique" part of the commands is required, e.g. ".ar"  for "archive".
+    epm / Episode Manager / (c)2021 André Jonsson
+    Version 0.4 (2021-11-16) 
+    Usage: epm [<options>] [.<command> [<args>]]
+    
+    Where <command> is:
+       .add     Add series
+               <title> [<year>]
+               <IMDb ID>
+       .unseen  Show unseen episodes of series
+               #/<IMDb ID>                     (show only specific)
+               [<pattern>]                     (show only matching)
+               --future                        (also unreleased, max 1)
+       .list    List configured series
+               --all                           (include also archived series)
+               --archived                      (list only archived series)
+               [<pattern>]                     (show only matching)
+       .mark    Mark episode as seen
+               #/<IMDb ID> <season> <episode>  (specific episodes)
+               #/<IMDb ID> <season>            (whole seasons)
+               #/<IMDb ID>                     (the whole series)
+       .unmark  Remove mark, as added by mark
+               #/<IMDb ID> <season> <episode>  (single episode)
+               #/<IMDb ID> <season>            (a whole season)
+               #/<IMDb ID>                     (the whole series)
+       .delete  Delete series (completely remove from config)
+               #/<IMDb ID>
+       .archive Archive series (still in config, but not normally shown)
+               #/<IMDb ID>
+       .restore Restore previously archived series
+               #/<IMDb ID>
+       .refresh Refresh episode data (forcibly)
+               [#/<IMDb ID>]                    (only specified series)
+               [<pattern>]                      (only matching series)
+    
+    Remarks:
+      # = Series number, as listed by e.g. the list or unseen commands.
+      Marking/unmarking also supports ranges, e.g. epm mark 1 2 1-10
+      If the given command is not found, it is used as a pattern to the unseen command.
+      Only "shortest unique" part of the commands is required, e.g. ".ar"  for "archive".
 
 
 ## Examples
+
 
 Add a series you'd like to monitor.
 
