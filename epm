@@ -170,29 +170,36 @@ def cmd_list_unseen(series_config, args, opts):
 
 	# TODO: optionally sort series by "earliest" episode in summary mode
 
+	show_series = 0
 	total = 0
 	total_duration = 0
 
 	ep_max_width = max(len(unseen[0]['title']) if unseen else 0 for _, _, _, unseen in series_unseen for ep in unseen)
 	ep_max_width = min(ep_max_width, 25)
 
-
 	for index, imdb_id, series, unseen in series_unseen:
 
 		if search and not match_search(series):
 			continue
 
-		end = None
+		hilite = (show_series % 2) == 0
+
+		tail = None
 		if not search:
-			end = ' \x1b[2m%3d episode%s\x1b[22;39m' % (len(unseen), plural(unseen))
+			tail = ' \x1b[2m%3d episode%s\x1b[22;39m' % (len(unseen), plural(unseen))
 
 		series_printed = False
-		def print_series():
-			print_series_title(index, series, title_width=max_width, end=end)
+		def print_series(hilite=False):
+			if hilite:
+				print('\x1b[48;5;234m', end='')
+
+			print_series_title(index, series, title_width=max_width, tail=tail)
 			nonlocal series_printed
 			series_printed = True
 
 		if search:
+			show_series += 1
+
 			current_season = 0
 			for idx, ep in enumerate(unseen):
 				s, released = format_episode_title('\x1b[6C', ep, title_width=ep_max_width, remaining=len(unseen) - idx - 1, today=True)
@@ -200,7 +207,7 @@ def cmd_list_unseen(series_config, args, opts):
 					break
 
 				if not series_printed:
-					print_series()
+					print_series(hilite=hilite)
 
 				season = ep['season']
 				if season != current_season:
@@ -216,10 +223,16 @@ def cmd_list_unseen(series_config, args, opts):
 				#print('not released:', series['title'], unseen[0]['title'])
 				continue
 
+			show_series += 1
+
 			if not series_printed:
-				print_series()
+				print_series(hilite=hilite)
 			print(f'       Next: ', end='')
-			print(s)
+			print(s, end='')
+			if hilite:
+				print('\x1b[m', end='')
+			print()
+
 			total += 1
 			total_duration += unseen[0].get('runtime', 0)
 
@@ -609,7 +622,7 @@ def refresh_all_episodes(series_config, args=None, opts=None):
 		]
 		concurrent.futures.wait(promises)
 
-	print('\x1b[m')
+	print('\x1b[K')
 
 	updated = 0
 	downloaded = 0
@@ -619,19 +632,6 @@ def refresh_all_episodes(series_config, args=None, opts=None):
 		if count:
 			updated += 1
 			downloaded += count
-
-#	for idx, (_, imdb_id, series) in enumerate(all_series):
-#		if 'archived' in series:
-#			continue
-#		if search and not match_search(series):
-#			continue
-#
-#		last_refresh = series.get(episodes_refreshed_key)
-#		if not last_refresh or age(last_refresh) > max_age:
-#			result = refresh_episodes(imdb_id, series_config, progress=(idx + 1, len(all_series)))
-#			if result:
-#				updated += 1
-#				downloaded += result
 
 	if updated:
 		print('\x1b[2mRefreshed %d episodes across %d series.\x1b[m' % (downloaded, updated))
@@ -643,7 +643,7 @@ def transform_episode_info(episode):
 	episode.pop('imdbvotes', 0)
 
 
-def print_series_title(num, info, title_width=0, imdb_id=None, gray=False, end=None):
+def print_series_title(num, info, title_width=0, imdb_id=None, gray=False, tail=None):
 	infop = {**info}
 
 	# pad title string if width is specified
@@ -672,18 +672,17 @@ def print_series_title(num, info, title_width=0, imdb_id=None, gray=False, end=N
 	if imdb_id is not None:
 		s += f'  \x1b[2m{imdb_id}\x1b[22;39m'
 
-	if end:
-		s += end
+	if tail:
+		s += tail
 
-	print('\x1b[48;5;234m\x1b[J\r', end='')
 	if gray:
 		# remove all escape sequences
-		s = strip_ansi(s)
-		print(f'\x1b[22;39;38;5;246m{s}', end='')
+		print(f'\x1b[22;39;38;5;246m%s' % strip_ansi(s), end='')
 	else:
-		print(s, end='')
+		print('%s' % s, end='')
 
-	print('\x1b[m')
+	print('\x1b[J')
+
 
 
 def format_episode_title(series_title, episode, title_width=0, gray=False, remaining=0, today=False, only_released=False):
@@ -700,7 +699,7 @@ def format_episode_title(series_title, episode, title_width=0, gray=False, remai
 		title_width -= 2
 		ep['title'] = ep['title'][:title_width] + '…'
 
-	s += f'\x1b[33;1ms{ep["season"]}e{ep["episode"]:02}\x1b[m \x1b[34;1m{ep["title"]:{title_width}}\x1b[m  '
+	s += f'\x1b[33;1ms{ep["season"]}e{ep["episode"]:02}\x1b[22;39m \x1b[34;1m{ep["title"]:{title_width}}\x1b[22;39m  '
 
 	future = False
 	if 'date' in episode:
@@ -716,13 +715,13 @@ def format_episode_title(series_title, episode, title_width=0, gray=False, remai
 		today = False
 
 	if future:
-		s += f'\x1b[1m{dt}\x1b[m'
+		s += f'\x1b[1m{dt}\x1b[22;39m'
 		if diff > 24*3600:
-			s += f'\x1b[38;5;244m/{fmt_duration(diff, roughly=True)}\x1b[m'
+			s += f'\x1b[38;5;244m/{fmt_duration(diff, roughly=True)}\x1b[22;39m'
 		if remaining:
-			s += '  \x1b[32;1m+%d\x1b[m' % remaining
+			s += '  \x1b[32;1m+%d\x1b[22;39m' % remaining
 	elif today:
-		s += '\x1b[32;1mTODAY\x1b[m'
+		s += '\x1b[32;1mTODAY\x1b[22;39m'
 	#else:
 	#	s += f'\x1b[2m{fmt_duration(episode.get("runtime", 0))}\x1b[m'
 
