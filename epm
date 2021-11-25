@@ -563,7 +563,7 @@ def refresh_episodes(imdb_id, series_config, progress=False):
 
 	episodes = omdb.episodes(imdb_id, details=True)
 	if progress is not None:
-		print('\r\x1b[J', end='', flush=True)
+		print('\r\x1b[K', end='', flush=True)
 
 	for ep in episodes:
 		transform_episode_info(ep)
@@ -594,8 +594,6 @@ def refresh_all_episodes(series_config, args=None, opts=None):
 		search = None
 
 
-
-
 	all_series = get_series(series_config)
 	to_refresh = []
 
@@ -612,6 +610,7 @@ def refresh_all_episodes(series_config, args=None, opts=None):
 	if not to_refresh:
 		return
 
+	t0 = time.time()
 	print('\x1b[2mRefreshing episodes of %d series...\x1b[m' % len(to_refresh), end='', flush=True)
 	promises = []
 
@@ -622,7 +621,7 @@ def refresh_all_episodes(series_config, args=None, opts=None):
 		]
 		concurrent.futures.wait(promises)
 
-	print('\x1b[K')
+	print('\r\x1b[K', end='', flush=True)
 
 	updated = 0
 	downloaded = 0
@@ -634,7 +633,7 @@ def refresh_all_episodes(series_config, args=None, opts=None):
 			downloaded += count
 
 	if updated:
-		print('\x1b[2mRefreshed %d episodes across %d series.\x1b[m' % (downloaded, updated))
+		print('\x1b[2mRefreshed %d episodes across %d series [%.1fs].\x1b[m' % (downloaded, updated, time.time() - t0))
 		save_series_config(series_config)
 
 
