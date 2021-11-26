@@ -8,6 +8,7 @@ import re
 import time
 from datetime import datetime, date
 import concurrent.futures
+from tempfile import mkstemp
 
 import omdb
 
@@ -20,6 +21,7 @@ default_max_episodes_refresh_age = 2*24*3600
 episodes_refreshed_key = 'episodes-refreshed'
 
 series_config_file = os.path.expandvars(f'$HOME/.config/{PRG}/series')
+num_config_backups = 10
 
 known_commands = (
 	'unseen',
@@ -35,6 +37,11 @@ known_commands = (
 )
 default_command = known_commands[0]
 
+_b = '\x1b[1m'     # bold
+_c = '\x1b[33;1m'  # command
+_o = '\x1b[34;1m'  # option
+_f = '\x1b[2m'     # faint
+_n = '\x1b[m'      # normal
 
 def main():
 	command = None
@@ -78,8 +85,6 @@ def main():
 		if arg.startswith('-'):
 			if arg == '-r':
 				tvpy.enable_refetch(True)
-			elif arg in ('-h', '--help'):
-				print_usage()
 			elif not eat_option(command, arg, args, options):
 				bad_opt(arg)
 		elif not command:
@@ -96,30 +101,8 @@ def main():
 	if command == 'help':
 		print_usage()
 
-	elif command == 'unseen':
-		err = cmd_list_unseen(series_config, command_args, options)
-
-	elif command == 'list':
-		err = cmd_list(series_config, command_args, options)
-
-	elif command == 'add':
-		err = cmd_add(series_config, command_args, options)
-
-	elif command == 'delete':
-		err = cmd_delete(series_config, command_args, options)
-
-	elif command in ('mark', 'unmark'):
-		err = cmd_mark(series_config, command_args, options, command == 'mark')
-
-	elif command in ('archive', 'restore'):
-		err = cmd_archive(series_config, command_args, options, command == 'archive')
-
-	elif command == 'refresh':
-		err = cmd_refresh(series_config, command_args, options)
-
 	else:
-		print('\x1b[41;97;1mCommand not implemented: %s\x1b[m' % command)
-		sys.exit(1)
+		err = cmd_handlers[command](series_config, command_args, options)
 
 	if err is not None:
 		print('\x1b[33;1m[\x1b[0;1m%s\x1b[33;1m]\x1b[m %s' % (command, err))
@@ -127,8 +110,14 @@ def main():
 
 
 def eat_option(command, option, args, options):
+	if option in ('-h', '--help'):
+		if command:
+			print_cmd_help(command)
+		else:
+			print_usage()
+
 	command = command or default_command
-	opt_cfg = known_options[command].get(option)
+	opt_cfg = known_options[command].get(option)[0]
 
 	if isinstance(opt_cfg, (int, str)):
 		options[opt_cfg] = True
@@ -160,6 +149,9 @@ def cmd_list_unseen(series_config, args, opts):
 
 	upto_future = 'unseen:future' in opts
 
+	only_started = 'unseen:started' in opts
+	only_planned = 'unseen:planned' in opts
+
 	if args:
 		search = re.compile('.*?'.join(re.escape(a.casefold()) for a in ' '.join(args).split()))
 		def match_search(series):
@@ -180,6 +172,13 @@ def cmd_list_unseen(series_config, args, opts):
 	for index, imdb_id, series, unseen in series_unseen:
 
 		if search and not match_search(series):
+			continue
+
+		has_episodes_seen = len(series.get('seen', {})) > 0
+
+		if only_started and not has_episodes_seen:
+			continue
+		if only_planned and has_episodes_seen:
 			continue
 
 		hilite = (show_series % 2) == 0
@@ -239,6 +238,15 @@ def cmd_list_unseen(series_config, args, opts):
 	# this is wildly incorrect!
 	#print(f'\x1b[48;5;235m\x1b[J\rTotal unseen: \x1b[1m{total}\x1b[22;39m episodes  \x1b[2m{fmt_duration(total_duration)}\x1b[22;39m')
 
+def cmd_list_unseen_help():
+	print(f'{_b}Show unseen episodes of series{_n}')
+	print(f'Usage: %s {_c}.unseen{_n} <options> <search...>' % PRG)
+	print(f'    {_o}#/<IMDb ID>                     (show only specific){_n}')
+	print(f'    {_o}[<pattern>]                     (show only matching){_n}')
+	print(f'    {_o}--future                        (also unreleased, max 1){_n}')
+
+	print_cmd_option_help('unseen')
+
 
 def cmd_list(series_config, args, opts):
 	refresh_all_episodes(series_config, opts=opts)
@@ -277,18 +285,31 @@ def cmd_list(series_config, args, opts):
 			print('\x1b[2m       Archived: %s\x1b[m' % series.get('archived'))
 		print_seen_status(series, gray=archived)
 
-	if num_archived:
-		print('\x1b[2mSeries archived: %d  (use --all / --archived)\x1b[m' % num_archived)
+	print('\x1b[2;3mTotal: %d   Archived: %d\x1b[m' % (len(series_list), num_archived))
 
+def cmd_list_help():
+	print(f'{_b}List series{_n}')
+	print(f'Usage: %s {_c}.list{_n} <options> [<search...>]' % PRG)
+	print(f'    {_o}[<search...>]       Show only matching series{_n}')
+
+	print_cmd_option_help('list')
+
+
+year_ptn = re.compile(r'^(\d{4})|\((\d{4})\)$')  # 1968 or (1968)
 
 def cmd_add(series_config, args, opts):
 	if not args:
 		return 'required argument missing: <title> / <IMDb ID>'
 
-	search = args[0]
+	args = list(a for a in ' '.join(args).split())
 	year = None
 	if len(args) >= 2:
-		year = args[1]
+		m = year_ptn.match(args[-1])
+		if m:
+			args.pop()
+			year = int(m.group(1) or m.group(2))
+
+	search = ' '.join(args)
 
 	print('- Searching series...', end='', flush=True)
 	hits = omdb.search(search, year=year)
@@ -310,7 +331,7 @@ def cmd_add(series_config, args, opts):
 
 		print('\x1b[32;1mFound \x1b[0;1m%d\x1b[m \x1b[32;1mseries:\x1b[m' % len(hits))
 		for idx, hit in enumerate(hits):
-			print_series_title(idx + 1, hit, title_width=max_width)
+			print_series_title(idx + 1, hit, imdb_id=hit['id'], title_width=max_width)
 
 		last_num = len(hits)
 		while True:
@@ -370,8 +391,16 @@ def cmd_add(series_config, args, opts):
 
 	print_series_title(index, {**hit, 'id': imdb_id}, imdb_id=imdb_id)
 
+def cmd_add_help():
+	print(f'{_b}Search for a series and (optionally) add it.{_n}')
+	print(f'Usage: %s {_c}.add{_n} <search>' % PRG)
+	print(f'    {_o}<title search>{_n}')
+	print(f'    {_o}<IMDb ID>{_n}')
 
-def cmd_delete(series_config, args, options):
+	print_cmd_option_help('add')
+
+
+def cmd_delete(series_config, args, opts):
 	if not args:
 		return 'Required argument missing: #/<IMDb ID>'
 
@@ -393,8 +422,15 @@ def cmd_delete(series_config, args, options):
 	print('\x1b[1mSeries deleted:\x1b[m \x1b[2m(series renumbered)\x1b[m')
 	print_series_title(index, series, imdb_id=imdb_id)
 
+def cmd_delete_help():
+	print(f'{_b}Complete remove a series from EPM - non-recoverable!{_n}')
+	print(f'Usage: %s {_c}.delete{_n} <# / IMDb ID>' % PRG)
+	print(f'    {_o}#/<IMDb ID>{_n}')
 
-def cmd_mark(series_config, args, opts, mark):
+	print_cmd_option_help('delete')
+
+
+def cmd_mark(series_config, args, opts, marking=True):
 	refresh_all_episodes(series_config, opts=opts)
 
 	if not args:
@@ -466,25 +502,21 @@ def cmd_mark(series_config, args, opts, mark):
 		if (season is None or ep['season'] in season) and (episode is None or ep['episode'] in episode):
 			key = _ep_key(ep)
 
-			if mark and key not in seen:
+			if marking and key not in seen:
 				seen[key] = now()
 				marked.append(ep)
 				marked_duration += ep.get('runtime', 0)
 
-			elif not mark and key in seen:
+			elif not marking and key in seen:
 				del seen[key]
 				marked.append(ep)
 
-	if mark:
+	if marking:
 		print('Marked ', end='')
 	else:
 		print('Unmarked ', end='')
 
-	if not marked:
-		print(f'\x1b[33;1mno\x1b[m', end='')
-	else:
-		print(f'\x1b[33;1m{len(marked)}\x1b[m', end='')
-
+	print(f'\x1b[33;1m{len(marked) if marked else "no"}\x1b[m', end='')
 	print(f' episode{plural(marked)} as seen:  \x1b[0;2m{fmt_duration(marked_duration)}\x1b[m')
 
 	if marked:
@@ -495,8 +527,27 @@ def cmd_mark(series_config, args, opts, mark):
 
 	save_series_config(series_config)
 
+def cmd_mark_help():
+	print(f'{_b}Mark a series, season or specific episode as seen.{_n}')
+	print(f'Usage: %s {_c}.mark{_n} <# / IMDb ID> [<season / episode specifier>]' % PRG)
+	print(f'    {_o}#/<IMDb ID> <season> <episode>  (specific episodes){_n}')
+	print(f'    {_o}#/<IMDb ID> <season>            (whole seasons){_n}')
+	print(f'    {_o}#/<IMDb ID>                     (the whole series){_n}')
 
-def cmd_archive(series_config, args, options, archiving):
+	print_cmd_option_help('mark')
+
+
+def cmd_unmark_help():
+	print(f'{_b}Unmark a series/season/episode - reverse of .mark command.{_n}')
+	print(f'Usage: %s {_c}.unmark{_n} <# / IMDb ID> [<season / episode specifier>]' % PRG)
+	print(f'    {_o}#/<IMDb ID> <season> <episode>  (single episode){_n}')
+	print(f'    {_o}#/<IMDb ID> <season>            (a whole season){_n}')
+	print(f'    {_o}#/<IMDb ID>                     (the whole series){_n}')
+
+	print_cmd_option_help('unmark')
+
+
+def cmd_archive(series_config, args, opts, archiving=True):
 	if not args:
 		return 'Required argument missing: #/<IMDb ID>'
 
@@ -527,9 +578,56 @@ def cmd_archive(series_config, args, options, archiving):
 	save_series_config(series_config)
 
 
+def cmd_archive_help():
+	print(f'{_b}Archving series - hides from normal .list command.{_n}')
+	print(f'Usage: %s {_c}.archive{_n} <# / IMDb ID>' % PRG)
+	print(f'    {_o}#/<IMDb ID>{_n}')
+
+	print_cmd_option_help('archive')
+
+
+def cmd_restore_help():
+	print(f'{_b}Restore series - reverse of .archive command.{_n}')
+	print(f'Usage: %s {_c}.restore{_n} <# / IMDb ID>' % PRG)
+	print(f'    {_o}#/<IMDb ID>{_n}')
+
+	print_cmd_option_help('restore')
+
+
 def cmd_refresh(series_config, args, opts):
 	refresh_all_episodes(series_config, args, { **opts, 'max-age': 0 })
 
+def cmd_refresh_help():
+	print(f'{_b}Refresh episode data of all non-archived series.{_n}')
+	print(f'Usage: %s {_c}.refresh{_n} <# / IMDb ID>' % PRG)
+	print(f'    {_o}[#/<IMDb ID>]       (only specified series){_n}')
+	print(f'    {_o}[<pattern>]         (only matching series){_n}')
+
+	print_cmd_option_help('refresh')
+
+
+cmd_handlers = {
+	'add': cmd_add,
+	'delete': cmd_delete,
+	'list': cmd_list,
+	'unseen': cmd_list_unseen,
+	'mark': cmd_mark,
+	'unmark': lambda *args, **kwargs: cmd_mark(*args, **kwargs, marking=False),
+	'archive': cmd_archive,
+	'restore': lambda *args, **kwargs: cmd_archive(*args, **kwargs, archiving=False),
+	'refresh': cmd_refresh,
+}
+cmd_help = {
+	'add': cmd_add_help,
+	'delete': cmd_delete_help,
+	'list': cmd_list_help,
+	'unseen': cmd_list_unseen_help,
+	'mark': cmd_mark_help,
+	'unmark': cmd_unmark_help,
+	'archive': cmd_archive_help,
+	'restore': cmd_restore_help,
+	'refresh': cmd_refresh_help,
+}
 
 def find_series(series_config, find_id):
 	# if it's an int, search by index, else search by IMDB ID
@@ -561,7 +659,7 @@ def refresh_episodes(imdb_id, series_config, progress=False):
 	elif progress is False:
 		print('\x1b[2mRefreshing episodes for %s...\x1b[m' % imdb_id, end='', flush=True)
 
-	episodes = omdb.episodes(imdb_id, details=True)
+	episodes = omdb.episodes(imdb_id)
 	if progress is not None:
 		print('\r\x1b[K', end='', flush=True)
 
@@ -637,10 +735,12 @@ def refresh_all_episodes(series_config, args=None, opts=None):
 		save_series_config(series_config)
 
 
-def transform_episode_info(episode):
-	episode.pop('poster', 0)
-	episode.pop('imdbvotes', 0)
+useful_episode_fields = [ 'season', 'episode', 'title', 'date', 'plot', 'runtime' ]
 
+def transform_episode_info(episode):
+	for field in list(episode.keys()):
+		if field not in useful_episode_fields:
+			episode.pop(field, 0)
 
 def print_series_title(num, info, title_width=0, imdb_id=None, gray=False, tail=None):
 	infop = {**info}
@@ -884,60 +984,54 @@ known_options = {
 	None: {
 	},
 	'list': {
-		'--all':    'list:all',
-		'--archived': 'list:archived',
+		'--all':      ('list:all', 'Show also archived series'),
+		'--archived': ('list:archived', 'Show only archived series'),
 	},
 	'unseen': {
-		'--future': 'unseen:future',
+		'--future': ('unseen:future', 'Show also future/unreleased episodes.'),
+		'--started': ('unseen:started', 'Show only series with seen episodes.'),
+		'--planned': ('unseen:planned', 'Show only series without seen episodes.'),
 	},
 }
 
+def print_cmd_option_help(command):
+	options = known_options.get(command)
+	if options:
+		print('\x1b[1mOptions:\x1b[m')
+		for opt, info in sorted(options.items()):
+			print('   %-20s %s' % (opt, info[1]))
+
+
 def print_usage(exit_code=0):
-	b = '\x1b[1m'
-	c = '\x1b[33;1m'
-	o = '\x1b[34;1m'
-	f = '\x1b[2m'
-	n = '\x1b[m'
-	print(f'{b}%s{n} / Episode Manager / (c)2021 André Jonsson' % PRG)
+	print(f'{_b}%s{_n} / Episode Manager / (c)2021 André Jonsson' % PRG)
 	print('Version %s (%s) ' % (VERSION, VERSION_DATE))
-	print(f'{b}Usage:{n} %s [<options>] [{c}.<command>{n} [{o}<args>{n}]]' % PRG)
+	print(f'{_b}Usage:{_n} %s [<options>] [{_c}.<command>{_n} [{_o}<args>{_n}]]' % PRG)
 	print()
-	print(f'Where {c}<command>{n} is:')
-	print(f'   {c}.add{n}     Add series')
-	print(f'           {o}<title> [<year>]{n}')
-	print(f'           {o}<IMDb ID>{n}')
-	print(f'   {c}.unseen{n}  Show unseen episodes of series')
-	print(f'           {o}#/<IMDb ID>                     (show only specific){n}')
-	print(f'           {o}[<pattern>]                     (show only matching){n}')
-	print(f'           {o}--future                        (also unreleased, max 1){n}')
-	print(f'   {c}.list{n}    List configured series')
-	print(f'           {o}--all                           (include also archived series){n}')
-	print(f'           {o}--archived                      (list only archived series){n}')
-	print(f'           {o}[<pattern>]                     (show only matching){n}')
-	print(f'   {c}.mark{n}    Mark episode as seen')
-	print(f'           {o}#/<IMDb ID> <season> <episode>  (specific episodes){n}')
-	print(f'           {o}#/<IMDb ID> <season>            (whole seasons){n}')
-	print(f'           {o}#/<IMDb ID>                     (the whole series){n}')
-	print(f'   {c}.unmark{n}  Remove mark, as added by {c}mark{n}')
-	print(f'           {o}#/<IMDb ID> <season> <episode>  (single episode){n}')
-	print(f'           {o}#/<IMDb ID> <season>            (a whole season){n}')
-	print(f'           {o}#/<IMDb ID>                     (the whole series){n}')
-	print(f'   {c}.delete{n}  Delete series (completely remove from config)')
-	print(f'           {o}#/<IMDb ID>{n}')
-	print(f'   {c}.archive{n} Archive series (still in config, but not normally shown)')
-	print(f'           {o}#/<IMDb ID>{n}')
-	print(f'   {c}.restore{n} Restore previously archived series')
-	print(f'           {o}#/<IMDb ID>{n}')
-	print(f'   {c}.refresh{n} Refresh episode data (forcibly)')
-	print(f'           {o}[#/<IMDb ID>]                    (only specified series){n}')
-	print(f'           {o}[<pattern>]                      (only matching series){n}')
+	print(f'Where {_c}<command>{_n} is:')
+	print(f'   {_c}.add{_n}     Add series')
+	print(f'   {_c}.delete{_n}  Delete series (completely remove from config)')
+	print(f'   {_c}.unseen{_n}  Show unseen episodes of series')
+	print(f'   {_c}.list{_n}    List series')
+	print(f'   {_c}.mark{_n}    Mark episode as seen')
+	print(f'   {_c}.unmark{_n}  Remove mark, as added by {_c}mark{_n}')
+	print(f'   {_c}.archive{_n} Archive series (still in config, but not normally shown)')
+	print(f'   {_c}.restore{_n} Restore previously archived series')
+	print(f'   {_c}.refresh{_n} Refresh episode data (forcibly)')
+	print()
+	print('Also try: {c}<command>{n} --help')
 	print()
 	print('Remarks:')
-	print(f'  # = Series number, as listed by e.g. the {c}list{n} or {c}unseen{n} commands.')
-	print(f'  Marking/unmarking also supports ranges, e.g. {b}%s mark 1 2 1-10{n}' % PRG)
-	print(f'  If the given command is not found, it is used as a pattern to the {b}unseen{n} command.')
+	print(f'  # = Series number, as listed by e.g. the {_c}list{_n} or {_c}unseen{_n} commands.')
+	print(f'  Marking/unmarking also supports ranges, e.g. {_b}%s mark 1 2 1-10{_n}' % PRG)
+	print(f'  If the given command is not found, it is used as a pattern to the {_b}unseen{_n} command.')
 	print(f'  Only "shortest unique" part of the commands is required, e.g. ".ar"  for "archive".')
 	sys.exit(exit_code)
+
+
+def print_cmd_help(command, exit_code=0):
+	cmd_help[command]()
+	sys.exit(exit_code)
+
 
 def bad_opt(opt):
 	print('Unknown option: \x1b[41;97;1m%s\x1b[m' % opt, file=sys.stderr)
@@ -970,12 +1064,59 @@ def load_series_config():
 	return config
 
 
+compressor = 'zstd'
+compression_extension = '.zst'
+
+import shutil
+if not shutil.which(compressor):
+	compressor = None
+	compression_extension = ''
+
+# TODO: these should return a waitable promise (so we can do it in parallel with the serialization)
+if compressor:
+	from subprocess import Popen
+	def mk_backup(filename, destination):
+		tmp_name = mkstemp( dir=os.path.dirname(filename))[1]
+		os.rename(filename, tmp_name)
+		try:
+			exit_code = Popen([compressor, '-18', '-q', '-f', tmp_name, '--rm', '-o', destination]).wait()
+			if exit_code != 0:
+				os.rename(tmp_name, destination)
+
+		except Exception as e:
+			print('\x1b[41;97;1mERROR\x1b[m Failed compressing database backup: %s' % str(e))
+			os.rename(tmp_name, destination)
+			exit_code = 1
+
+		return exit_code == 0
+else:
+	def mk_backup(filename, destination):
+		os.rename(filename, destination)
+
 def save_series_config(config):
 	if not os.path.exists(series_config_file):
 		os.makedirs(os.path.dirname(series_config_file), exist_ok=True)
 
-	with open(series_config_file, 'w') as fp:
-		json.dump(config, fp, indent=2, sort_keys=True)
+	def backup_name(idx):
+		return '%s.%d%s' % (series_config_file, idx, compression_extension)
+
+	# rotate backups
+	for idx in range(num_config_backups - 1, 0, -1):
+		if os.path.exists(backup_name(idx)):
+			os.rename(backup_name(idx), backup_name(idx + 1))
+
+	# current file becomes first backup (<name>.1)
+	mk_backup(series_config_file, backup_name(1))
+
+	# write to a temp file and then rename it afterwards
+	tmp_name = mkstemp(dir=os.path.dirname(series_config_file))[1]
+	try:
+		with open(tmp_name, 'w') as fp:
+			json.dump(config, fp, indent=2, sort_keys=True)
+		os.rename(tmp_name, series_config_file)
+	except Exception as e:
+		print('\x1b[41;97;1mERROR\x1b[m Failed saving series database: %s' % str(e))
+		os.remove(tmp_name)
 
 
 def plural(n):
