@@ -262,11 +262,14 @@ def cmd_list(series_config, args, opts):
 
 	list_all = 'list:all' in opts
 	only_archived = 'list:archived' in opts
+	only_started = 'list:started' in opts
+	only_planned = 'list:planned' in opts
 
 	search = re.compile('.*?'.join(re.escape(a.casefold()) for a in ' '.join(args).split()))
 	def match_search(series):
 		return search.search(series['title'].casefold()) is not None
 
+	num_shown = 0
 	num_archived = 0
 
 	for index, imdb_id, series in series_list:
@@ -277,15 +280,23 @@ def cmd_list(series_config, args, opts):
 			continue
 		if not archived and only_archived:
 			continue
+
+		has_episodes_seen = len(series.get('seen', {})) > 0
+		if only_started and not has_episodes_seen:
+			continue
+		if only_planned and has_episodes_seen:
+			continue
+
 		if search and not match_search(series):
 			continue
 
+		num_shown += 1
 		print_series_title(index, series, imdb_id=imdb_id, title_width=max_width, gray=archived)
 		if archived:
 			print('\x1b[2m       Archived: %s\x1b[m' % series.get('archived'))
 		print_seen_status(series, gray=archived)
 
-	print('\x1b[2;3mTotal: %d   Archived: %d\x1b[m' % (len(series_list), num_archived))
+	print('%d series \x1b[2;3mTotal: %d   Archived: %d\x1b[m' % (num_shown, len(series_list), num_archived))
 
 def cmd_list_help():
 	print(f'{_b}List series{_n}')
@@ -989,6 +1000,8 @@ known_options = {
 	'list': {
 		'--all':      ('list:all', 'Show also archived series'),
 		'--archived': ('list:archived', 'Show only archived series'),
+		'--started':  ('list:started', 'Show only series with seen episodes.'),
+		'--planned':  ('list:planned', 'Show only series without seen episodes.'),
 	},
 	'unseen': {
 		'--future': ('unseen:future', 'Show also future/unreleased episodes.'),
