@@ -495,8 +495,8 @@ def cmd_mark(series_config, args, opts, marking=True):
 
 	seen = series.get('seen', {})
 
-	marked = []
-	marked_duration = 0
+	episodes = []
+	episodes_duration = 0
 
 	for ep in series.get('episodes', []):
 		if (season is None or ep['season'] in season) and (episode is None or ep['episode'] in episode):
@@ -504,28 +504,31 @@ def cmd_mark(series_config, args, opts, marking=True):
 
 			if marking and key not in seen:
 				seen[key] = now()
-				marked.append(ep)
-				marked_duration += ep.get('runtime', 0)
+				episodes.append(ep)
+				episodes_duration += ep.get('runtime', 0)
 
 			elif not marking and key in seen:
 				del seen[key]
-				marked.append(ep)
+				episodes.append(ep)
 
-	if marking:
-		print('Marked ', end='')
-	else:
-		print('Unmarked ', end='')
+	if episodes:
+		if marking:
+			print('Marked ', end='')
+		else:
+			print('Unmarked ', end='')
 
-	print(f'\x1b[33;1m{len(marked) if marked else "no"}\x1b[m', end='')
-	print(f' episode{plural(marked)} as seen:  \x1b[0;2m{fmt_duration(marked_duration)}\x1b[m')
+		print(f'\x1b[33;1m{len(episodes)}\x1b[m', end='')
+		print(f' episode{plural(episodes)} as seen:  \x1b[0;2m{fmt_duration(episodes_duration)}\x1b[m')
+		max_width = max(len(ep['title']) for ep in episodes)
 
-	if marked:
-		max_width = max(len(ep['title']) for ep in marked)
-
-		for ep in marked:
+		for ep in episodes:
 			print(format_episode_title(series['title'], ep, title_width=max_width)[0])
 
-	save_series_config(series_config)
+		save_series_config(series_config)
+
+	else:
+		print('\x1b[33;1mNo episodes %smarked\x1b[m' % '' if marking else 'un')
+
 
 def cmd_mark_help():
 	print(f'{_b}Mark a series, season or specific episode as seen.{_n}')
