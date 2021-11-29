@@ -161,6 +161,16 @@ def cmd_unseen(series_config, args, opts):
 	else:
 		search = None
 
+	print('\x1b[2mListing ', end='')
+	if only_started:
+		print('started ', end='')
+	elif only_planned:
+		print('planned ', end='')
+	print('series with unseen episodes', end='')
+	if search:
+		print(', matching "%s"' % search.pattern, end='')
+	print('.\x1b[m')
+
 	# TODO: optionally sort series by "earliest" episode in summary mode
 
 	show_series = 0
