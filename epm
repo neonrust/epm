@@ -129,7 +129,7 @@ def eat_option(command, option, args, options):
 	return True
 
 
-def cmd_list_unseen(series_config, args, opts):
+def cmd_unseen(series_config, args, opts):
 	refresh_all_episodes(series_config, opts=opts)
 
 	series_list = get_series(series_config)
@@ -238,7 +238,7 @@ def cmd_list_unseen(series_config, args, opts):
 	# this is wildly incorrect!
 	#print(f'\x1b[48;5;235m\x1b[J\rTotal unseen: \x1b[1m{total}\x1b[22;39m episodes  \x1b[2m{fmt_duration(total_duration)}\x1b[22;39m')
 
-def cmd_list_unseen_help():
+def cmd_unseen_help():
 	print(f'{_b}Show unseen episodes of series{_n}')
 	print(f'Usage: %s {_c}.unseen{_n} <options> <search...>' % PRG)
 	print(f'    {_o}#/<IMDb ID>                     (show only specific){_n}')
@@ -624,7 +624,7 @@ cmd_handlers = {
 	'add': cmd_add,
 	'delete': cmd_delete,
 	'list': cmd_list,
-	'unseen': cmd_list_unseen,
+	'unseen': cmd_unseen,
 	'mark': cmd_mark,
 	'unmark': lambda *args, **kwargs: cmd_mark(*args, **kwargs, marking=False),
 	'archive': cmd_archive,
@@ -635,7 +635,7 @@ cmd_help = {
 	'add': cmd_add_help,
 	'delete': cmd_delete_help,
 	'list': cmd_list_help,
-	'unseen': cmd_list_unseen_help,
+	'unseen': cmd_unseen_help,
 	'mark': cmd_mark_help,
 	'unmark': cmd_unmark_help,
 	'archive': cmd_archive_help,
