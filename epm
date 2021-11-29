@@ -117,14 +117,16 @@ def eat_option(command, option, args, options):
 			print_usage()
 
 	command = command or default_command
-	opt_cfg = known_options[command].get(option)[0]
+	opt_key = get_option_key(command, option)
 
-	if isinstance(opt_cfg, (int, str)):
-		options[opt_cfg] = True
-	elif command:
-		print(f'\x1b[41;97;1mcommand {command} option config for {option} is not implemented: {opt_cfg}\x1b[m', file=sys.stderr)
+	if opt_key:
+		options[opt_key] = True
 	else:
-		print(f'\x1b[41;97;1mglobal option {option} is not implemented\x1b[m', file=sys.stderr)
+		if command:
+			print(f'\x1b[33;1m[{PRG} {command}] Unknown option: {option}\x1b[m', file=sys.stderr)
+		else:
+			print(f'\x1b[33;1m[{PRG} Option is not implemented: {option}\x1b[m', file=sys.stderr)
+		sys.exit(1)
 
 	return True
 
@@ -148,7 +150,6 @@ def cmd_unseen(series_config, args, opts):
 		return 'Everything has been seen, what to do?!?'
 
 	upto_future = 'unseen:future' in opts
-
 	only_started = 'unseen:started' in opts
 	only_planned = 'unseen:planned' in opts
 
@@ -998,24 +999,51 @@ known_options = {
 	None: {
 	},
 	'list': {
-		'--all':      ('list:all', 'Show also archived series'),
-		'--archived': ('list:archived', 'Show only archived series'),
-		'--started':  ('list:started', 'Show only series with seen episodes.'),
-		'--planned':  ('list:planned', 'Show only series without seen episodes.'),
+		'--all':      { 'key': 'list:all', 'alias': ['-a'], 'help': 'Show also archived series' },
+		'--archived': { 'key': 'list:archived', 'alias': ['-A'], 'help': 'Show only archived series' },
+		'--started':  { 'key': 'list:started', 'alias': ['-s'], 'help': 'Show only series with seen episodes.' },
+		'--planned':  { 'key': 'list:planned', 'alias': ['-p'], 'help': 'Show only series without seen episodes.' },
 	},
 	'unseen': {
-		'--future': ('unseen:future', 'Show also future/unreleased episodes.'),
-		'--started': ('unseen:started', 'Show only series with seen episodes.'),
-		'--planned': ('unseen:planned', 'Show only series without seen episodes.'),
+		'--future':  { 'key': 'unseen:future', 'alias': ['-f'], 'help': 'Show also future/unreleased episodes.' },
+		'--started': { 'key': 'unseen:started', 'alias': ['-s'], 'help': 'Show only series with seen episodes.' },
+		'--planned': { 'key': 'unseen:planned', 'alias': ['-p'], 'help': 'Show only series without seen episodes.' },
 	},
 }
 
+def get_option_key(command, option):
+	cmd_opts = known_options.get(command)
+	if not cmd_opts:
+		return None
+	for opt, info in cmd_opts.items():
+		if opt == option or option in info.get('alias', []):
+			return info['key']
+	return None
+
+
+def options_help(command):
+	cmd_opts = known_options.get(command)
+	if not cmd_opts:
+		return []
+
+	opt_help = []
+	for opt, info in cmd_opts.items():
+		alias = info.get('alias')
+		if alias:
+			opt = (opt, *alias)
+		opt_help.append( (opt, info['help']) )
+
+	return opt_help
+
+
 def print_cmd_option_help(command):
-	options = known_options.get(command)
+	options = options_help(command)
 	if options:
 		print('\x1b[1mOptions:\x1b[m')
-		for opt, info in sorted(options.items()):
-			print('   %-20s %s' % (opt, info[1]))
+		for opt, text in options:
+			if type(opt) is tuple:
+				opt = ', '.join(sorted(opt, key=lambda A: A.lstrip('-')))
+			print('   %-20s %s' % (opt, text))
 
 
 def print_usage(exit_code=0):
