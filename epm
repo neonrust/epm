@@ -9,8 +9,19 @@ import time
 from datetime import datetime, date
 import concurrent.futures
 from tempfile import mkstemp
+import curses
 
 import omdb
+
+logfp = open('epm.log', 'w')
+import atexit
+atexit.register(logfp.flush)
+def log(text):
+	text = text.replace('\x1b', r'\e').replace('\a', r'\a').replace('\n', r'\n').replace('\r', r'\r')
+	print(text, file=logfp, flush=True)
+logfp.write('\n'*10)
+logfp.flush()
+
 
 VERSION = '0.4'
 VERSION_DATE = '2021-11-16'
@@ -43,7 +54,11 @@ _o = '\x1b[34;1m'  # option
 _f = '\x1b[2m'     # faint
 _n = '\x1b[m'      # normal
 
-def main():
+def main(args):
+
+	if args and args[0] == 'ui':
+		return ui_run()
+
 	command = None
 	command_args = []
 	options = {
@@ -78,7 +93,6 @@ def main():
 		return default_command
 
 
-	args = sys.argv[1: ]
 	while args:
 		arg = args.pop(0)
 
@@ -97,12 +111,16 @@ def main():
 
 	series_config = load_series_config()
 
+	ctl_tty = mk_ctl_tty(sys.stdout.write)
+
+	#ctl_tty('before\a/bghi/hilite\n\a/bgn/after\n')
+	#sys.exit(42)
 
 	if command == 'help':
 		print_usage()
 
 	else:
-		err = cmd_handlers[command](series_config, command_args, options)
+		err = cmd_handlers[command](series_config, command_args, options, out=ctl_tty, width=term_width())
 
 	if err is not None:
 		print('\x1b[33;1m[\x1b[0;1m%s\x1b[33;1m]\x1b[m %s' % (command, err))
@@ -131,27 +149,36 @@ def eat_option(command, option, args, options):
 	return True
 
 
-def cmd_unseen(series_config, args, opts):
-	refresh_all_episodes(series_config, opts=opts)
+def cmd_unseen(series_config, args, opts, out=None, detail=True, show_id=True, width=None):
+	ind = ' '*7
+	if not show_id:
+		ind = ' '*3
+
+	refresh_all_episodes(series_config, opts=opts, out=out, width=width)
 
 	series_list = get_series(series_config)
 	if not series_list:
 		return no_series(series_config)
 
-	max_width = 0
+	#                 idx   year2+pad         dash pad eps                  margin
+	max_width = width - 5 - 3 - len('1968')*2 - 1 - 2 - 3 - len('episodes')
 	series_unseen = []
 	for index, imdb_id, series in series_list:
 		_, unseen = seen_unseen_episodes(series)
 		if unseen:
 			series_unseen.append((index, imdb_id, series, unseen))
-			max_width = max(max_width, len(series['title']))
+			if max_width is None:
+				max_width = max(max_width or 0, len(series['title']))
 
 	if not series_unseen:
-		return 'Everything has been seen, what to do?!?'
+		return 'Everything has been seen, better add some series!'
 
 	upto_future = 'unseen:future' in opts
 	only_started = 'unseen:started' in opts
 	only_planned = 'unseen:planned' in opts
+
+	if only_started and only_planned:
+		return 'Can\'t specify -s and -p at the same time'
 
 	if args:
 		search = re.compile('.*?'.join(re.escape(a.casefold()) for a in ' '.join(args).split()))
@@ -161,24 +188,26 @@ def cmd_unseen(series_config, args, opts):
 	else:
 		search = None
 
-	print('\x1b[2mListing ', end='')
-	if only_started:
-		print('started ', end='')
-	elif only_planned:
-		print('planned ', end='')
-	print('series with unseen episodes', end='')
-	if search:
-		print(', matching "%s"' % search.pattern, end='')
-	print('.\x1b[m')
+	#out('\x1b[2mListing ', end='')
+	#if only_started:
+	#	out('started ', end='')
+	#elif only_planned:
+	#	out('planned ', end='')
+	#out('series with unseen episodes', end='')
+	#if search:
+	#	out(', matching "%s"' % search.pattern, end='')
+	#out('.\x1b[m')
 
 	# TODO: optionally sort series by "earliest" episode in summary mode
 
 	show_series = 0
 	total = 0
 	total_duration = 0
-
-	ep_max_width = max(len(unseen[0]['title']) if unseen else 0 for _, _, _, unseen in series_unseen for ep in unseen)
-	ep_max_width = min(ep_max_width, 25)
+	#                                                   pad                    margin
+	ep_max_width = width - len('       Next: s10e10 ') - 1 - len('1968-04-02') - 1
+	if not ep_max_width:
+		ep_max_width = max(len(unseen[0]['title']) if unseen else 0 for _, _, _, unseen in series_unseen for ep in unseen)
+		ep_max_width = min(ep_max_width, 25)
 
 	for index, imdb_id, series, unseen in series_unseen:
 
@@ -196,23 +225,29 @@ def cmd_unseen(series_config, args, opts):
 
 		tail = None
 		if not search:
-			tail = ' \x1b[2m%3d episode%s\x1b[22;39m' % (len(unseen), plural(unseen))
+			tail = ' \a/dim/%3d episode%s\a//' % (len(unseen), plural(unseen))
 
 		series_printed = False
 		def print_series(hilite=False):
 			if hilite:
-				print('\x1b[48;5;234m', end='')
+				out('\a/bghi/')
 
-			print_series_title(index, series, title_width=max_width, tail=tail)
+			out(format_series_title(index if show_id else False, series, title_width=max_width))
+			if tail:
+				out(tail)
+			out('\n')
+
 			nonlocal series_printed
 			series_printed = True
 
-		if search:
+		if search and detail:
 			show_series += 1
 
 			current_season = 0
 			for idx, ep in enumerate(unseen):
-				s, released = format_episode_title('\x1b[6C', ep, title_width=ep_max_width, remaining=len(unseen) - idx - 1, today=True)
+				if idx > 0:
+					out('\n')  # see *1 below
+				s, released = format_episode_title('\a/6>/', ep, title_width=ep_max_width, remaining=len(unseen) - idx - 1, today=True)
 				if not released:
 					break
 
@@ -221,11 +256,18 @@ def cmd_unseen(series_config, args, opts):
 
 				season = ep['season']
 				if season != current_season:
-					print('    S%d\r' % season, end='')
+					out('    S%d\r' % season)
 					current_season = season
-				print(s)
+
+				out(s)
 				total += 1
 				total_duration += ep.get('runtime', 0)
+
+			if hilite:
+				out('\a/bgrst/')
+
+			# last \n  *1: for ansi-esc reasons, 'bgrst' must occur before the \n
+			out('\n')
 
 		else:
 			s, released = format_episode_title(None, unseen[0], title_width=ep_max_width, today=True, only_released=False)
@@ -237,11 +279,12 @@ def cmd_unseen(series_config, args, opts):
 
 			if not series_printed:
 				print_series(hilite=hilite)
-			print(f'       Next: ', end='')
-			print(s, end='')
+			out(f'{ind}Next: ')
+			out(s)
 			if hilite:
-				print('\x1b[m', end='')
-			print()
+				#out('\x1b[m')
+				out('\a/bgrst/')
+			out('\n')
 
 			total += 1
 			total_duration += unseen[0].get('runtime', 0)
@@ -252,22 +295,24 @@ def cmd_unseen(series_config, args, opts):
 def cmd_unseen_help():
 	print(f'{_b}Show unseen episodes of series{_n}')
 	print(f'Usage: %s {_c}.unseen{_n} <options> <search...>' % PRG)
-	print(f'    {_o}#/<IMDb ID>                     (show only specific){_n}')
-	print(f'    {_o}[<pattern>]                     (show only matching){_n}')
-	print(f'    {_o}--future                        (also unreleased, max 1){_n}')
+	print(f'    {_o}#/<IMDb ID>         {_n} Show only specific')
+	print(f'    {_o}[<pattern>]         {_n} Show only matching')
+	print(f'    {_o}--future            {_n} Also unreleased episodes (max 1)')
 
 	print_cmd_option_help('unseen')
 
 
-def cmd_list(series_config, args, opts):
-	refresh_all_episodes(series_config, opts=opts)
+def cmd_list(series_config, args, opts, out=None, width=None):
+	refresh_all_episodes(series_config, opts=opts, out=out, width=width)
 
 	series_list = get_series(series_config)
 
 	if not series_list:
 		return no_series(series_config)
 
-	max_width = max(map(lambda item: len(item[-1]['title']) if 'archived' not in item[-1] else 0, series_list))
+	# TODO: use 'width'
+	max_width = width - 5 - 3 - len('1968')*2 - 1 - 2 - 3 - len('episodes')
+	#max_width = max(map(lambda item: len(item[-1]['title']) if 'archived' not in item[-1] else 0, series_list))
 
 	# TODO: print header/columns
 
@@ -302,24 +347,25 @@ def cmd_list(series_config, args, opts):
 			continue
 
 		num_shown += 1
-		print_series_title(index, series, imdb_id=imdb_id, title_width=max_width, gray=archived)
+		out(format_series_title(index, series, imdb_id=imdb_id, title_width=max_width, gray=archived))
 		if archived:
-			print('\x1b[2m       Archived: %s\x1b[m' % series.get('archived'))
-		print_seen_status(series, gray=archived)
+			out('\a/dim/       Archived: %s\a//' % series.get('archived'))
+		out(format_seen_status(series, gray=archived))
 
-	print('%d series \x1b[2;3mTotal: %d   Archived: %d\x1b[m' % (num_shown, len(series_list), num_archived))
+	out('%d series \a/dim/\a/italic/Total: %d   Archived: %d\a//\n' % (num_shown, len(series_list), num_archived))
+
 
 def cmd_list_help():
 	print(f'{_b}List series{_n}')
 	print(f'Usage: %s {_c}.list{_n} <options> [<search...>]' % PRG)
-	print(f'    {_o}[<search...>]       Show only matching series{_n}')
+	print(f'    {_o}[<search...>]     {_n} Show only matching series')
 
 	print_cmd_option_help('list')
 
 
 year_ptn = re.compile(r'^(\d{4})|\((\d{4})\)$')  # 1968 or (1968)
 
-def cmd_add(series_config, args, opts):
+def cmd_add(series_config, args, opts, out=None, width=None):
 	if not args:
 		return 'required argument missing: <title> / <IMDb ID>'
 
@@ -333,11 +379,12 @@ def cmd_add(series_config, args, opts):
 
 	search = ' '.join(args)
 
-	print('- Searching series...', end='', flush=True)
+	out('- Searching series...')
 	hits = omdb.search(search, year=year)
-	print('\r\x1b[J', end='')
+	#print('\r\x1b[J', end='')
+	out('\r\a/clr/')
 	if not hits:
-		return 'Nothing found. Try generalizing your search.'
+		out('Nothing found. Try generalizing your search.\n')
 
 	if len(hits) > 1:
 		# exclude ones we already have in our config
@@ -345,16 +392,20 @@ def cmd_add(series_config, args, opts):
 		hits = list(filter(lambda H: H['id'] not in series_config, hits))
 
 		if already:
-			print('\x1b[2mAlready added: %d\x1b[m' % len(already))
+			#print('\x1b[2mAlready added: %d\x1b[m' % len(already))
+			out('\a/dim/Already added: %d\a//' % len(already))
 			for hit in already:
 				print_series_title(None, series_config[hit['id']], imdb_id=hit['id'], gray=True)
 
-		max_width = max(len(series['title']) for series in hits)
+		max_width = width - 5 - 3 - len('1968')*2 - 1 - 2 - 3 - len('episodes')
+		#max_width = max(len(series['title']) for series in hits)
 
-		print('\x1b[32;1mFound \x1b[0;1m%d\x1b[m \x1b[32;1mseries:\x1b[m' % len(hits))
+		#print('\x1b[32;1mFound \x1b[0;1m%d\x1b[m \x1b[32;1mseries:\x1b[m' % len(hits))
+		out('\a/b/Found %d series:\a//\n\n' % len(hits))
 		for idx, hit in enumerate(hits):
-			print_series_title(idx + 1, hit, imdb_id=hit['id'], title_width=max_width)
+			out(format_series_title(idx + 1, hit, imdb_id=hit['id'], title_width=max_width) + '\n')
 
+		out('\n')
 		last_num = len(hits)
 		while True:
 			try:
@@ -387,7 +438,7 @@ def cmd_add(series_config, args, opts):
 		for index, series_imdb_id, _ in get_series(series_config):
 			if series_imdb_id == imdb_id:
 				break
-		print_series_title(index, series_config[imdb_id], imdb_id=imdb_id)
+		out(format_series_title(index, series_config[imdb_id], imdb_id=imdb_id) + '\n')
 		return
 
 	hit['seen'] = {}
@@ -422,7 +473,7 @@ def cmd_add_help():
 	print_cmd_option_help('add')
 
 
-def cmd_delete(series_config, args, opts):
+def cmd_delete(series_config, args, opts, out=None, width=None):
 	if not args:
 		return 'Required argument missing: #/<IMDb ID>'
 
@@ -452,8 +503,8 @@ def cmd_delete_help():
 	print_cmd_option_help('delete')
 
 
-def cmd_mark(series_config, args, opts, marking=True):
-	refresh_all_episodes(series_config, opts=opts)
+def cmd_mark(series_config, args, opts, marking=True, out=None, width=None):
+	refresh_all_episodes(series_config, opts=opts, out=out, width=width)
 
 	if not args:
 		return 'Required argument missing: #/<IMDb ID>'
@@ -555,9 +606,11 @@ def cmd_mark(series_config, args, opts, marking=True):
 def cmd_mark_help():
 	print(f'{_b}Mark a series, season or specific episode as seen.{_n}')
 	print(f'Usage: %s {_c}.mark{_n} <# / IMDb ID> [<season / episode specifier>]' % PRG)
-	print(f'    {_o}#/<IMDb ID> <season> <episode>  (specific episodes){_n}')
-	print(f'    {_o}#/<IMDb ID> <season>            (whole seasons){_n}')
-	print(f'    {_o}#/<IMDb ID>                     (the whole series){_n}')
+	print(f'    {_o}#/<IMDb ID> <season> <episode> {_n} Episodes')
+	print(f'    {_o}#/<IMDb ID> <season>           {_n} Seasons')
+	print(f'    {_o}#/<IMDb ID>                    {_n} Whole series')
+	print('Also support ranges:   > %s .mark 42 1 1-5' % PRG)
+	print('And episode specifiers (with ranges): > %s .mark 42 s1e1-5' % PRG)
 
 	print_cmd_option_help('mark')
 
@@ -565,14 +618,16 @@ def cmd_mark_help():
 def cmd_unmark_help():
 	print(f'{_b}Unmark a series/season/episode - reverse of .mark command.{_n}')
 	print(f'Usage: %s {_c}.unmark{_n} <# / IMDb ID> [<season / episode specifier>]' % PRG)
-	print(f'    {_o}#/<IMDb ID> <season> <episode>  (single episode){_n}')
-	print(f'    {_o}#/<IMDb ID> <season>            (a whole season){_n}')
-	print(f'    {_o}#/<IMDb ID>                     (the whole series){_n}')
+	print(f'    {_o}#/<IMDb ID> <season> <episode> {_n} Episodes')
+	print(f'    {_o}#/<IMDb ID> <season>           {_n} Seasons')
+	print(f'    {_o}#/<IMDb ID>                    {_n} Whole series')
+	print('Also support ranges:   > %s .mark 42 1 1-5' % PRG)
+	print('And episode specifiers (with ranges): > %s .mark 42 s1e1-5' % PRG)
 
 	print_cmd_option_help('unmark')
 
 
-def cmd_archive(series_config, args, opts, archiving=True):
+def cmd_archive(series_config, args, opts, archiving=True, out=None, width=None):
 	if not args:
 		return 'Required argument missing: #/<IMDb ID>'
 
@@ -583,6 +638,8 @@ def cmd_archive(series_config, args, opts, archiving=True):
 		return err
 
 	currently_archived = series.get('archived', False) == True
+
+	# TODO: check if all episodes are seen or not?
 
 	if archiving == currently_archived:
 		# TODO: better presentation of title
@@ -619,14 +676,14 @@ def cmd_restore_help():
 	print_cmd_option_help('restore')
 
 
-def cmd_refresh(series_config, args, opts):
-	refresh_all_episodes(series_config, args, { **opts, 'max-age': 0 })
+def cmd_refresh(series_config, args, opts, out=None, width=None):
+	refresh_all_episodes(series_config, args, out, width, { **opts, 'max-age': 0 })
 
 def cmd_refresh_help():
 	print(f'{_b}Refresh episode data of all non-archived series.{_n}')
 	print(f'Usage: %s {_c}.refresh{_n} <# / IMDb ID>' % PRG)
-	print(f'    {_o}[#/<IMDb ID>]       (only specified series){_n}')
-	print(f'    {_o}[<pattern>]         (only matching series){_n}')
+	print(f'    {_o}[#/<IMDb ID>]      {_n} Only specified series')
+	print(f'    {_o}[<pattern>]        {_n} Only matching series')
 
 	print_cmd_option_help('refresh')
 
@@ -699,7 +756,7 @@ def refresh_episodes(imdb_id, series_config, progress=False):
 	return len(episodes)
 
 
-def refresh_all_episodes(series_config, args=None, opts=None):
+def refresh_all_episodes(series_config, args=None, opts=None, out=None, width=None):
 	opts = opts or {}
 	max_age = opts.get('max-age', default_max_episodes_refresh_age)
 
@@ -739,7 +796,7 @@ def refresh_all_episodes(series_config, args=None, opts=None):
 
 	with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
 		promises = [
-			executor.submit(refresh_episodes, imdb_id, series_config, progress=None)
+			executor.submit(refresh_episodes, imdb_id, series_config, out=out, progress=None)
 			for imdb_id in to_refresh
 		]
 		concurrent.futures.wait(promises)
@@ -767,7 +824,12 @@ def transform_episode_info(episode):
 		if field not in useful_episode_fields:
 			episode.pop(field, 0)
 
-def print_series_title(num, info, title_width=0, imdb_id=None, gray=False, tail=None):
+
+def print_series_title(num, info, title_width=0, imdb_id=None, gray=False):
+	print(format_series_title(num, info, title_width=title_width, imdb_id=imdb_id, gray=gray))
+
+
+def format_series_title(num, info, title_width=0, imdb_id=None, gray=False):
 	infop = {**info}
 
 	# pad title string if width is specified
@@ -784,29 +846,87 @@ def print_series_title(num, info, title_width=0, imdb_id=None, gray=False, tail=
 		else:
 			infop['year'] = '%d-' % year[0]
 
-	if num is not None:
-		infop['_num'] = '%5s' % f'#{num}'
-
-		s = '\x1b[33;1m%(_num)s \x1b[38;5;253m%(title)s\x1b[22;39m  \x1b[38;5;245m%(year)-9s\x1b[22;39m' % infop
-	else:
+	if num is None:
 		if 'added' in infop:
 			infop['added'] = infop['added'].split()[0]
-		s = ' \x1b[32;1m%(added)s\x1b[22;39m  \x1b[38;5;253m%(title)s\x1b[22;39m  \x1b[38;5;245m%(year)-9s\x1b[22;39m' % infop
+		#s = ' \x1b[32;1m%(added)s\x1b[22;39m ' % infop
+		s = ' \a/date/%(added)s\a// ' % infop
+
+	elif num is False:
+		s = ' '
+
+	else:
+		infop['_num'] = '%5s' % f'#{num}'
+		#s = '\x1b[33;1m%(_num)s ' % infop
+		s = '\a/index/%(_num)s ' % infop
+
+	s += '\a/title/%(title)s\a//  \a/year/%(year)-9s\a//' % infop
+	#s += '\x1b[38;5;253m%(title)s\x1b[22;39m  \x1b[38;5;245m%(year)-9s\x1b[22;39m' % infop
 
 	if imdb_id is not None:
-		s += f'  \x1b[2m{imdb_id}\x1b[22;39m'
-
-	if tail:
-		s += tail
+		#s += f'  \x1b[2m{imdb_id}\x1b[22;39m'
+		s += f'  \a/imdb/{imdb_id}\a//'
 
 	if gray:
 		# remove all escape sequences
-		print(f'\x1b[22;39;38;5;246m%s' % strip_ansi(s), end='')
-	else:
-		print('%s' % s, end='')
+		#s = f'\x1b[22;39;38;5;246m%s' % strip_ansi(s)
+		s = f'\a//\a/dim/%s' % ctl_strip(s)
+	#else:
+		#print('%s' % s, end='')
+	#	s += '\x1b[J'  # clear to EOL (e.g. different bg color)
 
-	print('\x1b[J')
+	return s
 
+# introducing "ctl" - high-level text styling using in-band control sequences
+# basic syntax: \x1c|<style name>|
+# and then 'style name' is mapped to underlying output-specific syntax, e.g. ANSI escape sequences for terminals.
+tty_ctl = {
+ 	'':         lambda w, _: w('\x1b[22;23;24;25;27;28;29;39m'),  # fg: reset
+	'bghi':     lambda w, _: w('\x1b[48;5;234m\x1b[J'), # bg: hilight
+	'bgrst':    lambda w, _: w('\x1b[49m'),             # bg: reset
+	'clr':      lambda w, _: w('\x1b[J'),
+ 	'b':        lambda w, _: w('\x1b[1m'),
+	'dim':      lambda w, _: w('\x1b[2m'),
+	'italic':   lambda w, _: w('\x1b[3m'),
+	'underl':   lambda w, _: w('\x1b[4m'),
+	'^':        lambda w, n: w('\x1b[%dA' % int(n)),
+	'v':        lambda w, n: w('\x1b[%dB' % int(n)),
+	'>':        lambda w, n: w('\x1b[%dC' % int(n)),
+	'<':        lambda w, n: w('\x1b[%dD' % int(n)),
+	'index':    lambda w, _: w('\x1b[33;1m'),
+	'date':     lambda w, _: w('\x1b[32;1m'),
+	'title':    lambda w, _: w('\x1b[38;5;253m'),
+	'year':     lambda w, _: w('\x1b[38;5;245m'),
+	'imdb':     lambda w, _: w('\x1b[2m'),
+	'epid':     lambda w, _: w('\x1b[33;1m'),
+	'eptitle':  lambda w, _: w('\x1b[34;1m'),
+	'countdn':  lambda w, _: w('\x1b[32;1m'),
+	'oper':     lambda w, _: w('\x1b[34;1m'),
+	'duration': lambda w, _: w('\x1b[38;5;244m'),
+	'total':    lambda w, _: w('\x1b[38;5;256m'),
+}
+def mk_ctl_tty(writer):
+
+	_ctl_tty_buf = []
+	def ctl_tty(s):
+		# buffer everything, flush when LF is received
+
+		nonlocal _ctl_tty_buf
+		lf = s.find('\n')
+		if lf == -1:
+			_ctl_tty_buf.append(s)
+			return
+
+		sofar = ''.join(_ctl_tty_buf) + s[:lf + 1]  # up to, and including, the LF
+		_ctl_tty_buf.clear()
+
+		ctl_do(sofar, tty_ctl, writer)
+
+		s = s[lf + 1: ]
+		if s:
+			ctl_tty(s)  # the bit after the LF, if any
+
+	return ctl_tty
 
 
 def format_episode_title(series_title, episode, title_width=0, gray=False, remaining=0, today=False, only_released=False):
@@ -823,7 +943,8 @@ def format_episode_title(series_title, episode, title_width=0, gray=False, remai
 		title_width -= 2
 		ep['title'] = ep['title'][:title_width] + '…'
 
-	s += f'\x1b[33;1ms{ep["season"]}e{ep["episode"]:02}\x1b[22;39m \x1b[34;1m{ep["title"]:{title_width}}\x1b[22;39m  '
+	#s += f'\x1b[33;1ms{ep["season"]}e{ep["episode"]:02}\x1b[22;39m \x1b[34;1m{ep["title"]:{title_width}}\x1b[22;39m  '
+	s += f'\a/epid/s{ep["season"]}e{ep["episode"]:02}\a// \a/eptitle/{ep["title"]:{title_width}}\a//  '
 
 	future = False
 	if 'date' in episode:
@@ -839,13 +960,16 @@ def format_episode_title(series_title, episode, title_width=0, gray=False, remai
 		today = False
 
 	if future:
-		s += f'\x1b[1m{dt}\x1b[22;39m'
+		#s += f'\x1b[1m{dt}\x1b[22;39m'
+		s += f'\a/b/{dt}\a//'
 		if diff > 24*3600:
-			s += f'\x1b[38;5;244m/{fmt_duration(diff, roughly=True)}\x1b[22;39m'
+			#s += f'\x1b[38;5;244m/{fmt_duration(diff, roughly=True)}\x1b[22;39m'
+			s += f'\a/duration//{fmt_duration(diff, roughly=True)}\a//'
 		if remaining:
-			s += '  \x1b[32;1m+%d\x1b[22;39m' % remaining
+			#s += '  \x1b[32;1m+%d\x1b[22;39m' % remaining
+			s += '  \a/countdn/+%d\a//' % remaining
 	elif today:
-		s += '\x1b[32;1mTODAY\x1b[22;39m'
+		s += '\a/countdn/TODAY\a//'
 	#else:
 	#	s += f'\x1b[2m{fmt_duration(episode.get("runtime", 0))}\x1b[m'
 
@@ -904,39 +1028,45 @@ def _ep_key(episode):
 	return f'{episode["season"]}:{episode["episode"]}'
 
 
-def print_seen_status(series, gray=False):
-	ind = '       '
+def format_seen_status(series, gray=False, indent=7):
+	ind = ' '*indent
 
-	print(f'{ind}', end='')
+	s = f'{ind}'
 
 	seen, unseen = seen_unseen_episodes(series)
 	all_seen = seen and len(seen) == len(series.get('episodes', []))
 
-	s = ''
-
 	if seen or unseen:
-		s += '\x1b[38;5;256mTotal: '
+		#s += '\x1b[38;5;256mTotal: '
+		s += '\a/total/Total: '
 
 	if seen:
 		seen_duration = sum(ep.get('runtime', 0) for ep in seen)
-		s += f'Seen: {len(seen)}  \x1b[2m{fmt_duration(seen_duration)}\x1b[m'
+		#s += f'Seen: {len(seen)}  \x1b[2m{fmt_duration(seen_duration)}\x1b[m'
+		s += f'Seen: {len(seen)}  \a/dim/{fmt_duration(seen_duration)}\a//'
 		if all_seen:
-			s += '  \x1b[32;1mALL\x1b[m'
+			#s += '  \x1b[32;1mALL\x1b[m'
+			s += '  \a/countdn/ALL\a//'
 
 	if seen and unseen:
-		s += ' \x1b[34;1m-\x1b[m '
+		#s += ' \x1b[34;1m-\x1b[m '
+		s += ' \a/oper/-\a// '
 
 	if unseen:
 		unseen_duration = sum(ep.get('runtime', 0) for ep in unseen)
-		s += f'Unseen: {len(unseen)}  \x1b[2m{fmt_duration(unseen_duration)}\x1b[m'
+		#s += f'Unseen: {len(unseen)}  \x1b[2m{fmt_duration(unseen_duration)}\x1b[m'
+		s += f'Unseen: {len(unseen)}  \a/dim/{fmt_duration(unseen_duration)}\a//'
 
 	if seen or unseen:
-		s += '\x1b[m'
+		#s += '\x1b[m'
+		s += '\a//'
 
 	if gray:
-		print(f'\x1b[2m{strip_ansi(s)}\x1b[m')
-	else:
-		print(s)
+		#print(f'\x1b[2m{strip_ansi(s)}\x1b[m')
+		s = f'\a/dim/{strip_ctl(s)}\a//'
+	#else:
+		#print(s)
+	s += '\n'
 
 	title_width = 0
 	if seen and unseen:
@@ -946,16 +1076,21 @@ def print_seen_status(series, gray=False):
 		# show the last *in sequence* episode marked as seen,
 		# NOT the episode last *marked* as seen
 		if gray:
-			print('\x1b[2m', end='')
-		print(f'{ind}Last: ', end='')
-		print(format_episode_title('', seen[-1], gray=gray, title_width=title_width)[0])
+			#print('\x1b[2m', end='')
+			s += '\a/dim/'
+		#print(f'{ind}Last: ', end='')
+		s += f'{ind}Last: '
+		s += format_episode_title('', seen[-1], gray=gray, title_width=title_width)[0] + '\n'
 
 	if unseen:
-		s, future = format_episode_title('', unseen[0], gray=gray, title_width=title_width)
-		if s:
+		ep_s, future = format_episode_title('', unseen[0], gray=gray, title_width=title_width)
+		if ep_s:
 			if gray:
-				print('\x1b[2m', end='')
-			print(f'{ind}Next:', s)
+				#print('\x1b[2m', end='')
+				s += '\a/dim/'
+			s += f'{ind}Next: %s\n' % ep_s
+
+	return s
 
 
 def series_num_archived(series_config):
@@ -1179,5 +1314,342 @@ def plural(n):
 	return '' if n == 1 else 's'
 
 
+ctl_ptn = re.compile('\a/(\d+)?([^/]*?)/')
+
+ctl_trace = True
+
+def ctl_do(s, styles, writer=None):
+	if ctl_trace:
+		log('ctl_do: »%s«' % s)
+
+		def tracer(writer):
+			def w(s):
+				log('write: »%s« (%d)' % (s, len(s)))
+				writer(s)
+			return w
+
+		writer = tracer(writer)
+
+	pos = 0
+	# execute ctl-commands and forward everything else as-is
+	while pos < len(s):
+		m = ctl_ptn.search(s, pos)
+		head = s[pos: m.start() if m else None]
+		if head:
+			writer(head) # fwd up to ctl code start (or end of string)
+
+		if not m:  # no ctl code
+			break
+
+		# decode the ctl code
+		arg = m.group(1)
+		code = m.group(2)
+
+		command = styles.get(code)
+		if command is None:
+			raise ValueError('unknown ctl code: %s' % code)
+
+		# execute the ctl command
+		command(writer, arg)
+
+		pos = m.end()
+
+
+def ctl_strip(s):
+	return re.sub('\a/[^/]*?/', '', s)
+
+
+def ui_main(scr):
+	curses.use_default_colors()
+	try:
+		curses.curs_set(False)
+	except:
+		pass
+
+
+	color_idx = 50
+	def color(fg, bg=-1, bold=False, dim=False):
+		nonlocal color_idx
+		curses.init_pair(color_idx, fg, bg);
+		pair = curses.color_pair(color_idx)
+		if bold: pair |= curses.A_BOLD
+		elif dim: pair |= curses.A_DIM
+		color_idx += 1
+		return pair
+
+	white = color(curses.COLOR_WHITE, bold=True)
+	yellow = color(curses.COLOR_YELLOW, bold=True)
+	blue = color(curses.COLOR_BLUE, bold=True)
+	faint = color(-1, dim=True)
+
+
+	series_config = load_series_config()
+
+	top_margin = 1
+	bottom_margin = 1
+
+	# size = None
+	# last_y = None
+	# last_x = None
+
+	# style_ptn = re.compile('\x1b' + r'\[(\d+(;\d+)*)?m')
+	# move_ptn = re.compile('\x1b' + r'\[(\d+)([ABCD])')
+
+	# cy = None
+	# cx = None
+	# style = curses.A_NORMAL
+
+	# def add_text(*args, **kwargs):
+	# 	nonlocal cy
+	# 	nonlocal cx
+	# 	nonlocal style
+
+	# 	if cy > last_y or cx > last_x:
+	# 		return
+
+	# 	text = ' '.join(str(a) for a in args)
+	# 	#text = strip_ansi(text)
+
+	# 	# TODO: interpret escape sequences or do prompt-toolkit-style "structured text" ?
+	# 	m = style_ptn.search(text)
+	# 	if m:
+	# 		if m.start() > 0:
+	# 			add_text(text[:m.start()], **kwargs, end='')
+	# 		text = text[m.end(): ]
+
+	# 		csi = m.group(1)
+	# 		log('CSI text: »%s«' % text)
+	# 		log('     CSI: »%s«' % csi)
+	# 		if csi:
+	# 			fg, bg, attr = csi2style(csi, fg, bg, style)
+
+	# 			style = (fg or curses.A_NORMAL) | attr
+	# 			if fg and style != curses.A_NORMAL:
+	# 				style |= curses.A_BOLD
+	# 	else:
+	# 		log('CSI not found in text: »%s«' % text)
+
+	# 	kwstr = ' '.join('%s=»%s«' % (k, v) for k, v in kwargs.items())
+	# 	log('add_text(%d,%d): »%s« %s' % (cy, cx, text, kwstr))
+	# 	text_parts = text.split('\n')
+
+	# 	for part in text_parts[: -1]:
+	# 		add_text(part, **kwargs, end=None)
+	# 	text = text_parts[-1]
+
+	# 	text_parts = text.split('\r')
+	# 	for part in text_parts[: -1]:
+	# 		add_text(part, end='')
+	# 		cx = 0
+	# 	text = text_parts[-1]
+
+	# 	# execute cursor movement escape sequences
+	# 	m = move_ptn.search(text)
+	# 	if m:
+	# 		before = text[: m.start()]
+	# 		if before:
+	# 			add_text(before, **kwargs, end='')
+	# 		text = text[m.end(): ]
+	# 		count = int(m.group(1))
+	# 		direction = m.group(2)
+	# 		if direction == 'A':  # up
+	# 			if cy > count + top_margin:
+	# 				cy -= count
+	# 		elif direction == 'B':  # down
+	# 			if cy < last_y - count:
+	# 				cy += count
+	# 		elif direction == 'D':  # left / back
+	# 			if cx > count:
+	# 				cx -= count
+	# 		elif direction == 'C':  # right / forward
+	# 			if cx < last_x - count:
+	# 				cx += count
+
+	# 	text = text[: last_x - cx]
+	# 	if text:
+	# 		scr.addstr(cy, cx, text, style)#curses.COLOR_WHITE)#series_title)
+	# 		cx += len(text)
+	# 	if kwargs.get('end') == None:
+	# 		cx = 0
+	# 		cy += 1
+
+	# log('-> y: %d  x: %d' % (cy, cx))
+
+	title_writer = CursesWriter(scr, rect=(0, 0, 0, -1))    # only first line
+	menu_writer = CursesWriter(scr, rect=(-1, 0, -1, -1))   # only bottom line
+	main_writer = CursesWriter(scr, rect=(top_margin, 0, -bottom_margin - 1, -1))  # the rest
+
+	def on_resize(newsize):
+		#nonlocal size
+		#nonlocal last_y
+		#nonlocal last_x
+		title_writer.resize()
+		menu_writer.resize()
+		main_writer.resize()
+		#size = newsize
+		#last_y = size[0] - 1 - bottom_margin
+		#last_x = size[1] - 1
+
+	on_resize(scr.getmaxyx())
+
+	def mk_ctl_curses(writer):
+		def ctl_curses(s):
+			ctl_do(s, curses_ctl, writer)
+
+		return ctl_curses
+
+	while True:
+		scr.clear()
+
+		# TODO: draw top & bottom bars/menus/titles
+		title_writer.home()
+		title_writer('EPM UI v0.1')
+
+		menu_writer.home()
+		menu_writer('Quit')
+
+		#cy = top_margin
+		#cx = 0
+
+		for _ in range(10):
+			log('')
+		log('='*80)
+		#cmd_unseen(series_config, ['who'], {'unseen:start': True}, out=mk_ctl_curses(main_writer), detail=False, show_id=False, width=last_x - 30)
+		#scr.refresh()
+
+		key = scr.getch()
+		if key == -1:
+			continue
+
+		if key == ord('q'):
+			break
+
+		if key == curses.KEY_RESIZE:
+			on_resize(scr.getmaxyx())
+
+curses_styles = {
+	'':      lambda writer: writer.reset_color(),
+	'title': lambda writer: writer.set_color(fg=curses.COLOR_YELLOW, attr=curses.A_BOLD),
+	'year':  lambda writer: writer.set_color(fg=curses.COLOR_WHITE, attr=curses.A_NORMAL),
+}
+
+def ctl_curses(writer, s):
+	ctl_do(s, curses_styles, writer)
+
+class CursesWriter:
+	def __init__(self, screen, rect=None):
+		self.screen = screen
+		self.rect_def = rect
+		self.y = 0
+		self.x = 0
+		self.resize()
+
+		self.fg = -1
+		self.bg = -1
+		self.attr = curses.A_NORMAL
+
+
+		self.home()
+
+	def home(self):
+		self.y = self.rect[0]
+		self.x = self.rect[1]
+
+	def reset_color(self):
+		self.fg = -1
+		self.bg = -1
+		self.attr = curses.A_NORMAL
+
+	def set_color(self, fg=None, bg=None, attr=None):
+		if fg is not None:
+			self.fg = fg
+		if bg is not None:
+			self.bg = bg
+		if attr is not None:
+			self.attr = attr
+
+	def resize(self):
+		self.h_w = self.screen.getmaxyx()
+
+		# by default, the whole screen
+		self.rect = [ 0, 0, self.h_w[0], self.h_w[1] ]
+
+		if self.rect_def is not None:
+			for n in range(4):
+				if self.rect_def[n] >= 0:
+					value = self.rect_def[n]
+					if n >= 2:  # 'max' values can't be larger than screen size
+						value = min(self.h_w[n - 2], value)
+					self.rect[n] = value
+
+				elif n >= 2:
+					self.rect[n] = self.h_w[n - 2] - self.rect_def[n]
+
+			log('rect: %s' % self.rect)
+
+		# clip y & x to the rect
+		self.y = min(self.rect[2] - 1, max(self.rect[0], self.y))
+		self.x = min(self.rect[3] - 1, max(self.rect[1], self.x))
+
+
+	def __call__(self, text):
+		if self.y >= self.rect[3] or self.x >= self.rect[2]:
+			return
+		if len(text) + self.x >= self.rect[2]:
+			text = text[: self.rect[2] - len(text)]
+
+		self.screen.addstr(self.y, self.x, text)#, self.fg | self.attr)
+		self.x += len(text)
+		self.y += 1
+
+
+def csi2style(csi, fg, bg, attr):
+	csi = [int(c) for c in csi.split(';')]
+	if not csi or csi == [0]:
+		attr = curses.A_NORMAL
+
+	#fg = 0
+	#bg = 0
+	#attr = curses.A_NORMAL
+
+	while csi:
+		c = csi.pop(0)
+		if c == 2:
+			attr |= curses.A_DIM
+		elif c == 22:
+			attr = curses.A_NORMAL
+		if c >= 30 and c <= 37:
+			fg = c - 30
+		elif c >= 40 and c <= 47:
+			bg = c - 40
+		elif c in (38, 48) and len(csi) >= 1:
+			is_fg = c == 38
+			mode = csi.pop(0)
+			if mode == 5 and len(csi) == 1:  # 256-color
+				if is_fg:
+					fg = csi.pop(0)
+				else:
+					bg = csi.pop(0)
+			elif mode == 2 and len(csi) == 3: # true-color
+				if is_fg:
+					fg = csi[:3]
+				else:
+					fg = csi[:3]
+			else:
+				raise RuntimeError('bad CSI sequence: %d;%s' % (38 if is_fg else 48, mode))
+		elif c == 39:
+			attr = curses.A_NORMAL # should actually remove A_BOLD and A_DIM
+		else:
+			raise RuntimeError('bad CSI sequence: %d' % c)
+
+	return fg, bg, style
+
+
+def ui_run():
+	try:
+		curses.wrapper(ui_main)
+	except KeyboardInterrupt:
+		pass
+
 if __name__ == '__main__':
-	main()
+	main(sys.argv[1: ])
