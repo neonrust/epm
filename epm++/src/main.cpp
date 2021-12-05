@@ -13,7 +13,7 @@ int main()
 	fmt::print(g_log, "epm term app...\n");
 
 
-	term::App app;//(term::MouseEvents);
+	term::App app(term::MouseEvents);
 	if(not app)
 		return 1;
 
