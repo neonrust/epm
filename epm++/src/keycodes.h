@@ -1,5 +1,8 @@
 #pragma once
 
+#include <string>
+#include <vector>
+
 namespace key
 {
 
@@ -9,10 +12,10 @@ enum Key
 	BACKSPACE = 1000,
 	TAB,
 	ENTER,
-	ARROW_UP,
-	ARROW_DOWN,
-	ARROW_RIGHT,
-	ARROW_LEFT,
+	UP,
+	DOWN,
+	RIGHT,
+	LEFT,
 	HOME,
 	INSERT,
 	DELETE,
@@ -32,6 +35,32 @@ enum Key
 	F10,
 	F11,
 	F12,
+	A,
+	B,
+	C,
+	D,
+	E,
+	F,
+	G,
+	H,
+	I,
+	J,
+	K,
+	L,
+	M,
+	N,
+	O,
+	P,
+	Q,
+	R,
+	S,
+	T,
+	U,
+	V,
+	W,
+	X,
+	Y,
+	Z,
 };
 
 enum Modifier
@@ -42,4 +71,9 @@ enum Modifier
 	CTRL  = 1 << 2,
 };
 
-} // NS: term
+std::string to_string(Key k, Modifier m);
+
+Key key_from_string(const std::string &s);
+Modifier modifier_from_list(const std::vector<std::string> &v);
+
+} // NS: key

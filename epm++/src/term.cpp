@@ -44,8 +44,12 @@ namespace term
 extern std::string safe(const std::string &s);
 
 using IOFlag = decltype(termios::c_lflag);
-IOFlag LocalEcho = ECHO;
-IOFlag LineBuffering = ICANON;
+// NOTE: make sure these flag bits does not overlap if used simultaneously
+[[maybe_unused]] static constexpr IOFlag LocalEcho      = ECHO;
+[[maybe_unused]] static constexpr IOFlag LineBuffering  = ICANON;
+[[maybe_unused]] static constexpr IOFlag SignalDecoding = ISIG;
+[[maybe_unused]] static constexpr IOFlag EightBit       = CS8;
+[[maybe_unused]] static constexpr IOFlag CRtoLF         = ICRNL;
 
 void signal_received(int signum);
 
@@ -104,7 +108,7 @@ void App::loop(std::function<bool (Event)> handler)
 
 
 
-bool set_in_flags(IOFlag flags, bool set=true);
+bool modify_io_flags(bool set, IOFlag flags);
 bool clear_in_flags(IOFlag flags);
 
 bool App::initialize(Options opts)
@@ -129,7 +133,13 @@ bool App::initialize(Options opts)
 
 	fmt::print(g_log, "clear termios flags..\n");
 	clear_in_flags(LocalEcho | LineBuffering);
+	//modify_io_flags(true, EightBit | CRtoLF);
 
+	if((opts & NoSignalDecode) > 0)
+	{
+		fmt::print(g_log, "disabling signal sequence decoding...\n");
+		clear_in_flags(SignalDecoding);
+	}
 	if((opts & Fullscreen) > 0)
 	{
 		fmt::print(g_log, "enabling alternate screen...\n");
@@ -156,6 +166,9 @@ bool App::initialize(Options opts)
 	_height = std::get<1>(size);
 	fmt::print(g_log, "terminal size: {}x{}\n", _width, _height);
 
+	if(not init_input())
+		return false;
+
 	return true;
 }
 
@@ -172,6 +185,8 @@ void App::shutdown()
 	write(esc::mouse_buttons_off);
 	write(esc::screen_normal);
 	write(esc::cursor_show);
+
+	shutdown_input();
 
 	_initialized = false;
 }
@@ -195,20 +210,42 @@ void App::write(const std::string_view &s)
 
 bool clear_in_flags(IOFlag flags)
 {
-	return set_in_flags(flags, false);
+	return modify_io_flags(false, flags);
 }
 
-bool set_in_flags(IOFlag flags, bool set)
+bool modify_io_flags(bool set, IOFlag flags)
 {
 	::termios settings;
 
 	if(::tcgetattr(STDIN_FILENO, &settings))
 		return false;
 
+	// NOTE: this only works if none of the flag bits overlap between lflags, cflags and iflags
+	static constexpr auto iflags_mask = CRtoLF;
+	static constexpr auto cflags_mask = EightBit;
+	static constexpr auto lflags_mask = LocalEcho | LineBuffering  | SignalDecoding;
+
+	const auto iflags = flags & iflags_mask;
+	const auto lflags = flags & lflags_mask;
+	const auto cflags = flags & cflags_mask;
 	if(set)
-		settings.c_lflag |= flags;
+	{
+		if(iflags)
+			settings.c_iflag |= iflags;
+		if(cflags)
+			settings.c_cflag |= cflags;
+		if(lflags)
+			settings.c_lflag |= lflags;
+	}
 	else
-		settings.c_lflag &= ~flags;
+	{
+		if(iflags)
+			settings.c_iflag &= ~iflags;
+		if(cflags)
+			settings.c_cflag &= ~cflags;
+		if(lflags)
+			settings.c_lflag &= ~lflags;
+	}
 
 	if(::tcsetattr(STDIN_FILENO, TCSANOW, &settings))
 		return false;

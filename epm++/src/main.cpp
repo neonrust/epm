@@ -1,5 +1,6 @@
 #include "term.h"
 
+#include <tuple>
 #include <fmt/core.h>
 
 std::FILE *g_log { nullptr };
@@ -12,12 +13,37 @@ int main()
 	fmt::print(g_log, "epm term app...\n");
 
 
-	term::App app(term::MouseEvents);
+	term::App app;//(term::MouseEvents);
 	if(not app)
 		return 1;
 
 	app.loop([](term::Event e) {
-		fmt::print(g_log, "\x1b[33;1mevent: text: '{}' ({})\x1b[m\n", e.text, e.text.size());
+
+		if(e.mouse.button_action != term::NoAction)
+		{
+			fmt::print(
+				"  mouse button {} {} @ {},{}\n",
+				e.mouse.button,
+				e.mouse.button_action==term::ButtonPressed? "pressed": "released",
+				std::get<0>(e.mouse.position),
+				std::get<1>(e.mouse.position)
+			);
+		}
+		else if(e.mouse.wheel_moved != 0)
+			fmt::print("  mouse wheel: {}\n", e.mouse.wheel_moved);
+
+		else if(std::get<0>(e.mouse.position) != -1)
+			fmt::print(
+				"   mouse move: {},{}\n",
+				std::get<0>(e.mouse.position),
+				std::get<1>(e.mouse.position)
+			);
+
+		else if(e.key != key::None)
+			fmt::print("   key: {}\n", key::to_string(e.key, e.key_modifiers));
+		else
+			fmt::print("  text: '{}' ({})\n", e.text, e.text.size());
+
 		return true;
 	});
 

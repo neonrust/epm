@@ -6,6 +6,7 @@
 
 #include "event.h"
 
+
 using namespace std::literals::string_view_literals;
 using namespace std::literals::string_literals;
 
@@ -21,13 +22,21 @@ enum Options
 	MouseButtonEvents = 1 << 2,
 	MouseMoveEvents   = 1 << 3,
 	MouseEvents       = MouseButtonEvents | MouseMoveEvents,
+	NoSignalDecode    = 1 << 4,
+};
+
+struct KeySequence
+{
+	std::string sequence;
+	key::Modifier mods;
+	key::Key key;
 };
 
 struct App
 {
 	friend void signal_received(int signum);
 
-	App(Options opts = Defaults);
+	App(Options opts=Defaults);
 	~App();
 
 	operator bool() const;
@@ -40,10 +49,16 @@ private:
 	void shutdown();
 	std::tuple<std::size_t, std::size_t> get_size() const;
 	void write(const std::string_view &s);
-	Event read_input() const;
 
+	bool init_input();
+	Event read_input() const;
+	void shutdown_input();
+
+private:
 	std::size_t _width { 0 };
 	std::size_t _height { 0 };
+	std::vector<KeySequence> _key_sequences;
+
 	bool _initialized { false };
 };
 
