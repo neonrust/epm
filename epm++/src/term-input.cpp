@@ -26,9 +26,10 @@ namespace term
 
 //static constexpr char _ = '\0';
 
-std::variant<Event, int> parse_esc(std::function<bool (char &, char)> next);
-std::variant<Event, int> parse_csi(std::function<bool(char &, char)> next);
+//std::variant<Event, int> parse_esc(std::function<bool (char &, char)> next);
+//std::variant<Event, int> parse_csi(std::function<bool(char &, char)> next);
 std::variant<Event, int> parse_mouse(const std::string_view &in, std::size_t &eaten);
+std::variant<Event, int> parse_utf8(const std::string_view &in, std::size_t &eaten);
 
 std::string safe(const std::string &s);
 std::string hex(const std::string &s);
@@ -53,11 +54,9 @@ Event App::read_input() const
 	};
 
 
-	fmt::print(g_log, "\x1b[97;1m// {}\x1b[m {}\n", safe(in), hex(in));
-
 	static const std::string mouse_prefix("\x1b[<");
 
-	if(in.size() >= 14 and in.starts_with(mouse_prefix))
+	if(in.size() >= 9 and in.starts_with(mouse_prefix))
 	{
 		std::size_t eaten { 0 };
 
@@ -83,16 +82,22 @@ Event App::read_input() const
 		}
 	}
 
-	// TODO: parse utf-8 character
 
-	fmt::print(g_log, "couldn't parse input: '{}' ({})\n", safe(in), in.size());
+	// TODO: parse utf-8 character
+	std::size_t eaten { 0 };
+	auto event = parse_utf8(std::string_view(in.begin(), in.end()), eaten);
+	if(eaten > 0)
+	{
+		revert(in.substr(eaten));
+		return std::get<Event>(event);
+	}
+
+	fmt::print(g_log, "\x1b[33;1mparse failed: {}\x1b[m {}  ({})\n", safe(in), hex(in), in.size());
 	return {};
 }
 
 std::variant<Event, int> parse_mouse(const std::string_view &in, std::size_t &eaten)
 {
-	fmt::print(g_log, "parse_mouse {}\n", safe(std::string(in)));
-
 	// '0;63;16M'  (button | modifiers ; X ; Y ; pressed or motion)
 	// '0;63;16m'  (button | modifiers ; X ; Y ; released)
 
@@ -219,6 +224,43 @@ std::variant<Event, int> parse_mouse(const std::string_view &in, std::size_t &ea
 	}
 
 	return -1;
+}
+
+// this was ruthlessly stolen from termlib (tkbd.c)
+static const std::uint8_t utf8_length[] = {
+	1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, // 0x00
+	1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, // 0x20
+	1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, // 0x40
+	1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, // 0x60
+	1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, // 0x80
+	1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, // 0xa0
+	2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2, // 0xc0
+	3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,4,4,4,4,4,4,4,4,5,5,5,5,6,6,1,1  // 0xe0
+};
+//static const std::uint8_t utf8_mask[] = {0x7F, 0x1F, 0x0F, 0x07, 0x03, 0x01};
+
+std::variant<Event, int> parse_utf8(const std::string_view &in, std::size_t &eaten)
+{
+	if(in.empty())
+		return -1;
+
+	std::size_t len = utf8_length[(uint8_t)in[0]];
+	if (len > in.size())
+		return -1;
+
+//	const auto mask = utf8_mask[len - 1];
+//	std::uint32_t codepoint = in[0] & mask;
+
+//	for (int i = 1; i < len; ++i)
+//	{
+//		codepoint <<= 6;
+//		codepoint |= in[i] & 0x3f;
+//	}
+
+	eaten = len;
+	return Event{
+		.text = std::string(in.substr(0, len)),
+	};
 }
 
 bool App::init_input()

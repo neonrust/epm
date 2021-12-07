@@ -18,5 +18,9 @@ set(sources
 	src/keycodes.cpp
 )
 
+#link_directories(epm extern/termlib/lib/)
+#include_directories(epm extern/termlib/include/)
+
 add_executable(epm ${sources})
+
 target_link_libraries(epm fmt pthread dl)
