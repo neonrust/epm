@@ -13,7 +13,7 @@ from tempfile import mkstemp
 import omdb
 
 VERSION = '0.4'
-VERSION_DATE = '2021-11-16'
+VERSION_DATE = '2021-12-07'
 
 PRG = os.path.basename(sys.argv[0])
 
@@ -689,9 +689,9 @@ def find_series(series_config, find_id):
 def no_series(series_config):
 	num_archived = series_num_archived(series_config)
 	if num_archived:
-		return 'No series [%d archived]. Use: \x1b[1m%s add <title> [<year>]\x1b[m' % (num_archived, PRG)
+		return 'No active series [but %d archived]. Use: \x1b[1m%s add <title search...> [<year>]\x1b[m' % (num_archived, PRG)
 	else:
-		return 'No series. Use: \x1b[1m%s add <title> [<year>]\x1b[m' % PRG
+		return 'No series added. Use: \x1b[1m%s add <title> [<year>]\x1b[m' % PRG
 
 
 def refresh_episodes(imdb_id, series_config, progress=False):
