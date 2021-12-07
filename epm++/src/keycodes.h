@@ -23,6 +23,7 @@ enum Key
 	PAGE_UP,
 	PAGE_DOWN,
 	ESCAPE,
+	NUMPAD_5,
 	F1,
 	F2,
 	F3,

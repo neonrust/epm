@@ -30,6 +30,7 @@ std::string to_string(Key k, Modifier m)
 	case PAGE_UP:     key_name = "PAGE_UP"; break;
 	case PAGE_DOWN:   key_name = "PAGE_DOWN"; break;
 	case ESCAPE:      key_name = "ESCAPE"; break;
+	case NUMPAD_5:    key_name = "NUMPAD_5"; break;
 	default: break;
 	}
 	if(k >= F1 and k <= F12)
@@ -71,20 +72,21 @@ Key key_from_string(const std::string &name)
 		if(name.size() == 3) // F10 .. F12
 			return Key(name[2] - '0' + F10);
 	}
-	if(name == "BACKSPACE") return    BACKSPACE;
-	if(name == "TAB") return          TAB;
-	if(name == "ENTER") return        ENTER;
-	if(name == "UP") return           UP;
-	if(name == "DOWN") return         DOWN;
-	if(name == "RIGHT") return        RIGHT;
-	if(name == "LEFT") return         LEFT;
-	if(name == "HOME") return         HOME;
-	if(name == "INSERT") return       INSERT;
-	if(name == "DELETE") return       DELETE;
-	if(name == "END") return          END;
-	if(name == "PAGE_UP") return         PAGE_UP;
-	if(name == "PAGE_DOWN") return         PAGE_DOWN;
-	if(name == "ESCAPE") return       ESCAPE;
+	if(name == "BACKSPACE")  return  BACKSPACE;
+	if(name == "TAB")        return  TAB;
+	if(name == "ENTER")      return  ENTER;
+	if(name == "UP")         return  UP;
+	if(name == "DOWN")       return  DOWN;
+	if(name == "RIGHT")      return  RIGHT;
+	if(name == "LEFT")       return  LEFT;
+	if(name == "HOME")       return  HOME;
+	if(name == "INSERT")     return  INSERT;
+	if(name == "DELETE")     return  DELETE;
+	if(name == "END")        return  END;
+	if(name == "PAGE_UP")    return  PAGE_UP;
+	if(name == "PAGE_DOWN")  return  PAGE_DOWN;
+	if(name == "ESCAPE")     return  ESCAPE;
+	if(name == "NUMPAD_5")   return  NUMPAD_5;
 
 	fmt::print(g_log, "unknown key: '{}'\n", name);
 	assert(false);
