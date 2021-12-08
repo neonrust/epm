@@ -30,32 +30,32 @@ int main()
 	app.loop([](const event::Event &e) {
 
 		std::visit(overloaded{
-		               [](const event::Key &k) {
-		                   fmt::print("   key: {}\n", key::to_string(k.key, k.modifiers));
-		               },
-		               [](const event::MouseMove &mm) {
-		                   fmt::print("   mouse move: {},{}\n", mm.x, mm.y);
-		               },
-		               [](const event::MouseButton &mb) {
-		                   fmt::print(
-		                   "  mouse button {} {} @ {},{}\n",
-		                   mb.button,
-		                   mb.pressed? "pressed": "released",
-		                   mb.x,
-		                   mb.y
-		                   );
-		               },
-		               [](const event::MouseWheel &mw) {
-		                   fmt::print("  mouse wheel: {}\n", mw.delta);
-		               },
-		               [](const event::Char &c) {
-		                   (void)c;
-		                   fmt::print(u8"  text: '{}' 0x{:08x}\n", c.to_string(), std::uint32_t(c.codepoint));
-		               },
-		               [](const event::Resize &rs) {
-		                   fmt::print("  resize: {}x{}+{}+{}   was: {}x{}+{}+{}\n", rs.width, rs.height, rs.x, rs.y, rs.old.width, rs.old.height, rs.old.x, rs.old.y);
-		               },
-		           }, e);
+		    [](const event::Key &k) {
+		        fmt::print("   key: {}\n", key::to_string(k.key, k.modifiers));
+		    },
+		    [](const event::MouseMove &mm) {
+		        fmt::print("   mouse move: {},{}\n", mm.x, mm.y);
+		    },
+		    [](const event::MouseButton &mb) {
+		        fmt::print(
+		        "  mouse button {} {} @ {},{}\n",
+		        mb.button,
+		        mb.pressed? "pressed": "released",
+		        mb.x,
+		        mb.y
+		        );
+		    },
+		    [](const event::MouseWheel &mw) {
+		        fmt::print("  mouse wheel: {}\n", mw.delta);
+		    },
+		    [](const event::Char &c) {
+		        (void)c;
+		        fmt::print("  text: '{}' 0x{:08x}\n", c.to_string(), std::uint32_t(c.codepoint));
+		    },
+		    [](const event::Resize &rs) {
+		        fmt::print("  resize: {}x{}+{}+{}   was: {}x{}+{}+{}\n", rs.width, rs.height, rs.x, rs.y, rs.old.width, rs.old.height, rs.old.x, rs.old.y);
+		    },
+		}, e);
 
 		return true;
 	});

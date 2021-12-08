@@ -32,7 +32,7 @@ struct Char
 {
 	std::uint32_t codepoint;
 
-	std::u8string to_string() const
+	std::string to_string() const
 	{
 		auto cp = codepoint;
 
@@ -60,19 +60,19 @@ struct Char
 			len = 4;
 		}
 		else
-			return u8"";
+			return "";
 
-		std::u8string s;
+		std::string s;
 		s.resize(len);
 
 		for(int idx = int(len - 1); idx > 0; --idx)
 		{
-			s[std::size_t(idx)] = static_cast<char8_t>((cp & 0x3f) | 0x80);
+			s[std::size_t(idx)] = static_cast<char>((cp & 0x3f) | 0x80);
 			cp >>= 6;
 		}
-		s[0] = static_cast<char8_t>(cp | first);
+		s[0] = static_cast<char>(cp | first);
 
-		return std::u8string(s, len);
+		return s;
 	}
 };
 struct MouseButton
