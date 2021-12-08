@@ -69,8 +69,8 @@ private:
 	event::Event read_input() const;
 	void shutdown_input();
 
-	void emit_resize_event(std::tuple<std::size_t, std::size_t> size);
-	void resize_cells(std::size_t width, std::size_t height);
+	void enqueue_resize_event(std::tuple<std::size_t, std::size_t> size);
+	void apply_resize(std::size_t width, std::size_t height);
 	void refresh();
 	void draw_cell(std::size_t x, std::size_t y, const Cell &cell, bool move_needed=true);
 

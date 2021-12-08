@@ -23,7 +23,7 @@ int main()
 
 	using namespace term;
 
-	App app(MouseEvents);
+	App app(Fullscreen);
 	if(not app)
 		return 1;
 

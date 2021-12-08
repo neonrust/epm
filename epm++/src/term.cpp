@@ -95,10 +95,15 @@ void App::loop(std::function<bool (const event::Event &)> handler)
 	{
 		if(_resize_recevied)
 		{
-			auto size = get_size();
-			emit_resize_event(size);
-			_width = std::get<0>(size);
-			_height = std::get<1>(size);
+			_resize_recevied = false;
+
+			const auto size = get_size();
+			const auto new_width = std::get<0>(size);
+			const auto new_height = std::get<1>(size);
+
+			enqueue_resize_event(size);
+
+			apply_resize(new_width, new_height);
 		}
 
 		if(_refresh_needed > 0)
@@ -122,7 +127,7 @@ void App::loop(std::function<bool (const event::Event &)> handler)
 	fmt::print(g_log, "\x1b[31;1mApp:loop exiting\x1b[m\n");
 }
 
-void App::emit_resize_event(std::tuple<std::size_t, std::size_t> size)
+void App::enqueue_resize_event(std::tuple<std::size_t, std::size_t> size)
 {
 	_internal_events.emplace_back<event::Resize>({
 	                                                 .width = std::get<0>(size),
@@ -198,7 +203,7 @@ bool App::initialize(Options opts)
 	auto w = std::get<0>(size);
 	auto h = std::get<1>(size);
 
-	resize_cells(w, h);
+	apply_resize(w, h);
 
 	if(not init_input())
 		return false;

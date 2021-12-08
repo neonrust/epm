@@ -13,6 +13,7 @@
 
 #include <unistd.h>
 #include <signal.h>
+#include <poll.h>
 #include <unordered_set>
 
 extern std::FILE *g_log;
@@ -41,7 +42,21 @@ event::Event App::read_input() const
 
 	std::string in;
 	in.resize(std::size_t(std::cin.rdbuf()->in_avail()));
-	// interrupted by SIGWINCH ?
+	pollfd pollfds = {
+	    .fd = STDIN_FILENO,
+	    .events = POLLIN,
+	    .revents = 0,
+	};
+	sigset_t sigs;
+	sigemptyset(&sigs);
+	sigaddset(&sigs, SIGWINCH);
+	//sigaddset(&sigs, SIGINT);
+	//sigaddset(&sigs, SIGTERM);
+	int rc = ::ppoll(&pollfds, 1, nullptr, &sigs);
+	if(rc == EINTR)
+		return {};// TODO: return a non-event
+
+	fmt::print(g_log, "poll rc: {}\n", rc);
 	std::cin.read(in.data(), int(in.size()));
 
 	auto revert = [](const std::string &chars) {
@@ -165,7 +180,6 @@ std::variant<event::Event, int> parse_mouse(const std::string_view &in, std::siz
 
 	if(movement)
 	{
-//		fmt::print(g_log, "  mouse move: {},{}\n", mouse_x, mouse_y);
 		eaten = len;
 		return event::MouseMove{
 			.x = mouse_x,
@@ -178,7 +192,6 @@ std::variant<event::Event, int> parse_mouse(const std::string_view &in, std::siz
 		mouse_button += 1;
 		if(button_pressed)
 		{
-//			fmt::print(g_log, "  button  pressed: {} mods: {:03b}  @ {},{}\n", mouse_button, mods, mouse_x, mouse_y);
 			eaten = len;
 			return event::MouseButton{
 				.button = mouse_button,
@@ -190,8 +203,6 @@ std::variant<event::Event, int> parse_mouse(const std::string_view &in, std::siz
 		}
 		else if(button_released)
 		{
-//			fmt::print(g_log, "  button released: {} mods: {:03b}  @ {},{}\n", mouse_button, mods, mouse_x, mouse_y);
-
 			eaten = len;
 			return event::MouseButton{
 				.button = mouse_button,
@@ -203,8 +214,6 @@ std::variant<event::Event, int> parse_mouse(const std::string_view &in, std::siz
 		}
 		else if(mouse_wheel != 0)
 		{
-//			fmt::print(g_log, "      wheel moved: {} mods: {:03b}  @ {},{}\n", mouse_wheel, mods, mouse_x, mouse_y);
-
 			eaten = len;
 			return event::MouseWheel{
 				.delta = mouse_wheel,

@@ -12,12 +12,10 @@ extern std::FILE *g_log;
 namespace term
 {
 
-void App::resize_cells(std::size_t new_width, std::size_t new_height)
+void App::apply_resize(std::size_t new_width, std::size_t new_height)
 {
 	if(new_width == _width and new_height == _height)
 		return;
-
-	fmt::print(g_log, "screen resized: {}x{} -> {}x{}\n", new_width, new_height, _width, _height);
 
 	if(new_height != _height)
 	{
