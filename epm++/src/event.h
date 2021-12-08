@@ -4,6 +4,7 @@
 
 #include <string>
 #include <tuple>
+#include <variant>
 
 
 namespace term
@@ -17,6 +18,39 @@ enum ButtonAction
 	ButtonPressed  = 1,
 	ButtonReleased = 2,
 };
+
+struct KeyEvent
+{
+	key::Key key;
+	key::Modifier key_modifiers { key::NoMod };
+};
+struct TextEvent
+{
+	char8_t text;
+};
+struct MouseMoveEvent
+{
+	int x;
+	int y;
+};
+struct MouseButtonEvent
+{
+	int button;
+	bool pressed;  // false: released
+	int x;
+	int y;
+};
+struct SurfaceSizeEvent
+{
+	int x { 0 };
+	int y { 0 };
+	int width;
+	int height;
+};
+// TODO: others?
+
+
+//using Event = std::variant<KeyEvent, TextEvent, MouseMoveEvent, MouseButtonEvent, SurfaceSizeEvent>;
 
 struct Event
 {
