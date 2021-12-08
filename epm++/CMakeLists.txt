@@ -14,6 +14,7 @@ set(sources
 	src/term.h
 	src/term.cpp
 	src/term-input.cpp
+	src/term-screen.cpp
 	src/keycodes.h
 	src/keycodes.cpp
 )

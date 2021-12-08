@@ -3,6 +3,9 @@
 #include <string>
 #include <vector>
 
+namespace term
+{
+
 namespace key
 {
 
@@ -78,3 +81,5 @@ Key key_from_string(const std::string &s);
 Modifier modifier_from_list(const std::vector<std::string> &v);
 
 } // NS: key
+
+} // NS: term

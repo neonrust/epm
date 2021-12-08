@@ -8,6 +8,9 @@
 extern std::FILE *g_log;
 
 
+namespace term
+{
+
 namespace key
 {
 
@@ -116,3 +119,5 @@ Modifier modifier_from_list(const std::vector<std::string> &v)
 
 
 } // NS: key
+
+} // NS: term

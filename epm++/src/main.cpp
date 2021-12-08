@@ -2,8 +2,17 @@
 
 #include <tuple>
 #include <fmt/core.h>
+#include <variant>
+
 
 std::FILE *g_log { nullptr };
+
+// these are stolen from: https://en.cppreference.com/w/cpp/utility/variant/visit
+// helper type for the visitor #4
+template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
+// explicit deduction guide (not needed as of C++20)
+template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
+
 
 int main()
 {
@@ -12,37 +21,41 @@ int main()
 
 	fmt::print(g_log, "epm term app...\n");
 
+	using namespace term;
 
-	term::App app(term::MouseEvents);
+	App app(MouseEvents);
 	if(not app)
 		return 1;
 
-	app.loop([](term::Event e) {
+	app.loop([](const event::Event &e) {
 
-		if(e.mouse.button_action != term::NoAction)
-		{
-			fmt::print(
-				"  mouse button {} {} @ {},{}\n",
-				e.mouse.button,
-				e.mouse.button_action==term::ButtonPressed? "pressed": "released",
-				std::get<0>(e.mouse.position),
-				std::get<1>(e.mouse.position)
-			);
-		}
-		else if(e.mouse.wheel_moved != 0)
-			fmt::print("  mouse wheel: {}\n", e.mouse.wheel_moved);
-
-		else if(std::get<0>(e.mouse.position) != -1)
-			fmt::print(
-				"   mouse move: {},{}\n",
-				std::get<0>(e.mouse.position),
-				std::get<1>(e.mouse.position)
-			);
-
-		else if(e.key != key::None)
-			fmt::print("   key: {}\n", key::to_string(e.key, e.key_modifiers));
-		else
-			fmt::print("  text: '{}' ({})\n", e.text, e.text.size());
+		std::visit(overloaded{
+		               [](const event::Key &k) {
+		                   fmt::print("   key: {}\n", key::to_string(k.key, k.modifiers));
+		               },
+		               [](const event::MouseMove &mm) {
+		                   fmt::print("   mouse move: {},{}\n", mm.x, mm.y);
+		               },
+		               [](const event::MouseButton &mb) {
+		                   fmt::print(
+		                   "  mouse button {} {} @ {},{}\n",
+		                   mb.button,
+		                   mb.pressed? "pressed": "released",
+		                   mb.x,
+		                   mb.y
+		                   );
+		               },
+		               [](const event::MouseWheel &mw) {
+		                   fmt::print("  mouse wheel: {}\n", mw.delta);
+		               },
+		               [](const event::Char &c) {
+		                   (void)c;
+		                   fmt::print(u8"  text: '{}' 0x{:08x}\n", c.to_string(), std::uint32_t(c.codepoint));
+		               },
+		               [](const event::Resize &rs) {
+		                   fmt::print("  resize: {}x{}+{}+{}   was: {}x{}+{}+{}\n", rs.width, rs.height, rs.x, rs.y, rs.old.width, rs.old.height, rs.old.x, rs.old.y);
+		               },
+		           }, e);
 
 		return true;
 	});

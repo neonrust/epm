@@ -23,14 +23,14 @@ using namespace std::chrono_literals;
 namespace term
 {
 
-std::variant<Event, int> parse_mouse(const std::string_view &in, std::size_t &eaten);
-std::variant<Event, int> parse_utf8(const std::string_view &in, std::size_t &eaten);
+std::variant<event::Event, int> parse_mouse(const std::string_view &in, std::size_t &eaten);
+std::variant<event::Event, int> parse_utf8(const std::string_view &in, std::size_t &eaten);
 
 std::string safe(const std::string &s);
 std::string hex(const std::string &s);
 std::vector<std::string_view> split(const std::string_view &s, const std::string &sep);
 
-Event App::read_input() const
+event::Event App::read_input() const
 {
 	//constexpr long max_read { 16 };
 
@@ -41,6 +41,7 @@ Event App::read_input() const
 
 	std::string in;
 	in.resize(std::size_t(std::cin.rdbuf()->in_avail()));
+	// interrupted by SIGWINCH ?
 	std::cin.read(in.data(), int(in.size()));
 
 	auto revert = [](const std::string &chars) {
@@ -59,7 +60,7 @@ Event App::read_input() const
 		if(eaten > 0)
 		{
 			revert(in.substr(mouse_prefix.size() + eaten));
-			return std::get<Event>(event);
+			return std::get<event::Event>(event);
 		}
 	}
 
@@ -70,9 +71,9 @@ Event App::read_input() const
 			// put the rest of the read chars
 			revert(in.substr(kseq.sequence.size()));
 
-			return {
+			return event::Key{
 				.key = kseq.key,
-				.key_modifiers = kseq.mods,
+				.modifiers = kseq.mods,
 			};
 		}
 	}
@@ -84,14 +85,14 @@ Event App::read_input() const
 	if(eaten > 0)
 	{
 		revert(in.substr(eaten));
-		return std::get<Event>(event);
+		return std::get<event::Event>(event);
 	}
 
 	fmt::print(g_log, "\x1b[33;1mparse failed: {}\x1b[m {}  ({})\n", safe(in), hex(in), in.size());
 	return {};
 }
 
-std::variant<Event, int> parse_mouse(const std::string_view &in, std::size_t &eaten)
+std::variant<event::Event, int> parse_mouse(const std::string_view &in, std::size_t &eaten)
 {
 	// '0;63;16M'  (button | modifiers ; X ; Y ; pressed or motion)
 	// '0;63;16m'  (button | modifiers ; X ; Y ; released)
@@ -166,11 +167,10 @@ std::variant<Event, int> parse_mouse(const std::string_view &in, std::size_t &ea
 	{
 //		fmt::print(g_log, "  mouse move: {},{}\n", mouse_x, mouse_y);
 		eaten = len;
-		return Event{
-			.key_modifiers = mods,
-			.mouse = {
-				.position = { mouse_x, mouse_y },
-			},
+		return event::MouseMove{
+			.x = mouse_x,
+			.y = mouse_y,
+			.modifiers = mods,
 		};
 	}
 	else
@@ -180,13 +180,12 @@ std::variant<Event, int> parse_mouse(const std::string_view &in, std::size_t &ea
 		{
 //			fmt::print(g_log, "  button  pressed: {} mods: {:03b}  @ {},{}\n", mouse_button, mods, mouse_x, mouse_y);
 			eaten = len;
-			return Event{
-				.key_modifiers = mods,
-				.mouse = {
-					.button_action = ButtonPressed,
-					.button = mouse_button,
-					.position = { mouse_x, mouse_y },
-				},
+			return event::MouseButton{
+				.button = mouse_button,
+				.pressed = true,
+				.x = mouse_x,
+				.y = mouse_y,
+				.modifiers = mods,
 			};
 		}
 		else if(button_released)
@@ -194,13 +193,12 @@ std::variant<Event, int> parse_mouse(const std::string_view &in, std::size_t &ea
 //			fmt::print(g_log, "  button released: {} mods: {:03b}  @ {},{}\n", mouse_button, mods, mouse_x, mouse_y);
 
 			eaten = len;
-			return Event{
-				.key_modifiers = mods,
-				.mouse = {
-					.button_action = ButtonReleased,
-					.button = mouse_button,
-					.position = { mouse_x, mouse_y },
-				},
+			return event::MouseButton{
+				.button = mouse_button,
+				.pressed = false,
+				.x = mouse_x,
+				.y = mouse_y,
+				.modifiers = mods,
 			};
 		}
 		else if(mouse_wheel != 0)
@@ -208,12 +206,11 @@ std::variant<Event, int> parse_mouse(const std::string_view &in, std::size_t &ea
 //			fmt::print(g_log, "      wheel moved: {} mods: {:03b}  @ {},{}\n", mouse_wheel, mods, mouse_x, mouse_y);
 
 			eaten = len;
-			return Event{
-				.key_modifiers = mods,
-				.mouse = {
-					.wheel_moved = mouse_wheel,
-					.position = { mouse_x, mouse_y },
-				},
+			return event::MouseWheel{
+				.delta = mouse_wheel,
+				.x = mouse_x,
+				.y = mouse_y,
+				.modifiers = mods,
 			};
 		}
 	}
@@ -234,7 +231,7 @@ static const std::uint8_t utf8_length[] = {
 };
 static const std::uint8_t utf8_mask[] = {0x7f, 0x1f, 0x0f, 0x07, 0x03, 0x01};
 
-std::variant<Event, int> parse_utf8(const std::string_view &in, std::size_t &eaten)
+std::variant<event::Event, int> parse_utf8(const std::string_view &in, std::size_t &eaten)
 {
 	if(in.empty())
 		return -1;
@@ -244,19 +241,18 @@ std::variant<Event, int> parse_utf8(const std::string_view &in, std::size_t &eat
 		return -1;
 
 	const auto mask = utf8_mask[len - 1];
-	[[maybe_unused]] char8_t codepoint = static_cast<char8_t>(in[0] & mask);
+	char32_t codepoint = static_cast<char8_t>(in[0] & mask);
 
 	for(std::size_t idx = 1; idx < len; ++idx)
 	{
 		codepoint <<= 6;
-		codepoint |= static_cast<char8_t>(in[idx] & 0x3f);
+		codepoint |= static_cast<char32_t>(in[idx] & 0x3f);
 	}
 
 	eaten = len;
 
-	return Event{
-		.text = std::string(in.substr(0, len)),
-//		.ch = codepoint,
+	return event::Char{
+		.codepoint = codepoint,
 	};
 }
 

@@ -89,19 +89,32 @@ App::operator bool() const
 	return _initialized;
 }
 
-void App::loop(std::function<bool (Event)> handler)
+void App::loop(std::function<bool (const event::Event &)> handler)
 {
 	while(true)
 	{
+		if(_resize_recevied)
+		{
+			auto size = get_size();
+			emit_resize_event(size);
+			_width = std::get<0>(size);
+			_height = std::get<1>(size);
+		}
+
 		if(_refresh_needed > 0)
 			refresh();
 
+		// forward any internally queued events
+		for(const auto &event: _internal_events)
+			handler(event);
+		_internal_events.clear();
+
 		auto event = read_input();
-		if(event.eof)
-		{
-			fmt::print(g_log, "\x1b[31;1mEOF\x1b[m\n");
-			break;
-		}
+//		if(event.eof)
+//		{
+//			fmt::print(g_log, "\x1b[31;1mEOF\x1b[m\n");
+//			break;
+//		}
 		if(not handler(event))
 			break;
 	}
@@ -109,38 +122,16 @@ void App::loop(std::function<bool (Event)> handler)
 	fmt::print(g_log, "\x1b[31;1mApp:loop exiting\x1b[m\n");
 }
 
-void App::refresh()
+void App::emit_resize_event(std::tuple<std::size_t, std::size_t> size)
 {
-	std::size_t idx { 0  };
-
-	for(auto iter = _cells.begin(); iter != _cells.end(); iter++, idx++)
-	{
-		auto &cell = *iter;
-		std::size_t prev_x { -1 };
-
-		if(cell.dirty)
-		{
-			const auto x = idx % _width;
-			const auto y = idx / _width;
-			draw_cell(x, y, cell, prev_x != x);
-			prev_x = x;
-
-			cell.dirty = false;
-		}
-	}
-	_refresh_needed = 0;
-}
-
-void App::draw_cell(std::size_t x, std::size_t y, const Cell &cell, bool move_needed)
-{
-	// TODO: move to x, y
-	// TODO: write cell contents
-	//   possibly into an "execution buffer" ?
-
-	if(move_needed) // TODO: can we also skip fg/bg/style if they're the same as previous cell?
-		fmt::print(_cell_fmt, x, y, cell.bg, cell.fg, cell.style, cell.ch);
-	else
-		fmt::print(_cell_fmt, cell.bg, cell.fg, cell.style, cell.ch);
+	_internal_events.emplace_back<event::Resize>({
+	                                                 .width = std::get<0>(size),
+	                                                 .height = std::get<1>(size),
+	                                                 .old = {
+	                                                     .width = _width,
+	                                                     .height = _height,
+	                                                 },
+	                                             } );
 }
 
 
@@ -197,10 +188,17 @@ bool App::initialize(Options opts)
 		write(esc::mouse_move_on);
 	}
 
+	if((opts & Fullscreen) > 0)
+	{
+		_fullscreen = true;
+		std::signal(SIGWINCH, signal_received);
+	}
+
 	const auto size = get_size();
-	_width = std::get<0>(size);
-	_height = std::get<1>(size);
-	fmt::print(g_log, "terminal size: {}x{}\n", _width, _height);
+	auto w = std::get<0>(size);
+	auto h = std::get<1>(size);
+
+	resize_cells(w, h);
 
 	if(not init_input())
 		return false;
@@ -300,6 +298,13 @@ bool modify_io_flags(bool set, IOFlag flags)
 
 void signal_received(int signum)
 {
+	if(signum == SIGWINCH)
+	{
+		if(g_app)
+			g_app->_resize_recevied = true;
+		return;
+	}
+
 	fmt::print(g_log, "\x1b[33;1msignal: {}\x1b[m\n", signum);
 
 	if(g_app)
