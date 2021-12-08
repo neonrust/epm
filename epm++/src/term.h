@@ -25,6 +25,11 @@ enum Options
 	MouseEvents       = MouseButtonEvents | MouseMoveEvents,
 	NoSignalDecode    = 1 << 4,
 };
+// bitwise OR of multiple 'Options' is still an 'Options'
+inline Options operator | (Options a, Options b)
+{
+	return static_cast<Options>(static_cast<int>(a) | static_cast<int>(b));
+}
 
 struct KeySequence
 {

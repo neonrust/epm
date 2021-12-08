@@ -31,10 +31,11 @@ std::string safe(const std::string &s);
 std::string hex(const std::string &s);
 std::vector<std::string_view> split(const std::string_view &s, const std::string &sep);
 
+static const char mouse_prefix[] = "\x1b[<";
+
+
 std::optional<event::Event> App::read_input() const
 {
-	//constexpr long max_read { 16 };
-
 	// if no data already available, wait for data to arrive
 	//   but allow interruptions
 	if(std::cin.rdbuf()->in_avail() == 0)
@@ -62,16 +63,14 @@ std::optional<event::Event> App::read_input() const
 	};
 
 
-	static const std::string mouse_prefix("\x1b[<");
-
 	if(in.size() >= 9 and in.starts_with(mouse_prefix))
 	{
 		std::size_t eaten { 0 };
 
-		auto event = parse_mouse(std::string_view(in.begin() + int(mouse_prefix.size()), in.end()), eaten);
+		auto event = parse_mouse(std::string_view(in.begin() + int(sizeof(mouse_prefix) - 1), in.end()), eaten);
 		if(eaten > 0)
 		{
-			revert(in.substr(mouse_prefix.size() + eaten));
+			revert(in.substr(sizeof(mouse_prefix) - 1 + eaten));
 			return std::get<event::Event>(event);
 		}
 	}
