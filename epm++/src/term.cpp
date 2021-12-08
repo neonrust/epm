@@ -93,6 +93,9 @@ void App::loop(std::function<bool (Event)> handler)
 {
 	while(true)
 	{
+		if(_refresh_needed > 0)
+			refresh();
+
 		auto event = read_input();
 		if(event.eof)
 		{
@@ -106,6 +109,39 @@ void App::loop(std::function<bool (Event)> handler)
 	fmt::print(g_log, "\x1b[31;1mApp:loop exiting\x1b[m\n");
 }
 
+void App::refresh()
+{
+	std::size_t idx { 0  };
+
+	for(auto iter = _cells.begin(); iter != _cells.end(); iter++, idx++)
+	{
+		auto &cell = *iter;
+		std::size_t prev_x { -1 };
+
+		if(cell.dirty)
+		{
+			const auto x = idx % _width;
+			const auto y = idx / _width;
+			draw_cell(x, y, cell, prev_x != x);
+			prev_x = x;
+
+			cell.dirty = false;
+		}
+	}
+	_refresh_needed = 0;
+}
+
+void App::draw_cell(std::size_t x, std::size_t y, const Cell &cell, bool move_needed)
+{
+	// TODO: move to x, y
+	// TODO: write cell contents
+	//   possibly into an "execution buffer" ?
+
+	if(move_needed) // TODO: can we also skip fg/bg/style if they're the same as previous cell?
+		fmt::print(_cell_fmt, x, y, cell.bg, cell.fg, cell.style, cell.ch);
+	else
+		fmt::print(_cell_fmt, cell.bg, cell.fg, cell.style, cell.ch);
+}
 
 
 bool modify_io_flags(bool set, IOFlag flags);
