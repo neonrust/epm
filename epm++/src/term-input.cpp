@@ -31,32 +31,29 @@ std::string safe(const std::string &s);
 std::string hex(const std::string &s);
 std::vector<std::string_view> split(const std::string_view &s, const std::string &sep);
 
-event::Event App::read_input() const
+std::optional<event::Event> App::read_input() const
 {
 	//constexpr long max_read { 16 };
 
-	// wait for data to become available
-	// TODO: timeout?
-	while(std::cin.rdbuf()->in_avail() == 0)
-		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	// if no data already available, wait for data to arrive
+	//   but allow interruptions
+	if(std::cin.rdbuf()->in_avail() == 0)
+	{
+		static pollfd pollfds = {
+			.fd = STDIN_FILENO,
+			.events = POLLIN,
+			.revents = 0,
+		};
+		sigset_t sigs;
+		sigemptyset(&sigs);
+		int rc = ::ppoll(&pollfds, 1, nullptr, &sigs);
+		if(rc == -1 and errno == EINTR)  // something more urgent came up
+			return std::nullopt;
+	}
 
 	std::string in;
 	in.resize(std::size_t(std::cin.rdbuf()->in_avail()));
-	pollfd pollfds = {
-	    .fd = STDIN_FILENO,
-	    .events = POLLIN,
-	    .revents = 0,
-	};
-	sigset_t sigs;
-	sigemptyset(&sigs);
-	sigaddset(&sigs, SIGWINCH);
-	//sigaddset(&sigs, SIGINT);
-	//sigaddset(&sigs, SIGTERM);
-	int rc = ::ppoll(&pollfds, 1, nullptr, &sigs);
-	if(rc == EINTR)
-		return {};// TODO: return a non-event
 
-	fmt::print(g_log, "poll rc: {}\n", rc);
 	std::cin.read(in.data(), int(in.size()));
 
 	auto revert = [](const std::string &chars) {

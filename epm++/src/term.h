@@ -66,7 +66,7 @@ private:
 	void write(const std::string_view &s);
 
 	bool init_input();
-	event::Event read_input() const;
+	std::optional<event::Event> read_input() const;
 	void shutdown_input();
 
 	void enqueue_resize_event(std::tuple<std::size_t, std::size_t> size);

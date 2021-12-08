@@ -109,19 +109,16 @@ void App::loop(std::function<bool (const event::Event &)> handler)
 		if(_refresh_needed > 0)
 			refresh();
 
-		// forward any internally queued events
+		// first handle any internally queued events
 		for(const auto &event: _internal_events)
 			handler(event);
 		_internal_events.clear();
 
-		auto event = read_input();
-//		if(event.eof)
-//		{
-//			fmt::print(g_log, "\x1b[31;1mEOF\x1b[m\n");
-//			break;
-//		}
-		if(not handler(event))
-			break;
+		const auto event = read_input();
+
+		if(event.has_value())
+			if(not handler(event.value()))
+				break;
 	}
 
 	fmt::print(g_log, "\x1b[31;1mApp:loop exiting\x1b[m\n");
@@ -130,13 +127,13 @@ void App::loop(std::function<bool (const event::Event &)> handler)
 void App::enqueue_resize_event(std::tuple<std::size_t, std::size_t> size)
 {
 	_internal_events.emplace_back<event::Resize>({
-	                                                 .width = std::get<0>(size),
-	                                                 .height = std::get<1>(size),
-	                                                 .old = {
-	                                                     .width = _width,
-	                                                     .height = _height,
-	                                                 },
-	                                             } );
+		.width = std::get<0>(size),
+		.height = std::get<1>(size),
+		.old = {
+			.width = _width,
+			.height = _height,
+			},
+	});
 }
 
 
