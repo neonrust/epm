@@ -20,14 +20,9 @@ extern std::FILE *g_log;
 using namespace std::string_view_literals;
 using namespace std::chrono_literals;
 
-
 namespace term
 {
 
-//static constexpr char _ = '\0';
-
-//std::variant<Event, int> parse_esc(std::function<bool (char &, char)> next);
-//std::variant<Event, int> parse_csi(std::function<bool(char &, char)> next);
 std::variant<Event, int> parse_mouse(const std::string_view &in, std::size_t &eaten);
 std::variant<Event, int> parse_utf8(const std::string_view &in, std::size_t &eaten);
 
@@ -237,7 +232,7 @@ static const std::uint8_t utf8_length[] = {
 	2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2, // 0xc0
 	3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,4,4,4,4,4,4,4,4,5,5,5,5,6,6,1,1  // 0xe0
 };
-//static const std::uint8_t utf8_mask[] = {0x7F, 0x1F, 0x0F, 0x07, 0x03, 0x01};
+static const std::uint8_t utf8_mask[] = {0x7f, 0x1f, 0x0f, 0x07, 0x03, 0x01};
 
 std::variant<Event, int> parse_utf8(const std::string_view &in, std::size_t &eaten)
 {
@@ -248,18 +243,20 @@ std::variant<Event, int> parse_utf8(const std::string_view &in, std::size_t &eat
 	if (len > in.size())
 		return -1;
 
-//	const auto mask = utf8_mask[len - 1];
-//	std::uint32_t codepoint = in[0] & mask;
+	const auto mask = utf8_mask[len - 1];
+	[[maybe_unused]] char8_t codepoint = static_cast<char8_t>(in[0] & mask);
 
-//	for (int i = 1; i < len; ++i)
-//	{
-//		codepoint <<= 6;
-//		codepoint |= in[i] & 0x3f;
-//	}
+	for(std::size_t idx = 1; idx < len; ++idx)
+	{
+		codepoint <<= 6;
+		codepoint |= static_cast<char8_t>(in[idx] & 0x3f);
+	}
 
 	eaten = len;
+
 	return Event{
 		.text = std::string(in.substr(0, len)),
+//		.ch = codepoint,
 	};
 }
 
@@ -289,7 +286,7 @@ bool App::init_input()
 			mods = key::modifier_from_list(item["mods"].get<std::vector<std::string>>());
 		const auto key = key::key_from_string(item["key"].get<std::string>());
 
-		auto seq_str = item["seq"].get<std::string>();
+		const auto seq_str = item["seq"].get<std::string>();
 		if(seen_sequences.find(seq_str) != seen_sequences.end())
 			fmt::print(g_log, "\x1b[41;97;1msequence '{}' already mapped\x1b[m\n", seq_str);
 		seen_sequences.insert(seq_str);
@@ -315,14 +312,16 @@ bool App::init_input()
 			}
 		}
 
-			_key_sequences.push_back({
-									  .sequence = seq,
-									  .mods = mods,
-									  .key = key,
-									  });
+		_key_sequences.push_back({
+			.sequence = seq,
+			.mods = mods,
+			.key = key,
+		});
 	}
 
 	// sort, longest sequence first
+	// TODO:  better to sort alphabetically?
+	//   when searching, we can then stop if 'in' is past (alphabetically) than the 'sequence'
 	std::sort(_key_sequences.begin(), _key_sequences.end(), [](const auto &A, const auto &B) {
 		return A.sequence.size() > B.sequence.size();
 	});
