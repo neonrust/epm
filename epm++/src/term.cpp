@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <tuple>
+#include <variant>
 #include <csignal>
 #include <fmt/core.h>
 #include <cuchar>
@@ -92,6 +93,10 @@ App::operator bool() const
 
 void App::loop(std::function<bool (const event::Event &)> handler)
 {
+	std::size_t prev_mx { static_cast<std::size_t>(-1) };
+	std::size_t prev_my { static_cast<std::size_t>(-1) };
+
+
 	while(true)
 	{
 		if(_resize_recevied)
@@ -118,8 +123,19 @@ void App::loop(std::function<bool (const event::Event &)> handler)
 		const auto event = read_input();
 
 		if(event.has_value())
+		{
+			const auto *mm = std::get_if<event::MouseMove>(&event.value());
+			if(mm != nullptr)
+			{
+				if(mm->x == prev_mx and mm->y == prev_my)
+					continue;
+				prev_mx = mm->x;
+				prev_my = mm->y;
+			}
+
 			if(not handler(event.value()))
 				break;
+		}
 	}
 
 	fmt::print(g_log, "\x1b[31;1mApp:loop exiting\x1b[m\n");

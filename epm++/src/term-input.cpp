@@ -152,26 +152,26 @@ std::variant<event::Event, int> parse_mouse(const std::string_view &in, std::siz
 
 //	fmt::print(g_log, "  mouse seq: {:02x} {} {} {}\n", std::stoi(parts[0].data()), parts[1], parts[2], tail);
 
-	int buttons_modifiers = std::stoi(parts[0].data());
-	const int mouse_x = std::stoi(parts[1].data());
-	const int mouse_y = std::stoi(parts[2].data());
+	std::uint64_t buttons_modifiers = std::stoul(parts[0].data());
+	const std::size_t mouse_x = std::stoul(parts[1].data());
+	const std::size_t mouse_y = std::stoul(parts[2].data());
 
 	const auto movement = (buttons_modifiers & 0x20) > 0;
 
 	auto button_pressed = not movement and tail == 'M';
 	auto button_released = not movement and tail == 'm';
 
-	int mouse_button = 0;
+	std::uint8_t mouse_button = 0;
 	int mouse_wheel = 0;
 
 	if(not movement)
 	{
 		// what about mouse buttons 8 - 11 ?
-		if(buttons_modifiers >= 128)
-			mouse_button = (buttons_modifiers & ~0x80) + 5;
-		else if(buttons_modifiers >= 64)
+		if(buttons_modifiers >= 128u)
+			mouse_button = static_cast<std::uint8_t>((buttons_modifiers & ~0x80u) + 5);
+		else if(buttons_modifiers >= 64u)
 		{
-			mouse_button = (buttons_modifiers & ~0x40) + 3;
+			mouse_button = static_cast<std::uint8_t>((buttons_modifiers & ~0x40u) + 3);
 			mouse_wheel = -(mouse_button - 3)*2 + 1;  // -1 or +1
 			// same as wheel?
 			button_pressed = button_released = false;

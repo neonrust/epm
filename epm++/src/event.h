@@ -79,21 +79,21 @@ struct MouseButton
 {
 	int button;
 	bool pressed;  // false: released
-	int x;
-	int y;
+	std::size_t x;
+	std::size_t y;
 	key::Modifier modifiers { key::NoMod };
 };
 struct MouseWheel
 {
 	int delta { 0 };
-	int x;
-	int y;
+	std::size_t x;
+	std::size_t y;
 	key::Modifier modifiers { key::NoMod };
 };
 struct MouseMove
 {
-	int x;
-	int y;
+	std::size_t x;
+	std::size_t y;
 	key::Modifier modifiers { key::NoMod };
 };
 struct Resize
