@@ -8,6 +8,7 @@
 #include <thread>
 #include <variant>
 #include <fstream>
+#include <regex>
 #include <fmt/core.h>
 #include <nlohmann/json.hpp>
 
@@ -61,6 +62,19 @@ std::optional<event::Event> App::read_input() const
 		for(auto iter = chars.rbegin(); iter != chars.rend(); iter++)
 			std::cin.putback(*iter);
 	};
+
+
+	// TODO: parse cursor position report: "\e[n;mR" (between 6 and 10 characters?)
+//	if(in.size() >= 6)
+//	{
+//		static const auto cpr_ptn = std::regex("^\x1b[(\\d+);(\\d+)R");
+//		std::smatch m;
+//		if(std::regex_search(in, m, cpr_ptn))
+//		{
+//			auto cx = m[0];
+//			auto cy = m[1];
+//		}
+//	}
 
 
 	if(in.size() >= 9 and in.starts_with(mouse_prefix))
