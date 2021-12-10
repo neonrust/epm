@@ -115,11 +115,12 @@ namespace esc
 
 const auto esc { "\x1b"s };
 const auto csi { esc + "[" };
-const auto cuu { csi + "{}A" };
-const auto cud { csi + "{}B" };
-const auto cuf { csi + "{}C" };
-const auto cub { csi + "{}D" };
-const auto cup { csi + "{};{}H" };
+
+const auto cuu { csi + "{:d}A" };
+const auto cud { csi + "{:d}B" };
+const auto cuf { csi + "{:d}C" };
+const auto cub { csi + "{:d}D" };
+const auto cup { csi + "{:d};{:d}H" };
 const auto ed  { csi + "{}J" };
 
 } // NS: esc

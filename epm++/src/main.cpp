@@ -39,12 +39,11 @@ int main()
 				return true;
 		    },
 		    [](const event::MouseButton &mb) {
-		        fmt::print(
-				"[main]  mouse button {} {} @ {},{}\n",
-		        mb.button,
-		        mb.pressed? "pressed": "released",
-		        mb.x,
-		        mb.y
+				fmt::print("[main]  mouse button {} {} @ {},{}\n",
+														mb.button,
+														mb.pressed? "pressed": "released",
+														mb.x,
+														mb.y
 				);
 				return true;
 			},
@@ -61,6 +60,7 @@ int main()
 				fmt::print("[main]  resize: {}x{}+{}+{}   was: {}x{}+{}+{}\n", rs.width, rs.height, rs.x, rs.y, rs.old.width, rs.old.height, rs.old.x, rs.old.y);
 				return true;
 			},
+			[](auto){ return true; },
 		}, e);
 
 		return keep_going;

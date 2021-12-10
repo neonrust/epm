@@ -132,11 +132,12 @@ void App::refresh()
 
 void App::draw_cell(std::size_t x, std::size_t y, const Cell &cell, bool move_needed)
 {
-	static const auto cell_fmt_move_style { esc::cup + esc::csi + "4{:s};3{:s};{:s}m{:c}" };
+	static const auto style { esc::cup + esc::csi + "4{:s};3{:s};{:s}m" };
 
-	(void)move_needed;
-	//if(move_needed) // TODO: can we also skip fg/bg/style if they're the same as previous cell?
-	    _output_buffer.append(fmt::format(cell_fmt_move_style, x, y, cell.bg, cell.fg, "0"/*cell.style*/, "a"));
+	if(move_needed)
+		_output_buffer.append(fmt::format(esc::cup, x, y));
+	_output_buffer.append(fmt::format(style, cell.bg, cell.fg, "0"/*cell.style*/));
+	_output_buffer.append(fmt::format("{}", "a"));
 	//else
 	//	fmt::print(cell_fmt_style, cell.bg, cell.fg, cell.style, cell.ch);
 }
