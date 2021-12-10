@@ -48,7 +48,8 @@ struct Cell
 	char fg[max_color_seq_len] { '\0' };    // an already "compiled" sequence, e.g. "8;5;r;g;b"   (the '3' prefix is implied)
 	char bg[max_color_seq_len] { '\0' };    // an already "compiled" sequence, e.g. "1"        (the '4' prefix is implied)
 	char style[max_style_seq_len] { '\0' }; // an already "compiled" sequence, e.g. "1"
-	wchar_t ch { '\0' };                     // a single UTF-8 character
+	wchar_t ch { '\0' };                    // a single UTF-8 character
+	bool is_virtual { false };              // true: this cell is displaying content from its left neighbor (i.e. a double-width character)
 };
 
 using Color = std::string;
@@ -70,11 +71,12 @@ struct App
 
 	void debug_print(std::size_t x, std::size_t y, Color fg, Color bg, Style st, const std::string &s);
 
+	void clear();
+
 private:
 	bool initialize(Options opts);
 	void shutdown();
 	std::tuple<std::size_t, std::size_t> get_size() const;
-	void write(const std::string_view &s);
 
 	bool init_input();
 	std::optional<event::Event> read_input() const;
@@ -84,6 +86,9 @@ private:
 	void apply_resize(std::size_t width, std::size_t height);
 	void refresh();
 	void draw_cell(std::size_t x, std::size_t y, const Cell &cell, bool move_needed=true);
+	void flush_buffer();
+
+	void write(const std::string_view &s);
 
 private:
 	std::size_t _refresh_needed { 0 };
@@ -95,6 +100,8 @@ private:
 
 	bool _resize_recevied { false };
 	std::vector<event::Event> _internal_events;
+
+	std::string _output_buffer;
 
 	bool _fullscreen { false };
 	bool _initialized { false };
@@ -113,5 +120,6 @@ const auto cud { csi + "{}B" };
 const auto cuf { csi + "{}C" };
 const auto cub { csi + "{}D" };
 const auto cup { csi + "{};{}H" };
+const auto ed  { csi + "{}J" };
 
 } // NS: esc
