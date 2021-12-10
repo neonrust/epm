@@ -127,7 +127,7 @@ void App::loop(std::function<bool (const event::Event &)> handler)
 		if(event.has_value())
 		{
 			const auto *mm = std::get_if<event::MouseMove>(&event.value());
-			if(mm != nullptr):
+			if(mm != nullptr)
 			{
 				if(mm->x == prev_mx and mm->y == prev_my)
 					continue;
