@@ -47,8 +47,11 @@ struct Cell
 	char fg[max_color_seq_len] { '\0' };    // an already "compiled" sequence, e.g. "8;5;r;g;b"   (the '3' prefix is implied)
 	char bg[max_color_seq_len] { '\0' };    // an already "compiled" sequence, e.g. "1"        (the '4' prefix is implied)
 	char style[max_style_seq_len] { '\0' }; // an already "compiled" sequence, e.g. "1"
-	char8_t ch { ' ' };                     // a single UTF-8 character
+	wchar_t ch { '\0' };                     // a single UTF-8 character
 };
+
+using Color = std::string;
+using Style = std::string;
 
 struct App
 {
@@ -63,6 +66,8 @@ struct App
 
 	//std::shared_ptr<Surface> screen_surface();
 	//std::shared_ptr<Surface> create_surface(std::size_t x, std::size_t y, std::size_t width, std::size_t height);
+
+	void debug_print(std::size_t x, std::size_t y, Color fg, Color bg, Style st, const std::string &s);
 
 private:
 	bool initialize(Options opts);

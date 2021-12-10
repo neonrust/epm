@@ -4,6 +4,7 @@
 #include <tuple>
 #include <csignal>
 #include <fmt/core.h>
+#include <cuchar>
 
 #include <unistd.h>
 #include <termios.h>
@@ -124,6 +125,48 @@ void App::loop(std::function<bool (const event::Event &)> handler)
 	fmt::print(g_log, "\x1b[31;1mApp:loop exiting\x1b[m\n");
 }
 
+void App::debug_print(std::size_t x, std::size_t y, Color fg, Color bg, Style st, const std::string &s)
+{
+	if(y >= _height)
+		return;
+
+	auto &row = _cells[y];
+	auto cx = x;
+
+	//std::u8string u8s;
+	//u8s.resize(s.size());
+	//::mbrtoc8(u8s.data(), s.c_str(), s.size(), nullptr);
+
+	for(const auto ch: s)
+	{
+		if(x >= _width)
+			break;
+
+		auto &cell = row[cx];
+
+		cell.dirty |= ch != cell.ch or cell.fg != fg or cell.bg != bg or cell.style != st;
+
+		std::strncpy(cell.fg, fg.c_str(), sizeof(cell.fg));
+		std::strncpy(cell.bg, bg.c_str(), sizeof(cell.bg));
+		std::strncpy(cell.style, st.c_str(), sizeof(cell.style));
+
+		cell.ch = (wchar_t)ch;  // TODO: one utf-8 "character"
+
+		//auto width = 1u; // TODO: width of 'ch'?
+		//   - impossible to know, as it's the terminal's decision how to render it.
+		//   - can't use CPR because nothing has been written to the terminal yet
+		//   - in theory, a test could be performed, computing the width of *all* characters (and caching the result) :)
+		//   - or just trust wcswidth() ?
+		auto width = ::wcswidth(&cell.ch, 1);
+		if(width > 1)
+		{
+			// TODO: set dirty flag in the cells 'cx + 1' to 'cx + width - 1' ?
+			// indicate that those cells will show content from another cell?
+		}
+		cx += static_cast<std::size_t>(width);
+	}
+}
+
 void App::enqueue_resize_event(std::tuple<std::size_t, std::size_t> size)
 {
 	_internal_events.emplace_back<event::Resize>({
@@ -132,7 +175,7 @@ void App::enqueue_resize_event(std::tuple<std::size_t, std::size_t> size)
 		.old = {
 			.width = _width,
 			.height = _height,
-			},
+	    },
 	});
 }
 
@@ -169,6 +212,7 @@ bool App::initialize(Options opts)
 		fmt::print(g_log, "disabling signal sequence decoding...\n");
 		clear_in_flags(SignalDecoding);
 	}
+
 	if((opts & Fullscreen) > 0)
 	{
 		fmt::print(g_log, "enabling alternate screen...\n");
