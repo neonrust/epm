@@ -4,6 +4,7 @@
 #include <functional>
 #include <cstdint>
 #include <cwchar>
+#include <optional>
 
 #include "event.h"
 
