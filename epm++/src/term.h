@@ -44,7 +44,7 @@ constexpr std::size_t max_style_seq_len { 6 };   // e.g. "1;2;3"
 
 struct Cell
 {
-	bool dirty { true };
+	bool dirty { false };
 	char fg[max_color_seq_len] { '\0' };    // an already "compiled" sequence, e.g. "8;5;r;g;b"   (the '3' prefix is implied)
 	char bg[max_color_seq_len] { '\0' };    // an already "compiled" sequence, e.g. "1"        (the '4' prefix is implied)
 	char style[max_style_seq_len] { '\0' }; // an already "compiled" sequence, e.g. "1"

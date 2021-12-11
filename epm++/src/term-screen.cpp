@@ -23,17 +23,17 @@ void App::apply_resize(std::size_t new_width, std::size_t new_height)
 
 		if(new_height > _height)
 		{
-			auto iter = _cells.begin() + int(_height);
-			for(auto row = _height; row < new_height; ++row)
-				iter->resize(new_width);
+			auto row_iter = _cells.begin() + int(_height);
+			for(auto row = _height; row < new_height; ++row, ++row_iter)
+				row_iter->resize(new_width);
 		}
 	}
 
-	auto iter = _cells.begin();
+	auto row_iter = _cells.begin();
 	// only the "old" rows (if it has grown)
 	auto rows = new_height > _height? _height: new_height;
 	for(std::size_t row = 0; row < rows; ++row)
-		iter->resize(new_width);
+		row_iter->resize(new_width);
 
 	_width = new_width;
 	_height = new_height;
@@ -71,6 +71,7 @@ void App::debug_print(std::size_t x, std::size_t y, Color fg, Color bg, Style st
 		}
 
 		cell.dirty |= ch != cell.ch or cell.fg != fg or cell.bg != bg or cell.style != st;
+		_refresh_needed += cell.dirty? 1: 0;
 
 		std::strncpy(cell.fg, fg.c_str(), sizeof(cell.fg));
 		std::strncpy(cell.bg, bg.c_str(), sizeof(cell.bg));
