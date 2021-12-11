@@ -28,7 +28,7 @@ struct Key
 	key::Key key;
 	key::Modifier modifiers { key::NoMod };
 };
-struct Char
+struct Input
 {
 	std::uint32_t codepoint;
 
@@ -113,7 +113,7 @@ struct Resize
 // TODO: others?
 
 
-using Event = std::variant<Key, Char, MouseButton, MouseWheel, MouseMove, Resize>;
+using Event = std::variant<Key, Input, MouseButton, MouseWheel, MouseMove, Resize>;
 
 //struct Event
 //{

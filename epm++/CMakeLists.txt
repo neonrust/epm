@@ -20,7 +20,7 @@ set(sources
 )
 
 #link_directories(epm extern/termlib/lib/)
-#include_directories(epm extern/termlib/include/)
+include_directories(epm extern/TheWhisp-signals/)
 
 add_executable(epm ${sources})
 

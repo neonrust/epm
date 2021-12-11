@@ -270,7 +270,7 @@ std::variant<event::Event, int> parse_utf8(const std::string_view &in, std::size
 
 	eaten = len;
 
-	return event::Char{
+	return event::Input{
 		.codepoint = codepoint,
 	};
 }

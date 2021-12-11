@@ -91,13 +91,13 @@ App::operator bool() const
 	return _initialized;
 }
 
-void App::loop(std::function<bool (const event::Event &)> handler)
+int App::run()
 {
 	std::size_t prev_mx { static_cast<std::size_t>(-1) };
 	std::size_t prev_my { static_cast<std::size_t>(-1) };
 
 
-	while(true)
+	while(not _should_quit)
 	{
 		if(_resize_recevied)
 		{
@@ -114,7 +114,7 @@ void App::loop(std::function<bool (const event::Event &)> handler)
 
 		// first handle any internally queued events
 		for(const auto &event: _internal_events)
-			handler(event);
+			dispatch_event(event);
 		_internal_events.clear();
 
 		if(_refresh_needed > 0)
@@ -135,12 +135,38 @@ void App::loop(std::function<bool (const event::Event &)> handler)
 				prev_my = mm->y;
 			}
 
-			if(not handler(event.value()))
-				break;
+			dispatch_event(event.value());
 		}
 	}
 
 	fmt::print(g_log, "\x1b[31;1mApp:loop exiting\x1b[m\n");
+
+	return 0;
+}
+
+void App::quit()
+{
+	_should_quit = true;
+}
+
+bool App::dispatch_event(const event::Event &e)
+{
+	if(std::holds_alternative<event::Key>(e))
+		return on_key_event(std::get<event::Key>(e)), true;
+	else if(std::holds_alternative<event::Input>(e))
+		return on_input_event(std::get<event::Input>(e)), true;
+	else if(std::holds_alternative<event::MouseButton>(e))
+		return on_mouse_button_event(std::get<event::MouseButton>(e)), true;
+	else if(std::holds_alternative<event::MouseMove>(e))
+		return on_mouse_move_event(std::get<event::MouseMove>(e)), true;
+	else if(std::holds_alternative<event::MouseWheel>(e))
+		return on_mouse_wheel_event(std::get<event::MouseWheel>(e)), true;
+	else if(std::holds_alternative<event::Resize>(e))
+		return on_resize_event(std::get<event::Resize>(e)), true;
+
+	fmt::print(g_log, "unhandled event type index:{}\n", e.index());
+
+	return false;
 }
 
 Size App::size() const

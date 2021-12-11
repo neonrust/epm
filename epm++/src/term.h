@@ -6,6 +6,7 @@
 #include <cwchar>
 #include <optional>
 #include <memory>
+#include <signals.hpp>
 
 #include "event.h"
 
@@ -71,7 +72,16 @@ struct App
 
 	operator bool() const;
 
-	void loop(std::function<bool (const event::Event &)> handler);
+	fteng::signal<void(const event::Key)> on_key_event;
+	fteng::signal<void(const event::Input)> on_input_event;
+	fteng::signal<void(const event::MouseMove)> on_mouse_move_event;
+	fteng::signal<void(const event::MouseButton)> on_mouse_button_event;
+	fteng::signal<void(const event::MouseWheel)> on_mouse_wheel_event;
+	fteng::signal<void(const event::Resize)> on_resize_event;
+
+	int run();
+
+	void quit();
 
 	//std::shared_ptr<Surface> screen_surface();
 	//std::shared_ptr<Surface> create_surface(std::size_t x, std::size_t y, std::size_t width, std::size_t height);
@@ -90,6 +100,8 @@ private:
 	bool init_input();
 	std::optional<event::Event> read_input() const;
 	void shutdown_input();
+
+	bool dispatch_event(const event::Event &e);
 
 	void enqueue_resize_event(std::tuple<std::size_t, std::size_t> size);
 	void apply_resize(std::size_t width, std::size_t height);
@@ -117,6 +129,7 @@ private:
 	bool _fullscreen { false };
 	bool _initialized { false };
 
+	bool _should_quit { false };
 };
 
 } // NS: term
