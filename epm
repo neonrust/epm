@@ -356,7 +356,11 @@ def cmd_add(series_config, args, opts, width=None):
 		if already:
 			print('\x1b[2mAlready added: %d\x1b[m' % len(already))
 			for hit in already:
-				print_series_title(None, series_config[hit['id']], imdb_id=hit['id'], gray=True)
+				if series_config[hit['id']].get('archived') is not None:
+					arch_tail = '  \x1b[33m(archived)\x1b[m'
+				else:
+					arch_tail = None
+				print_series_title(None, series_config[hit['id']], imdb_id=hit['id'], gray=True, tail=arch_tail)
 
 		max_width = width - 5 - 3 - len('1968')*2 - 1 - 2 - 3 - len('episodes')
 		#max_width = max(len(series['title']) for series in hits)
@@ -397,7 +401,12 @@ def cmd_add(series_config, args, opts, width=None):
 		for index, series_imdb_id, _ in get_series(series_config):
 			if series_imdb_id == imdb_id:
 				break
-		print_series_title(index, series_config[imdb_id], imdb_id=imdb_id)
+
+		if series_config[imdb_id].get('archived') is not None:
+			arch_tail = '  \x1b[33m(archived)\x1b[m'
+		else:
+			arch_tail = None
+		print_series_title(index, series_config[imdb_id], imdb_id=imdb_id, tail=arch_tail)
 		return
 
 	hit['seen'] = {}
@@ -783,7 +792,7 @@ def transform_episode_info(episode):
 		if field not in useful_episode_fields:
 			episode.pop(field, 0)
 
-def print_series_title(num, info, title_width=0, imdb_id=None, gray=False, tail=None):
+def print_series_title(num, info, title_width=0, imdb_id=None, gray=False, tail=None, archived=True):
 	infop = {**info}
 
 	# pad title string if width is specified
