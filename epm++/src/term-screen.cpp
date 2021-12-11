@@ -133,15 +133,15 @@ void App::refresh()
 
 void App::draw_cell(std::size_t x, std::size_t y, const Cell &cell, bool move_needed)
 {
-	static const auto style { esc::cup + esc::csi + "4{:s};3{:s};{:s}m" };
+	static const auto style { esc::csi + "4{:s};3{:s};{:s}m" };
 
 	if(move_needed)
-		_output_buffer.append(fmt::format(esc::cup, x, y));
+		_output_buffer.append(fmt::format(esc::cup, y, x));
+
 	_output_buffer.append(fmt::format(style, cell.bg, cell.fg, "0"/*cell.style*/));
-	_output_buffer.append(fmt::format("{}", "a"));
+	_output_buffer.append(fmt::format("{}", char(cell.ch)));
 	//else
 	//	fmt::print(cell_fmt_style, cell.bg, cell.fg, cell.style, cell.ch);
 }
-
 
 } // NS: term
