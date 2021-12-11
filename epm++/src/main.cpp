@@ -31,17 +31,17 @@ int main()
 
 		bool keep_going = std::visit(overloaded{
 			[](const event::Key &k) {
-				fmt::print("[main]   key: {}\n", key::to_string(k.key, k.modifiers));
+				fmt::print(g_log, "[main]   key: {}\n", key::to_string(k.key, k.modifiers));
 				return not (k.key == key::Q and k.modifiers == key::NoMod);
 		    },
 			[&app](const event::MouseMove &mm) {
 				//fmt::print("[main]   mouse move: {},{}\n", mm.x, mm.y);
 
-				app.debug_print(10, 10, "3", "0", "", fmt::format("mouse: {}x{}  ", mm.x, mm.y));
+				app.debug_print(10, 10, fmt::format("mouse: {}x{}  ", mm.x, mm.y), "3", "0", "");
 				return true;
 		    },
 			[](const event::MouseButton &mb) {
-				fmt::print("[main]  mouse button {} {} @ {},{}\n",
+				fmt::print(g_log, "[main]  mouse button {} {} @ {},{}\n",
 														mb.button,
 														mb.pressed? "pressed": "released",
 														mb.x,
@@ -50,16 +50,15 @@ int main()
 				return true;
 			},
 			[](const event::MouseWheel &mw) {
-				fmt::print("[main]  mouse wheel: {}\n", mw.delta);
+				fmt::print(g_log, "[main]  mouse wheel: {}\n", mw.delta);
 				return true;
 			},
 			[](const event::Char &c) {
-		        (void)c;
-				fmt::print("[main]  text: '{}' 0x{:08x}\n", c.to_string(), std::uint32_t(c.codepoint));
+				fmt::print(g_log, "[main]  text: '{}' 0x{:08x}\n", c.to_string(), std::uint32_t(c.codepoint));
 				return true;
 			},
-			[](const event::Resize &rs) {
-				fmt::print("[main]  resize: {}x{}+{}+{}   was: {}x{}+{}+{}\n", rs.width, rs.height, rs.x, rs.y, rs.old.width, rs.old.height, rs.old.x, rs.old.y);
+			[&app](const event::Resize &rs) {
+				app.debug_print(rs.width - 10, rs.height - 1, fmt::format("size: {}x{}", rs.width, rs.height), "3", "0", "1");
 				return true;
 			},
 			[](auto){ return true; },

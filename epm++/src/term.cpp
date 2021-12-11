@@ -143,6 +143,11 @@ void App::loop(std::function<bool (const event::Event &)> handler)
 	fmt::print(g_log, "\x1b[31;1mApp:loop exiting\x1b[m\n");
 }
 
+Size App::size() const
+{
+	return { _width, _height };
+}
+
 void App::enqueue_resize_event(std::tuple<std::size_t, std::size_t> size)
 {
 	_internal_events.emplace_back<event::Resize>({

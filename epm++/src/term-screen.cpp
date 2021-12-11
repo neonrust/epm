@@ -12,41 +12,12 @@ extern std::FILE *g_log;
 namespace term
 {
 
-void App::apply_resize(std::size_t new_width, std::size_t new_height)
-{
-	if(new_width == _width and new_height == _height)
-		return;
-
-	if(new_height != _height)
-	{
-		_cells.resize(new_height);
-
-		if(new_height > _height)
-		{
-			auto row_iter = _cells.begin() + int(_height);
-			for(auto row = _height; row < new_height; ++row, ++row_iter)
-				row_iter->resize(new_width);
-		}
-	}
-
-	auto row_iter = _cells.begin();
-	// only the "old" rows (if it has grown)
-	auto rows = new_height > _height? _height: new_height;
-	for(std::size_t row = 0; row < rows; ++row)
-		row_iter->resize(new_width);
-
-	_width = new_width;
-	_height = new_height;
-
-	_output_buffer.reserve(_width*_height*2);  // a ball-part figure ;)
-}
-
-void App::debug_print(std::size_t x, std::size_t y, Color fg, Color bg, Style st, const std::string &s)
+void App::debug_print(std::size_t x, std::size_t y, const std::string &s, const Color fg, const Color bg, const Style st)
 {
 	if(y >= _height)
 		return;
 
-	auto &row = _cells[y];
+	auto &row = _cell_rows[y];
 	auto cx = x;
 
 	//std::u8string u8s;
@@ -60,7 +31,7 @@ void App::debug_print(std::size_t x, std::size_t y, Color fg, Color bg, Style st
 		if(x >= _width)
 			break;
 
-		auto &cell = row[cx];
+		auto &cell = (*row)[cx];
 
 		if((cell.is_virtual = next_virtual > 0) == true)
 		{
@@ -73,9 +44,9 @@ void App::debug_print(std::size_t x, std::size_t y, Color fg, Color bg, Style st
 		cell.dirty |= ch != cell.ch or cell.fg != fg or cell.bg != bg or cell.style != st;
 		_refresh_needed += cell.dirty? 1: 0;
 
-		std::strncpy(cell.fg, fg.c_str(), sizeof(cell.fg));
-		std::strncpy(cell.bg, bg.c_str(), sizeof(cell.bg));
-		std::strncpy(cell.style, st.c_str(), sizeof(cell.style));
+		std::strncpy(cell.fg, fg, sizeof(cell.fg));
+		std::strncpy(cell.bg, bg, sizeof(cell.bg));
+		std::strncpy(cell.style, st, sizeof(cell.style));
 
 		cell.ch = (wchar_t)ch;  // TODO: one utf-8 "character"
 
@@ -96,11 +67,69 @@ void App::clear()
 {
 	_output_buffer.append(fmt::format(esc::ed, 2));
 
-//	for(auto &row: _cells)
-//		for(auto &cell: row)
-//			cell.dirty = true;
+	//	for(auto &row: _cells)
+	//		for(auto &cell: row)
+	//			cell.dirty = true;
 
-//	_refresh_needed++;
+	//	_refresh_needed++;
+}
+
+void App::apply_resize(std::size_t new_width, std::size_t new_height)
+{
+	if(new_width == _width and new_height == _height)
+		return;
+
+	if(new_height != _height)
+	{
+		if(new_height < _height)
+			_cell_rows.resize(new_height); // rows "outside" will be deallocated by shared_ptr
+		else
+		{
+			for(auto idx = _height; idx < new_height; ++idx)
+			{
+				auto new_row = std::make_shared<CellRow>(new_width, Cell{});
+				_cell_rows.push_back(new_row);
+
+				// set dirty flag for all new rows (and the previously bottom-most row)
+				for(auto cell_iter = new_row->begin(); cell_iter != new_row->end(); ++cell_iter)
+					cell_iter->dirty = true;
+			}
+		}
+	}
+
+	if(new_width != _width)
+	{
+		auto row_iter = _cell_rows.begin();
+		// if it has grown, resize only the "old" rows (new rows are sized upon creation, above), otherwise all rows
+		const auto num_rows = new_height > _height? _height: new_height;
+		for(std::size_t row = 0; row < num_rows; ++row)
+		{
+			(*row_iter)->resize(new_width);
+
+			// if wider, set dirty flag for all the new columns
+			if(new_width > _width)
+			{
+				for(auto cell_iter = (*row_iter)->begin() + int(_width - 1); cell_iter != (*row_iter)->end(); ++cell_iter)
+					cell_iter->dirty = true;
+			}
+		}
+	}
+
+	if(new_height > _height)
+	{
+		for(auto idx = _height - 1; idx < new_height; ++idx)
+			_output_buffer.append(fmt::format(esc::cup + esc::el, idx, 0, 0));
+	}
+	if(new_width > _width)
+	{
+		for(auto idx = 0u; idx < new_height; ++idx)
+			_output_buffer.append(fmt::format(esc::cup + esc::el, idx, 0, 0));
+	}
+
+	_width = new_width;
+	_height = new_height;
+
+	_output_buffer.reserve(_width*_height*2);  // a ball-part figure ;)
 }
 
 void App::refresh()
@@ -108,7 +137,7 @@ void App::refresh()
 	auto cells_rendered = 0u;
 
 	auto cy = 0u;
-	for(auto row_iter = _cells.begin(); row_iter != _cells.end(); row_iter++, cy++)
+	for(auto row_iter = _cell_rows.begin(); row_iter != _cell_rows.end(); row_iter++, cy++)
 	{
 		auto &row = *row_iter;
 
@@ -116,7 +145,7 @@ void App::refresh()
 		Cell prev_cell;
 		auto cx = 0u;
 
-		for(auto col_iter = row.begin(); col_iter != row.end(); col_iter++, cx++)
+		for(auto col_iter = row->begin(); col_iter != row->end(); col_iter++, cx++)
 		{
 			auto &cell = *col_iter;
 

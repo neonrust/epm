@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cwchar>
 #include <optional>
+#include <memory>
 
 #include "event.h"
 
@@ -42,18 +43,24 @@ struct KeySequence
 constexpr std::size_t max_color_seq_len { 16 };  // e.g. "8;5;r;g;b"
 constexpr std::size_t max_style_seq_len { 6 };   // e.g. "1;2;3"
 
+using Color = char[max_color_seq_len];//std::string;
+using Style = char[max_color_seq_len];//std::string;
+
 struct Cell
 {
 	bool dirty { false };
-	char fg[max_color_seq_len] { '\0' };    // an already "compiled" sequence, e.g. "8;5;r;g;b"   (the '3' prefix is implied)
-	char bg[max_color_seq_len] { '\0' };    // an already "compiled" sequence, e.g. "1"        (the '4' prefix is implied)
-	char style[max_style_seq_len] { '\0' }; // an already "compiled" sequence, e.g. "1"
+	Color fg { '\0' };//[max_color_seq_len] { '\0' };    // an already "compiled" sequence, e.g. "8;5;r;g;b"   (the '3' prefix is implied)
+	Color bg { '\0' };//[max_color_seq_len] { '\0' };    // an already "compiled" sequence, e.g. "1"        (the '4' prefix is implied)
+	Style style { '\0' };//[max_style_seq_len] { '\0' }; // an already "compiled" sequence, e.g. "1"
 	wchar_t ch { '\0' };                    // a single UTF-8 character
 	bool is_virtual { false };              // true: this cell is displaying content from its left neighbor (i.e. a double-width character)
 };
 
-using Color = std::string;
-using Style = std::string;
+struct Size
+{
+	std::size_t width;
+	std::size_t height;
+};
 
 struct App
 {
@@ -69,7 +76,9 @@ struct App
 	//std::shared_ptr<Surface> screen_surface();
 	//std::shared_ptr<Surface> create_surface(std::size_t x, std::size_t y, std::size_t width, std::size_t height);
 
-	void debug_print(std::size_t x, std::size_t y, Color fg, Color bg, Style st, const std::string &s);
+	Size size() const;
+
+	void debug_print(std::size_t x, std::size_t y, const std::string &s, const Color fg="0", const Color bg="0", const Style st="");
 
 	void clear();
 
@@ -92,7 +101,9 @@ private:
 
 private:
 	std::size_t _refresh_needed { 0 };
-	std::vector<std::vector<Cell>> _cells;
+	using CellRow = std::vector<Cell>;
+	using CellRowRef = std::shared_ptr<CellRow>;
+	std::vector<CellRowRef> _cell_rows;
 	std::size_t _width { 0 };
 	std::size_t _height { 0 };
 
@@ -122,5 +133,6 @@ const auto cuf { csi + "{:d}C" };
 const auto cub { csi + "{:d}D" };
 const auto cup { csi + "{:d};{:d}H" };
 const auto ed  { csi + "{}J" };
+const auto el  { csi + "{}K" };
 
 } // NS: esc
