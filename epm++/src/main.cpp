@@ -30,7 +30,7 @@ int main()
 	app.on_key_event.connect([&app](const event::Key &k) {
 		fmt::print(g_log, "[main]   key: {}\n", key::to_string(k.key, k.modifiers));
 
-		if(k.key == key::Q and k.modifiers == key::NoMod)
+		if(k.key == key::ESCAPE and k.modifiers == key::NoMod)
 			app.quit();
 	});
 	app.on_mouse_move_event.connect([&app](const event::MouseMove &mm) {
