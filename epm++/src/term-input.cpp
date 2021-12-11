@@ -153,8 +153,8 @@ std::variant<event::Event, int> parse_mouse(const std::string_view &in, std::siz
 //	fmt::print(g_log, "  mouse seq: {:02x} {} {} {}\n", std::stoi(parts[0].data()), parts[1], parts[2], tail);
 
 	std::uint64_t buttons_modifiers = std::stoul(parts[0].data());
-	const std::size_t mouse_x = std::stoul(parts[1].data());
-	const std::size_t mouse_y = std::stoul(parts[2].data());
+	const std::size_t mouse_x = std::stoul(parts[1].data()) - 1;
+	const std::size_t mouse_y = std::stoul(parts[2].data()) - 1;
 
 	const auto movement = (buttons_modifiers & 0x20) > 0;
 
