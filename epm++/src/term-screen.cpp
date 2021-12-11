@@ -105,12 +105,15 @@ void App::clear()
 
 void App::refresh()
 {
+	auto cells_rendered = 0u;
+
 	auto cy = 0u;
 	for(auto row_iter = _cells.begin(); row_iter != _cells.end(); row_iter++, cy++)
 	{
 		auto &row = *row_iter;
 
 		std::size_t prev_x { 0 };
+		Cell prev_cell;
 		auto cx = 0u;
 
 		for(auto col_iter = row.begin(); col_iter != row.end(); col_iter++, cx++)
@@ -121,27 +124,36 @@ void App::refresh()
 			{
 				cell.dirty = false;
 				if(not cell.is_virtual)
-					draw_cell(cx, cy, cell, not (cx == prev_x + 1));
+				{
+					const bool non_adjacent = not (cx == prev_x + 1);
+					const bool diff_style = std::strcmp(cell.fg, prev_cell.fg) != 0 or std::strcmp(cell.bg, prev_cell.bg) != 0 or std::strcmp(cell.style, prev_cell.style) != 0;
+
+					draw_cell(cx, cy, cell, non_adjacent, diff_style);
+					++cells_rendered;
+					prev_cell = cell;
+				}
 				prev_x = cx;
 			}
 		}
 	}
 
+	fmt::print(g_log, "cells_rendered: {}\n", cells_rendered);
+
 	_refresh_needed = 0;
 }
 
 
-void App::draw_cell(std::size_t x, std::size_t y, const Cell &cell, bool move_needed)
+void App::draw_cell(std::size_t x, std::size_t y, const Cell &cell, bool move_needed, bool style_needed)
 {
 	static const auto style { esc::csi + "4{:s};3{:s};{:s}m" };
 
 	if(move_needed)
 		_output_buffer.append(fmt::format(esc::cup, y, x));
 
-	_output_buffer.append(fmt::format(style, cell.bg, cell.fg, "0"/*cell.style*/));
+	if(style_needed)
+		_output_buffer.append(fmt::format(style, cell.bg, cell.fg, cell.style));
+
 	_output_buffer.append(fmt::format("{}", char(cell.ch)));
-	//else
-	//	fmt::print(cell_fmt_style, cell.bg, cell.fg, cell.style, cell.ch);
 }
 
 } // NS: term
