@@ -105,7 +105,7 @@ private:
 
 	void enqueue_resize_event(std::tuple<std::size_t, std::size_t> size);
 	void apply_resize(std::size_t width, std::size_t height);
-	void refresh();
+	void render();
 	void draw_cell(std::size_t x, std::size_t y, const Cell &cell, bool move_needed=true, bool style_needed=true);
 	void flush_buffer();
 

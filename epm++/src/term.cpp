@@ -118,7 +118,7 @@ int App::run()
 		_internal_events.clear();
 
 		if(_refresh_needed > 0)
-			refresh();
+			render();
 
 		flush_buffer();
 
@@ -280,7 +280,7 @@ void App::shutdown()
 
 std::tuple<std::size_t, std::size_t> App::get_size() const
 {
-	::winsize size;
+	::winsize size { 0, 0, 0, 0 };
 
 	if(::ioctl(STDOUT_FILENO, TIOCGWINSZ, &size) < 0)
 		return { 0, 0 };
@@ -295,6 +295,7 @@ void App::flush_buffer()
 		write(_output_buffer);
 		_output_buffer.clear();
 	}
+	_refresh_needed = 0;
 }
 
 void App::write(const std::string_view &s)
