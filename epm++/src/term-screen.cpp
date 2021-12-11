@@ -2,6 +2,7 @@
 
 #include <fmt/core.h>
 #include <string>
+#include <cstring>
 
 using namespace std::string_literals;
 
@@ -33,33 +34,40 @@ void App::debug_print(std::size_t x, std::size_t y, const std::string &s, const 
 
 		auto &cell = (*row)[cx];
 
-		if((cell.is_virtual = next_virtual > 0) == true)
+		if(next_virtual > 0)
 		{
+			--next_virtual;
+			cell.is_virtual = true;
 			cell.dirty = true;
-			next_virtual--;
-			cx++;
+			++cx;
 			continue;
 		}
 
-		cell.dirty |= ch != cell.ch or cell.fg != fg or cell.bg != bg or cell.style != st;
-		_refresh_needed += cell.dirty? 1: 0;
+		const auto diff = ch != cell.ch or std::strcmp(cell.fg, fg) != 0 or std::strcmp(cell.bg, bg) != 0 or std::strcmp(cell.style, st) != 0;
+		if(diff)
+		{
+			cell.dirty = true;
+			++_refresh_needed;
 
-		std::strncpy(cell.fg, fg, sizeof(cell.fg));
-		std::strncpy(cell.bg, bg, sizeof(cell.bg));
-		std::strncpy(cell.style, st, sizeof(cell.style));
+			std::strncpy(cell.fg, fg, sizeof(cell.fg));
+			std::strncpy(cell.bg, bg, sizeof(cell.bg));
+			std::strncpy(cell.style, st, sizeof(cell.style));
 
-		cell.ch = (wchar_t)ch;  // TODO: one utf-8 "character"
+			cell.ch = (wchar_t)ch;  // TODO: one utf-8 "character"
 
-		//auto width = 1u; // TODO: width of 'ch'?
-		//   - impossible to know, as it's the terminal's decision how to render it.
-		//   - can't use CPR because nothing has been written to the terminal yet
-		//   - in theory, a test could be performed, computing the width of *all* characters (and caching the result) :)
-		//   - or just trust wcswidth() ?
-		auto width = ::wcswidth(&cell.ch, 1);
-		if(width > 1)
-			next_virtual = static_cast<std::size_t>(width - 1);
+			//auto width = 1u; // TODO: width of 'ch'?
+			//   - impossible to know, as it's the terminal's decision how to render it.
+			//   - can't use CPR because nothing has been written to the terminal yet
+			//   - in theory, a test could be performed, computing the width of *all* characters (and caching the result) :)
+			//   - or just trust wcswidth() ?
+			auto width = 1;//::wcswidth(&cell.ch, 1);
+			if(width > 1)
+				next_virtual = static_cast<std::size_t>(width - 1);
 
-		cx += static_cast<std::size_t>(width);
+			cx += static_cast<std::size_t>(width);
+		}
+		else
+			++cx;
 	}
 }
 
