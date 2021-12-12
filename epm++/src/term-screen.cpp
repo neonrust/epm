@@ -29,7 +29,7 @@ void App::debug_print(std::size_t x, std::size_t y, const std::string &s, const 
 
 	for(const auto ch: s)
 	{
-		if(x >= _width)
+		if(cx >= _width)
 			break;
 
 		auto &cell = (*row)[cx];
@@ -87,11 +87,13 @@ void App::apply_resize(std::size_t new_width, std::size_t new_height)
 	if(new_width == _width and new_height == _height)
 		return;
 
+	const bool entire_screen = _width == 0 and _height == 0;
+
+	fmt::print(g_log, "resize: {}x{} -> {}x{}\n", _width, _height, new_width, new_height);
+
 	_output_buffer.reserve(new_width*new_height*2);  // a ball-part figure ;)
 
 	const auto before = _output_buffer.size();
-
-	fmt::print(g_log, "resize: {}x{} -> {}x{}\n", _width, _height, new_width, new_height);
 
 	if(new_height != _height)
 	{
@@ -101,19 +103,20 @@ void App::apply_resize(std::size_t new_width, std::size_t new_height)
 		{
 			for(auto idx = _height; idx < new_height; ++idx)
 			{
-
 				auto new_row = std::make_shared<CellRow>(new_width, Cell{});
 				fmt::print(g_log, "resize:   adding row {} ({})\n", idx, new_row->size());
 				_cell_rows.push_back(new_row);
 
 				// set dirty flag for all new rows (and the previously bottom-most row)
-				for(auto cell_iter = new_row->begin(); cell_iter != new_row->end(); ++cell_iter)
-					cell_iter->dirty = true;
+				if(not entire_screen)
+					for(auto cell_iter = new_row->begin(); cell_iter != new_row->end(); ++cell_iter)
+						cell_iter->dirty = true;
 			}
 		}
 	}
 
-	if(new_width != _width)
+	// if the entire screen, we already did the req work above
+	if(not entire_screen and new_width != _width)
 	{
 		auto row_iter = _cell_rows.begin();
 		// if it has grown, resize only the "old" rows (new rows are sized upon creation, above), otherwise all rows
@@ -131,19 +134,24 @@ void App::apply_resize(std::size_t new_width, std::size_t new_height)
 		}
 	}
 
-	if(new_height > _height)
+	if(entire_screen)
+		_output_buffer.append(fmt::format(esc::ed, 2));
+	else
 	{
-		for(auto idx = _height - 1; idx < new_height; ++idx)
+		if(new_height > _height)
 		{
-			fmt::print(g_log, "resize:   clearing row {}\n", idx);
-			_output_buffer.append(fmt::format(esc::cup + esc::el, idx, 0, 0));
+			for(auto idx = _height - 1; idx < new_height; ++idx)
+			{
+				fmt::print(g_log, "resize:   clearing row {}\n", idx);
+				_output_buffer.append(fmt::format(esc::cup + esc::el, idx, 0, 0));
+			}
 		}
-	}
-	if(new_width > _width)
-	{
-		fmt::print(g_log, "resize:   clearing columns {}-eol\n", _width);
-		for(auto idx = 0u; idx < new_height; ++idx)
-			_output_buffer.append(fmt::format(esc::cup + esc::el, idx, _width, 0));
+		if(new_width > _width)
+		{
+			fmt::print(g_log, "resize:   clearing columns {}-eol\n", _width);
+			for(auto idx = 0u; idx < new_height; ++idx)
+				_output_buffer.append(fmt::format(esc::cup + esc::el, idx, _width, 0));
+		}
 	}
 
 	_width = new_width;

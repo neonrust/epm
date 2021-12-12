@@ -15,6 +15,10 @@ set(sources
 	src/term.cpp
 	src/term-input.cpp
 	src/term-screen.cpp
+	src/cell.h
+	src/screen.h
+	src/screen-buffer.h
+	src/screen-buffer.cpp
 	src/keycodes.h
 	src/keycodes.cpp
 )

@@ -9,6 +9,7 @@
 #include <signals.hpp>
 
 #include "event.h"
+#include "screen-buffer.h"
 
 
 using namespace std::literals::string_view_literals;
@@ -112,16 +113,21 @@ private:
 	void write(const std::string_view &s);
 
 private:
-	std::size_t _refresh_needed { 0 };
 	using CellRow = std::vector<Cell>;
 	using CellRowRef = std::shared_ptr<CellRow>;
+
+	ScreenBuffer _back_buffer;
+	ScreenBuffer _front_buffer;
 	std::vector<CellRowRef> _cell_rows;
+
+	std::size_t _refresh_needed { 0 };
+
 	std::size_t _width { 0 };
 	std::size_t _height { 0 };
 
 	std::vector<KeySequence> _key_sequences;
 
-	bool _resize_recevied { false };
+	bool _emit_resize_event { false };
 	std::vector<event::Event> _internal_events;
 
 	std::string _output_buffer;
@@ -144,8 +150,8 @@ const auto cuu { csi + "{:d}A" };
 const auto cud { csi + "{:d}B" };
 const auto cuf { csi + "{:d}C" };
 const auto cub { csi + "{:d}D" };
-const auto cup { csi + "{:d};{:d}H" };
-const auto ed  { csi + "{}J" };
-const auto el  { csi + "{}K" };
+const auto cup { csi + "{:d};{:d}H" };  // y; x
+const auto ed  { csi + "{}J" }; // erase lines: 0 = before cursor, 1 = after cursor, 2 = entire screen
+const auto el  { csi + "{}K" }; // erase line:  0 = before cursor, 1 = after cursor, 2 = entire line
 
 } // NS: esc

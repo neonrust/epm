@@ -96,12 +96,13 @@ int App::run()
 	std::size_t prev_mx { static_cast<std::size_t>(-1) };
 	std::size_t prev_my { static_cast<std::size_t>(-1) };
 
+	_emit_resize_event = true;  // to emit the initial resize
 
 	while(not _should_quit)
 	{
-		if(_resize_recevied)
+		if(_emit_resize_event)
 		{
-			_resize_recevied = false;
+			_emit_resize_event = false;
 
 			const auto size = get_size();
 			const auto new_width = std::get<0>(size);
@@ -247,12 +248,6 @@ bool App::initialize(Options opts)
 		std::signal(SIGWINCH, signal_received);
 	}
 
-	const auto size = get_size();
-	auto w = std::get<0>(size);
-	auto h = std::get<1>(size);
-
-	apply_resize(w, h);
-
 	if(not init_input())
 		return false;
 
@@ -364,7 +359,7 @@ void signal_received(int signum)
 	if(signum == SIGWINCH)
 	{
 		if(g_app)
-			g_app->_resize_recevied = true;
+			g_app->_emit_resize_event = true;
 		return;
 	}
 
