@@ -41,6 +41,8 @@ enum Bit
 	Underline  = 1 << 3,
 	Overstrike = 1 << 4,
 	// dimnishing returns for remaining styles... and not widely supported.
+
+	Unchanged  = 0xff,
 };
 
 }

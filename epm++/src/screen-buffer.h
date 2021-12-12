@@ -11,9 +11,13 @@ namespace term
 struct ScreenBuffer
 {
 	void set_size(std::size_t w, std::size_t h);
-	void clear(Color fg=color::Unchanged, Color bg=color::Unchanged);
+
+//	void clear(Color fg=color::Unchanged, Color bg=color::Unchanged);
+	void clear();
 
 	const Cell &cell(std::size_t x, std::size_t y) const;
+	void set_cell(std::size_t x, std::size_t y, wchar_t ch, Color fg=color::Default, Color bg=color::Default, Style style=style::Default);
+
 
 
 private:

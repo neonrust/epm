@@ -9,7 +9,7 @@
 #include <signals.hpp>
 
 #include "event.h"
-#include "screen-buffer.h"
+//#include "screen-buffer.h"
 
 
 using namespace std::literals::string_view_literals;
@@ -116,8 +116,8 @@ private:
 	using CellRow = std::vector<Cell>;
 	using CellRowRef = std::shared_ptr<CellRow>;
 
-	ScreenBuffer _back_buffer;
-	ScreenBuffer _front_buffer;
+	//ScreenBuffer _back_buffer;
+	//ScreenBuffer _front_buffer;
 	std::vector<CellRowRef> _cell_rows;
 
 	std::size_t _refresh_needed { 0 };

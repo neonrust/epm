@@ -45,17 +45,31 @@ void ScreenBuffer::set_size(std::size_t new_width, std::size_t new_height)
 	_height = new_height;
 }
 
-void ScreenBuffer::clear(Color fg, Color bg)
+//void ScreenBuffer::clear(Color fg, Color bg)
+//{
+//	for(auto &row: _rows)
+//	{
+//		for(auto &cell: *row)
+//		{
+//			if(fg != color::Unchanged)
+//				cell.fg = fg;
+//			if(bg != color::Unchanged)
+//				cell.bg = bg;
+//			cell.style = style::Default;
+//			cell.ch = '\0';
+//		}
+//	}
+//}
+
+void ScreenBuffer::clear()
 {
 	for(auto &row: _rows)
 	{
 		for(auto &cell: *row)
 		{
-			if(fg != color::Unchanged)
-				cell.fg = fg;
-			if(bg != color::Unchanged)
-				cell.bg = bg;
-			cell.style = style::Normal;
+			cell.fg = color::Default;
+			cell.bg = color::Default;
+			cell.style = style::Default;
 			cell.ch = '\0';
 		}
 	}
@@ -66,6 +80,21 @@ const Cell &ScreenBuffer::cell(std::size_t x, std::size_t y) const
 	assert(x < _width and y < _height);
 
 	return _rows[y]->operator[](x);
+}
+
+void ScreenBuffer::set_cell(std::size_t x, std::size_t y, wchar_t ch, Color fg, Color bg, Style style)
+{
+	assert(x < _width and y < _height);
+
+	auto &cell = _rows[y]->operator[](x);
+	if(fg != color::Unchanged)
+		cell.fg = fg;
+	if(bg != color::Unchanged)
+		cell.bg = bg;
+	if(style != style::Unchanged)
+		cell.style = style;
+
+	cell.ch = ch;
 }
 
 
