@@ -60,7 +60,7 @@ void App::debug_print(std::size_t x, std::size_t y, const std::string &s, const 
 			//   - can't use CPR because nothing has been written to the terminal yet
 			//   - in theory, a test could be performed, computing the width of *all* characters (and caching the result) :)
 			//   - or just trust wcswidth() ?
-			auto width = 1;//::wcswidth(&cell.ch, 1);
+			auto width = ::wcswidth(&cell.ch, 1);
 			if(width > 1)
 				next_virtual = static_cast<std::size_t>(width - 1);
 

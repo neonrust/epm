@@ -11,8 +11,8 @@ namespace term
 constexpr std::size_t max_color_seq_len { 16 };  // e.g. "8;5;r;g;b"
 constexpr std::size_t max_style_seq_len { 8 };   // e.g. "1;2;3"
 
-using Style = std::uint8_t;
-using Color = std::uint32_t;
+using Style = std::uint_fast8_t;
+using Color = std::uint_fast32_t;
 
 namespace color
 {
@@ -59,10 +59,16 @@ struct Cell
 		fmt::print(g_log, "~Cell\n");
 	}
 
+	inline bool operator == (const Cell &that) const
+	{
+		return ch == that.ch and fg == that.fg and bg == that.bg and style == that.style;
+	}
+
+	wchar_t ch   { '\0' };     // a single UTF-8 character
+	std::uint_fast8_t width;
 	Color fg     { color::Default };
 	Color bg     { color::Default };
 	Style style  { style::Default };
-	wchar_t ch   { '\0' };     // a single UTF-8 character
 };
 
 

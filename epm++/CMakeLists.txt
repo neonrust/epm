@@ -17,6 +17,7 @@ set(sources
 	src/term-screen.cpp
 	src/cell.h
 	src/screen.h
+	src/screen.cpp
 	src/screen-buffer.h
 	src/screen-buffer.cpp
 	src/keycodes.h
