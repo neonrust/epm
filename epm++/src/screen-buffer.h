@@ -4,20 +4,16 @@
 #include <memory>
 
 #include "cell.h"
+#include "size.h"
 
 namespace term
 {
 
-struct Size
-{
-	std::size_t width;
-	std::size_t height;
-};
-
 struct ScreenBuffer
 {
-	void set_size(std::size_t w, std::size_t h);
+	friend struct Screen;
 
+	void set_size(Size size);
 	inline Size size() const { return { _width, _height }; };
 
 //	void clear(Color fg=color::Unchanged, Color bg=color::Unchanged);

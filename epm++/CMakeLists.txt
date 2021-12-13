@@ -16,6 +16,7 @@ set(sources
 	src/term-input.cpp
 	src/term-screen.cpp
 	src/cell.h
+	src/size.h
 	src/screen.h
 	src/screen.cpp
 	src/screen-buffer.h

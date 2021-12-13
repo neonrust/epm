@@ -66,7 +66,42 @@ void ScreenBuffer::set_cell(std::size_t x, std::size_t y, wchar_t ch, std::size_
 
 }
 
+void ScreenBuffer::set_size(Size new_size)
+{
+	const auto &[new_width, new_height] = new_size;
 
+	if(new_width == _width and new_height == _height)
+		return;
+
+	const bool initial = _width == 0 and _height == 0;
+
+	fmt::print(g_log, "resize: {}x{} -> {}x{}\n", _width, _height, new_width, new_height);
+
+	_rows.resize(new_height); // if shorter, rows "outside" will be deallocated by the unique_ptr
+
+	if(new_height > _height)
+	{
+		// if initial (re)size, this will be all rows
+		for(auto idx = _height; idx < new_height; ++idx)
+		{
+			auto new_row = std::make_unique<CellRow>(new_width, Cell{});
+			fmt::print(g_log, "resize:   adding row {} ({})\n", idx, new_row->size());
+			_rows[idx] = std::move(new_row);
+		}
+	}
+
+	if(not initial and new_width != _width)  // if initial (re)size, we already did the required work above
+	{
+		auto row_iter = _rows.begin();
+		// if taller: resize only the "old" rows; new rows are sized upon creation, above. if not, all rows
+		const auto num_rows = new_height > _height? _height: new_height;
+		for(std::size_t row = 0; row < num_rows; ++row)
+			(*row_iter)->resize(new_width);
+	}
+
+	_width = new_width;
+	_height = new_height;
+}
 
 
 } // NS: term

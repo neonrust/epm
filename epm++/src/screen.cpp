@@ -1,7 +1,35 @@
 #include "screen.h"
 
+#include <string_view>
+
+using namespace std::literals::string_view_literals;
+
+
 namespace term
 {
+
+namespace esc
+{
+
+static constexpr auto esc { "\x1b"sv };
+static constexpr auto csi { "\x1b["sv };
+
+static constexpr auto cuu { "\x1b[{:d}A"sv };
+static constexpr auto cud { "\x1b[{:d}B"sv };
+static constexpr auto cuf { "\x1b[{:d}C"sv };
+static constexpr auto cub { "\x1b[{:d}D"sv };
+static constexpr auto cup { "\x1b[{:d};{:d}H"sv };  // y; x
+static constexpr auto ed  { "\x1b[{}J"sv }; // erase lines: 0 = before cursor, 1 = after cursor, 2 = entire screen
+static constexpr auto el  { "\x1b[{}K"sv }; // erase line:  0 = before cursor, 1 = after cursor, 2 = entire line
+
+} // NS: esc
+
+
+Screen::Screen(int fd) :
+	_fd(fd)
+{
+
+}
 
 void Screen::debug_print(std::size_t x, std::size_t y, const std::string &s, const Color fg, const Color bg, const Style style)
 {
@@ -38,7 +66,7 @@ void Screen::debug_print(std::size_t x, std::size_t y, const std::string &s, con
 	}
 }
 
-void Screen::flush(Output &out)
+void Screen::update()
 {
 	// TODO: compare '_back_buffer' and '_front_buffer'
 	//   write the diference to 'out' (such that '_front_buffer' becomes identical to '_back_buffer')
@@ -47,6 +75,8 @@ void Screen::flush(Output &out)
 
 	for(std::size_t cy = 0; cy < size.height; ++cy)
 	{
+		std::size_t prev_x { 0 };
+
 		for(std::size_t cx = 0; cx < size.width; ++cx)
 		{
 			auto &back_cell = _back_buffer.cell(cx, cy);
@@ -57,48 +87,39 @@ void Screen::flush(Output &out)
 				cx += back_cell.width;
 			else
 			{
-				// TODO: write back_cell to 'out'
+				const bool non_adjacent = not (cx == prev_x + 1);
+				const bool diff_style = back_cell.fg != front_cell.fg or back_cell.bg != front_cell.bg or back_cell.style != front_cell.style;
+
+				draw_cell(cx, cy, back_cell, non_adjacent, diff_style);
+				prev_x = cx;
 			}
 		}
 	}
+}
 
-	(void)out;
+void Screen::set_size(Size size)
+{
+	_output_buffer.reserve(size.width*size.height*2);  // a nice, round estimate :)
+
+	_back_buffer.set_size(size);
+	_front_buffer.set_size(size);
 }
 
 
-void ScreenBuffer::set_size(std::size_t new_width, std::size_t new_height)
+void Screen::draw_cell(std::size_t x, std::size_t y, const Cell &cell, bool move_needed, bool style_needed)
 {
-	if(new_width == _width and new_height == _height)
-		return;
+	static constexpr auto style { "\x1b[4{:s};3{:s};{:s}m"sv };
 
-	const bool initial = _width == 0 and _height == 0;
+	if(move_needed)
+		_output_buffer.append(fmt::format(esc::cup, y, x));
 
-	fmt::print(g_log, "resize: {}x{} -> {}x{}\n", _width, _height, new_width, new_height);
+	if(style_needed)
+		_output_buffer.append(fmt::format(style, color::C(cell.bg), color::C(cell.fg), style::S(cell.style)));
 
-	_rows.resize(new_height); // if shorter, rows "outside" will be deallocated by the unique_ptr
-
-	if(new_height > _height)
-	{
-		// if initial (re)size, this will be all rows
-		for(auto idx = _height; idx < new_height; ++idx)
-		{
-			auto new_row = std::make_unique<CellRow>(new_width, Cell{});
-			fmt::print(g_log, "resize:   adding row {} ({})\n", idx, new_row->size());
-			_rows[idx] = std::move(new_row);
-		}
-	}
-
-	if(not initial and new_width != _width)  // if initial (re)size, we already did the required work above
-	{
-		auto row_iter = _rows.begin();
-		// if taller: resize only the "old" rows; new rows are sized upon creation, above. if not, all rows
-		const auto num_rows = new_height > _height? _height: new_height;
-		for(std::size_t row = 0; row < num_rows; ++row)
-			(*row_iter)->resize(new_width);
-	}
-
-	_width = new_width;
-	_height = new_height;
+	if(cell.ch == 0)
+		_output_buffer.append(" ");
+	else
+		_output_buffer.append(fmt::format("{:c}", char(cell.ch)));
 }
 
 

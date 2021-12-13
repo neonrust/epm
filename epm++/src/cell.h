@@ -25,7 +25,13 @@ enum
 
 static constexpr Color special_mask { 0xff000000 };
 
+inline std::string C(Color c)
+{
+	(void)c;
+	return "3";
 }
+
+} // NS: color
 
 namespace style
 {
@@ -45,7 +51,13 @@ enum Bit
 	Unchanged  = 0xff,
 };
 
+inline std::string S(Style s)
+{
+	(void)s;
+	return "1";
 }
+
+} // NS: style
 
 inline Style operator | (style::Bit a, style::Bit b)
 {
