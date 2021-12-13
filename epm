@@ -83,9 +83,7 @@ def main():
 		arg = args.pop(0)
 
 		if arg.startswith('-'):
-			if arg == '-r':
-				tvpy.enable_refetch(True)
-			elif not eat_option(command, arg, args, options):
+			if not eat_option(command, arg, args, options):
 				bad_opt(arg)
 		elif not command:
 			command = resolve_cmd(arg)
