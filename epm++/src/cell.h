@@ -21,15 +21,18 @@ enum
 {
 	Default =   0x01000000,
 	Unchanged = 0x02000000,
+
+	Red    = 0xff0000,
+	Green  = 0x00ff00,
+	Blue   = 0x0000ff,
+	Yellow = 0xffff00,
+	Orange = 0xff8800,
+	Cyan   = 0x00ffff,
+	Purple = 0xcd00e0,
+	Pink   = 0xf797f8,
 };
 
 static constexpr Color special_mask { 0xff000000 };
-
-inline std::string C(Color c)
-{
-	(void)c;
-	return "3";
-}
 
 } // NS: color
 
@@ -51,17 +54,40 @@ enum Bit
 	Unchanged  = 0xff,
 };
 
-inline std::string S(Style s)
-{
-	(void)s;
-	return "1";
-}
-
 } // NS: style
 
 inline Style operator | (style::Bit a, style::Bit b)
 {
 	return static_cast<Style>(static_cast<std::uint8_t>(a) | static_cast<std::uint8_t>(b));
+}
+
+inline std::string escify(Color c)
+{
+	// TODO: compile color 'c' into corresponding escape sequence
+	//   possibly picking nearest color depending on output mode (16/256/true-color)
+	(void)c;
+	return "3";
+}
+inline std::string escify(Style s)
+{
+	// TODO: compile style 's' into corresponding escape sequence
+	std::string seq;
+
+	if((s & style::Intense) > 0)
+		seq += "1;";
+	else if((s & style::Faint) > 0)
+		seq += "2;";
+	if((s & style::Italic) > 0)
+		seq += "3;";
+	if((s & style::Underline) > 0)
+		seq += "4;";
+	if((s & style::Overstrike) > 0)
+		seq += "9;";
+
+	if(seq.empty())
+		return "0";
+
+	return seq;
 }
 
 struct Cell

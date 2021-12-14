@@ -11,16 +11,16 @@ namespace term
 namespace esc
 {
 
-static constexpr auto esc { "\x1b"sv };
-static constexpr auto csi { "\x1b["sv };
+[[maybe_unused]] static constexpr auto esc { "\x1b"sv };
+[[maybe_unused]] static constexpr auto csi { "\x1b["sv };
 
-static constexpr auto cuu { "\x1b[{:d}A"sv };
-static constexpr auto cud { "\x1b[{:d}B"sv };
-static constexpr auto cuf { "\x1b[{:d}C"sv };
-static constexpr auto cub { "\x1b[{:d}D"sv };
-static constexpr auto cup { "\x1b[{:d};{:d}H"sv };  // y; x
-static constexpr auto ed  { "\x1b[{}J"sv }; // erase lines: 0 = before cursor, 1 = after cursor, 2 = entire screen
-static constexpr auto el  { "\x1b[{}K"sv }; // erase line:  0 = before cursor, 1 = after cursor, 2 = entire line
+[[maybe_unused]] static constexpr auto cuu { "\x1b[{:d}A"sv };
+[[maybe_unused]] static constexpr auto cud { "\x1b[{:d}B"sv };
+[[maybe_unused]] static constexpr auto cuf { "\x1b[{:d}C"sv };
+[[maybe_unused]] static constexpr auto cub { "\x1b[{:d}D"sv };
+[[maybe_unused]] static constexpr auto cup { "\x1b[{:d};{:d}H"sv };  // y; x
+[[maybe_unused]] static constexpr auto ed  { "\x1b[{}J"sv }; // erase lines: 0 = before cursor, 1 = after cursor, 2 = entire screen
+[[maybe_unused]] static constexpr auto el  { "\x1b[{}K"sv }; // erase line:  0 = before cursor, 1 = after cursor, 2 = entire line
 
 } // NS: esc
 
@@ -84,7 +84,7 @@ void Screen::update()
 
 
 			if(back_cell == front_cell)
-				cx += back_cell.width;
+				cx += back_cell.width;  // store it, or call wcswidth() again ?
 			else
 			{
 				const bool non_adjacent = not (cx == prev_x + 1);
@@ -95,6 +95,16 @@ void Screen::update()
 			}
 		}
 	}
+
+	flush_buffer();
+
+	// terminal is now in synch with back buffer, we can copy it to the front buffer
+
+	// since the rows are pointers, we need to copy each row separately
+	auto biter = _back_buffer._rows.begin();
+	auto fiter = _front_buffer._rows.begin();
+	while(biter != _back_buffer._rows.end())
+		*(*fiter++) = *(*biter++);
 }
 
 void Screen::set_size(Size size)
@@ -108,18 +118,27 @@ void Screen::set_size(Size size)
 
 void Screen::draw_cell(std::size_t x, std::size_t y, const Cell &cell, bool move_needed, bool style_needed)
 {
-	static constexpr auto style { "\x1b[4{:s};3{:s};{:s}m"sv };
+	static constexpr auto color_style { "\x1b[4{:s};3{:s};{:s}m"sv };
 
 	if(move_needed)
 		_output_buffer.append(fmt::format(esc::cup, y, x));
 
 	if(style_needed)
-		_output_buffer.append(fmt::format(style, color::C(cell.bg), color::C(cell.fg), style::S(cell.style)));
+		_output_buffer.append(fmt::format(color_style, escify(cell.bg), escify(cell.fg), escify(cell.style)));
 
 	if(cell.ch == 0)
 		_output_buffer.append(" ");
 	else
 		_output_buffer.append(fmt::format("{:c}", char(cell.ch)));
+}
+
+void Screen::flush_buffer()
+{
+	if(not _output_buffer.empty())
+	{
+		::write(_fd, _output_buffer.c_str(), _output_buffer.size());
+		_output_buffer.clear();
+	}
 }
 
 

@@ -21,6 +21,8 @@ set(sources
 	src/screen.cpp
 	src/screen-buffer.h
 	src/screen-buffer.cpp
+	src/input.h
+	src/input.cpp
 	src/keycodes.h
 	src/keycodes.cpp
 )

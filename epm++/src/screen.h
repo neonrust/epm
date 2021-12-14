@@ -21,6 +21,7 @@ struct Screen
 
 private:
 	void draw_cell(std::size_t x, std::size_t y, const Cell &cell, bool move_needed, bool style_needed);
+	void flush_buffer();
 
 private:
 	int _fd { 0 };
