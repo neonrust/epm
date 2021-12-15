@@ -22,6 +22,7 @@ App::App(Options opts) :
 	g_app = this;
 
 	init_terminal(opts);
+	_initialized = true;
 
 	::atexit(app_atexit);
 	std::signal(SIGINT, signal_received);
@@ -77,7 +78,7 @@ int App::run()
 
 		_screen.update();
 
-		const auto event = _input.wait();
+		const auto event = _input.read();
 
 		if(event.has_value())
 		{

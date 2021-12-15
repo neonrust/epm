@@ -13,7 +13,7 @@ extern std::FILE *g_log;
 namespace term
 {
 
-void App::print(std::size_t x, std::size_t y, const std::string_view &s, const Color fg, const Color bg, const Style st)
+void App::print(std::size_t x, std::size_t y, const std::string_view s, const Color fg, const Color bg, const Style st)
 {
 	_screen.print(x, y, s, fg, bg, st);
 }

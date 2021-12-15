@@ -41,7 +41,7 @@ Screen::Screen(int fd) :
 
 
 
-void Screen::print(std::size_t x, std::size_t y, const std::string_view &s, const Color fg, const Color bg, const Style style)
+void Screen::print(std::size_t x, std::size_t y, const std::string_view s, const Color fg, const Color bg, const Style style)
 {
 	auto size = _back_buffer.size();
 
@@ -167,7 +167,7 @@ Size Screen::get_terminal_size()
 	return { std::size_t(size.ws_col), std::size_t(size.ws_row) };
 }
 
-void Screen::_out(const std::string_view &text)
+void Screen::_out(const std::string_view text)
 {
 	_output_buffer.append(text);
 }

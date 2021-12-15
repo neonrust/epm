@@ -18,14 +18,15 @@ namespace term
 {
 
 
-static std::variant<event::Event, int> parse_mouse(const std::string_view &in, std::size_t &eaten);
-static std::variant<event::Event, int> parse_utf8(const std::string_view &in, std::size_t &eaten);
-static std::vector<std::string_view> split(const std::string_view &s, const std::string_view &sep);
-static std::string safe(const std::string_view &s);
-static std::string hex(const std::string_view &s);
+static std::variant<event::Event, int> parse_mouse(const std::string_view in, std::size_t &eaten);
+static std::variant<event::Event, int> parse_utf8(const std::string_view in, std::size_t &eaten);
+static std::vector<std::string_view> split(const std::string_view s, const std::string_view sep);
+static std::string safe(const std::string_view s);
+static std::string hex(const std::string_view s);
 
 
 static constexpr auto mouse_prefix { "\x1b[<"sv };
+static constexpr auto max_mouse_seq_len { 16 }; //  \e[<nn;xxx;yyym -> 14
 
 Input::Input(std::istream &s) :
     _in(s)
@@ -33,12 +34,11 @@ Input::Input(std::istream &s) :
 	setup_keys("keys.json");
 }
 
-std::optional<event::Event> Input::wait()
+std::optional<event::Event> Input::read()
 {
-	// if no data already available, wait for data to arrive
-	//   but allow interruptions
 	if(_in.rdbuf()->in_avail() == 0)
 	{
+		// no data yet, wait for data to arrive, but allow interruptions
 		static pollfd pollfds = {
 		    .fd = STDIN_FILENO,
 		    .events = POLLIN,
@@ -56,7 +56,7 @@ std::optional<event::Event> Input::wait()
 
 	_in.read(in.data(), int(in.size()));
 
-	auto revert = [this](const std::string_view &chars) {
+	auto revert = [this](const std::string_view chars) {
 		for(auto iter = chars.rbegin(); iter != chars.rend(); iter++)
 			_in.putback(*iter);
 	};
@@ -79,10 +79,13 @@ std::optional<event::Event> Input::wait()
 	{
 		std::size_t eaten { 0 };
 
-		auto event = parse_mouse(std::string_view(in.begin() + int(sizeof(mouse_prefix) - 1), in.end()), eaten);
+		std::string_view mouse_seq(in.begin(), in.begin() + max_mouse_seq_len);
+		mouse_seq.remove_prefix(mouse_prefix.size());
+
+		auto event = parse_mouse(mouse_seq, eaten);
 		if(eaten > 0)
 		{
-			revert(in.substr(sizeof(mouse_prefix) - 1 + eaten));
+			revert(in.substr(mouse_prefix.size() + eaten));
 			return std::get<event::Event>(event);
 		}
 	}
@@ -115,7 +118,7 @@ std::optional<event::Event> Input::wait()
 	return {};
 }
 
-static std::variant<event::Event, int> parse_mouse(const std::string_view &in, std::size_t &eaten)
+static std::variant<event::Event, int> parse_mouse(const std::string_view in, std::size_t &eaten)
 {
 	// '0;63;16M'  (button | modifiers ; X ; Y ; pressed or motion)
 	// '0;63;16m'  (button | modifiers ; X ; Y ; released)
@@ -240,7 +243,7 @@ static const std::uint8_t utf8_length[] = {
 };
 static const std::uint8_t utf8_mask[] = {0x7f, 0x1f, 0x0f, 0x07, 0x03, 0x01};
 
-static std::variant<event::Event, int> parse_utf8(const std::string_view &in, std::size_t &eaten)
+static std::variant<event::Event, int> parse_utf8(const std::string_view in, std::size_t &eaten)
 {
 	if(in.empty())
 		return -1;
@@ -335,7 +338,7 @@ bool Input::setup_keys(const std::string &filename)
 }
 
 
-static std::string hex(const std::string_view &s)
+static std::string hex(const std::string_view s)
 {
 	std::string res;
 	for(const auto &c: s)
@@ -343,7 +346,7 @@ static std::string hex(const std::string_view &s)
 	return res;
 }
 
-static std::string safe(const std::string_view &s)
+static std::string safe(const std::string_view s)
 {
 	std::string res;
 	for(const auto &c: s)
@@ -362,7 +365,7 @@ static std::string safe(const std::string_view &s)
 	return res;
 }
 
-static std::vector<std::string_view> split(const std::string_view &s, const std::string_view &sep)
+static std::vector<std::string_view> split(const std::string_view s, const std::string_view sep)
 {
 	std::vector<std::string_view> parts;
 

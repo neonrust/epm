@@ -25,12 +25,12 @@ using namespace std::chrono_literals;
 namespace term
 {
 
-std::variant<event::Event, int> parse_mouse(const std::string_view &in, std::size_t &eaten);
-std::variant<event::Event, int> parse_utf8(const std::string_view &in, std::size_t &eaten);
+std::variant<event::Event, int> parse_mouse(const std::string_view in, std::size_t &eaten);
+std::variant<event::Event, int> parse_utf8(const std::string_view in, std::size_t &eaten);
 
 std::string safe(const std::string &s);
 std::string hex(const std::string &s);
-std::vector<std::string_view> split(const std::string_view &s, const std::string &sep);
+std::vector<std::string_view> split(const std::string_view s, const std::string &sep);
 
 static const char mouse_prefix[] = "\x1b[<";
 
@@ -117,7 +117,7 @@ std::optional<event::Event> App::read_input() const
 	return {};
 }
 
-std::variant<event::Event, int> parse_mouse(const std::string_view &in, std::size_t &eaten)
+std::variant<event::Event, int> parse_mouse(const std::string_view in, std::size_t &eaten)
 {
 	// '0;63;16M'  (button | modifiers ; X ; Y ; pressed or motion)
 	// '0;63;16m'  (button | modifiers ; X ; Y ; released)
@@ -250,7 +250,7 @@ static const std::uint8_t utf8_length[] = {
 };
 static const std::uint8_t utf8_mask[] = {0x7f, 0x1f, 0x0f, 0x07, 0x03, 0x01};
 
-std::variant<event::Event, int> parse_utf8(const std::string_view &in, std::size_t &eaten)
+std::variant<event::Event, int> parse_utf8(const std::string_view in, std::size_t &eaten)
 {
 	if(in.empty())
 		return -1;
@@ -375,7 +375,7 @@ std::string safe(const std::string &s)
 	return res;
 }
 
-std::vector<std::string_view> split(const std::string_view &s, const std::string &sep)
+std::vector<std::string_view> split(const std::string_view s, const std::string &sep)
 {
 	std::vector<std::string_view> parts;
 

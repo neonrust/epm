@@ -41,7 +41,7 @@ const auto synch_end   { "\x1b[?2026l"sv };
 namespace term
 {
 
-void write(const std::string_view &s);
+void write(const std::string_view s);
 
 extern std::string safe(const std::string &s);
 
@@ -122,7 +122,7 @@ void restore_terminal()
 	write(esc::cursor_show);
 }
 
-void write(const std::string_view &s)
+void write(const std::string_view s)
 {
 	//fmt::print(g_log, "write: '{}' ({})\n", safe(std::string(s)), s.size());
 	::write(STDOUT_FILENO, s.data(), s.size());

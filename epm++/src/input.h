@@ -12,7 +12,7 @@ struct Input
 {
 	Input(std::istream &s);
 
-	std::optional<event::Event> wait();
+	std::optional<event::Event> read();
 
 private:
 	bool setup_keys(const std::string &filename);
