@@ -13,67 +13,15 @@ extern std::FILE *g_log;
 namespace term
 {
 
-void App::debug_print(std::size_t x, std::size_t y, const std::string &s, const Color fg, const Color bg, const Style st)
+void App::print(std::size_t x, std::size_t y, const std::string_view &s, const Color fg, const Color bg, const Style st)
 {
-	if(y >= _height)
-		return;
-
-	auto &row = _cell_rows[y];
-	auto cx = x;
-
-	//std::u8string u8s;
-	//u8s.resize(s.size());
-	//::mbrtoc8(u8s.data(), s.c_str(), s.size(), nullptr);
-
-	std::size_t next_virtual { 0 };
-
-	for(const auto ch: s)
-	{
-		if(cx >= _width)
-			break;
-
-		auto &cell = (*row)[cx];
-
-		if(next_virtual > 0)
-		{
-			--next_virtual;
-			cell.is_virtual = true;
-			cell.dirty = true;
-			++cx;
-			continue;
-		}
-
-		const auto diff = ch != cell.ch or std::strcmp(cell.fg, fg) != 0 or std::strcmp(cell.bg, bg) != 0 or std::strcmp(cell.style, st) != 0;
-		if(diff)
-		{
-			cell.dirty = true;
-			++_refresh_needed;
-
-			std::strncpy(cell.fg, fg, sizeof(cell.fg));
-			std::strncpy(cell.bg, bg, sizeof(cell.bg));
-			std::strncpy(cell.style, st, sizeof(cell.style));
-
-			cell.ch = (wchar_t)ch;  // TODO: one utf-8 "character"
-
-			//auto width = 1u; // TODO: width of 'ch'?
-			//   - impossible to know, as it's the terminal's decision how to render it.
-			//   - can't use CPR because nothing has been written to the terminal yet
-			//   - in theory, a test could be performed, computing the width of *all* characters (and caching the result) :)
-			//   - or just trust wcswidth() ?
-			auto width = ::wcswidth(&cell.ch, 1);
-			if(width > 1)
-				next_virtual = static_cast<std::size_t>(width - 1);
-
-			cx += static_cast<std::size_t>(width);
-		}
-		else
-			++cx;
-	}
+	_screen.print(x, y, s, fg, bg, st);
 }
 
 void App::clear()
 {
-	_output_buffer.append(fmt::format(esc::ed, 2));
+	_screen.clear();
+//	_output_buffer.append(fmt::format(esc::ed, 2));
 
 	//	for(auto &row: _cells)
 	//		for(auto &cell: row)

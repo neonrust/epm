@@ -10,11 +10,11 @@ add_compile_options(-Wextra -Wall -Wpedantic -Wconversion -Werror -Wno-padded)
 
 set(sources
 	src/main.cpp
+	src/app.h
+	src/app.cpp
 	src/event.h
-	src/term.h
-	src/term.cpp
-	src/term-input.cpp
-	src/term-screen.cpp
+	src/terminal.h
+	src/terminal.cpp
 	src/cell.h
 	src/size.h
 	src/screen.h

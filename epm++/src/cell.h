@@ -2,6 +2,9 @@
 
 #include <cstdint>
 #include <fmt/core.h>
+#include <string_view>
+
+using namespace std::literals::string_view_literals;
 
 extern std::FILE *g_log;
 
@@ -34,6 +37,10 @@ enum
 
 static constexpr Color special_mask { 0xff000000 };
 
+inline std::uint8_t red_part(Color c)   { return (c >> 16) & 0xff; };
+inline std::uint8_t green_part(Color c) { return (c >>  8) & 0xff; };
+inline std::uint8_t blue_part(Color c)  { return  c        & 0xff; };
+
 } // NS: color
 
 namespace style
@@ -63,11 +70,9 @@ inline Style operator | (style::Bit a, style::Bit b)
 
 inline std::string escify(Color c)
 {
-	// TODO: compile color 'c' into corresponding escape sequence
-	//   possibly picking nearest color depending on output mode (16/256/true-color)
-	(void)c;
-	return "3";
+	return fmt::format("8;5;{};{};{}"sv, color::red_part(c), color::green_part(c), color::blue_part(c));
 }
+
 inline std::string escify(Style s)
 {
 	// TODO: compile style 's' into corresponding escape sequence

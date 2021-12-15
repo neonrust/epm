@@ -26,16 +26,18 @@ namespace term
 //	}
 //}
 
-void ScreenBuffer::clear()
+void ScreenBuffer::clear(Color fg, Color bg)
 {
 	for(auto &row: _rows)
 	{
 		for(auto &cell: *row)
 		{
-			cell.fg = color::Default;
-			cell.bg = color::Default;
-			cell.style = style::Default;
 			cell.ch = '\0';
+			if(fg != color::Unchanged)
+				cell.fg = color::Default;
+			if(bg != color::Unchanged)
+				cell.bg = color::Default;
+			cell.style = style::Default;
 		}
 	}
 }

@@ -20,9 +20,9 @@ namespace term
 
 static std::variant<event::Event, int> parse_mouse(const std::string_view &in, std::size_t &eaten);
 static std::variant<event::Event, int> parse_utf8(const std::string_view &in, std::size_t &eaten);
-static std::vector<std::string_view> split(const std::string_view &s, const std::string &sep);
-static std::string safe(const std::string &s);
-static std::string hex(const std::string &s);
+static std::vector<std::string_view> split(const std::string_view &s, const std::string_view &sep);
+static std::string safe(const std::string_view &s);
+static std::string hex(const std::string_view &s);
 
 
 static constexpr auto mouse_prefix { "\x1b[<"sv };
@@ -56,7 +56,7 @@ std::optional<event::Event> Input::wait()
 
 	_in.read(in.data(), int(in.size()));
 
-	auto revert = [this](const std::string &chars) {
+	auto revert = [this](const std::string_view &chars) {
 		for(auto iter = chars.rbegin(); iter != chars.rend(); iter++)
 			_in.putback(*iter);
 	};
@@ -335,7 +335,7 @@ bool Input::setup_keys(const std::string &filename)
 }
 
 
-static std::string hex(const std::string &s)
+static std::string hex(const std::string_view &s)
 {
 	std::string res;
 	for(const auto &c: s)
@@ -343,7 +343,7 @@ static std::string hex(const std::string &s)
 	return res;
 }
 
-static std::string safe(const std::string &s)
+static std::string safe(const std::string_view &s)
 {
 	std::string res;
 	for(const auto &c: s)
@@ -362,7 +362,7 @@ static std::string safe(const std::string &s)
 	return res;
 }
 
-static std::vector<std::string_view> split(const std::string_view &s, const std::string &sep)
+static std::vector<std::string_view> split(const std::string_view &s, const std::string_view &sep)
 {
 	std::vector<std::string_view> parts;
 

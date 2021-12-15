@@ -64,7 +64,7 @@ std::string to_string(Key k, Modifier m)
 	return result;
 }
 
-Key key_from_string(const std::string &name)
+Key key_from_string(const std::string_view &name)
 {
 	if(name.empty())
 		return None;

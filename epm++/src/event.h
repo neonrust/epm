@@ -1,6 +1,7 @@
 #pragma once
 
 #include "keycodes.h"
+#include "size.h"
 
 #include <string>
 #include <tuple>
@@ -100,14 +101,12 @@ struct Resize
 {
 	std::size_t x { 0 };  // only applicable for sub-surfaces
 	std::size_t y { 0 };  // only applicable for sub-surfaces
-	std::size_t width;
-	std::size_t height;
+	Size size { 0, 0 };
 
 	struct {
 		std::size_t x { 0 };  // only applicable for sub-surfaces
 		std::size_t y { 0 };  // only applicable for sub-surfaces
-		std::size_t width { 0 };
-		std::size_t height { 0 };
+		Size size { 0, 0 };
 	} old {};
 };
 // TODO: others?

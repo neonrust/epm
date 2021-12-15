@@ -1,4 +1,4 @@
-#include "term.h"
+#include "app.h"
 
 #include <tuple>
 #include <fmt/core.h>
@@ -36,7 +36,7 @@ int main()
 	app.on_mouse_move_event.connect([&app](const event::MouseMove &mm) {
 		//fmt::print("[main]   mouse move: {},{}\n", mm.x, mm.y);
 
-		app.debug_print(10, 10, fmt::format("mouse: {}x{}  ", mm.x, mm.y), "3", "0", "");
+		app.screen().print(10, 10, fmt::format("mouse: {}x{}  ", mm.x, mm.y));
 	});
 	app.on_mouse_button_event.connect([](const event::MouseButton &mb) {
 		fmt::print(g_log, "[main]  mouse button {} {} @ {},{}\n",
@@ -54,7 +54,7 @@ int main()
 		return true;
 	});
 	app.on_resize_event.connect([&app](const event::Resize &rs) {
-		app.debug_print(rs.width - 10, rs.height - 1, fmt::format("size: {}x{}", rs.width, rs.height), "3", "0", "1");
+		app.screen().print(rs.size.width - 10, rs.size.height - 1, fmt::format("size: {}x{}", rs.size.width, rs.size.height));
 	});
 
 	return app.run();

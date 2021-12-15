@@ -77,7 +77,7 @@ enum Modifier
 
 std::string to_string(Key k, Modifier m);
 
-Key key_from_string(const std::string &s);
+Key key_from_string(const std::string_view &s);
 Modifier modifier_from_list(const std::vector<std::string> &v);
 
 } // NS: key
