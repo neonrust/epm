@@ -78,11 +78,10 @@ int App::run()
 
 		_screen.update();
 
-		const auto event = _input.read();
 
-		if(event.has_value())
+		for(const auto &event: _input.read())
 		{
-			const auto *mm = std::get_if<event::MouseMove>(&event.value());
+			const auto *mm = std::get_if<event::MouseMove>(&event);
 			if(mm != nullptr)
 			{
 				if(mm->x == prev_mx and mm->y == prev_my)
@@ -91,7 +90,7 @@ int App::run()
 				prev_my = mm->y;
 			}
 
-			dispatch_event(event.value());
+			dispatch_event(event);
 		}
 	}
 

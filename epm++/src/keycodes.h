@@ -39,7 +39,7 @@ enum Key
 	F10,
 	F11,
 	F12,
-	A,
+	A = 'A',
 	B,
 	C,
 	D,

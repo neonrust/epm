@@ -34,7 +34,7 @@ Input::Input(std::istream &s) :
 	setup_keys("keys.json");
 }
 
-std::optional<event::Event> Input::read()
+std::vector<event::Event> Input::read()
 {
 	if(_in.rdbuf()->in_avail() == 0)
 	{
@@ -48,7 +48,7 @@ std::optional<event::Event> Input::read()
 		sigemptyset(&sigs);
 		int rc = ::ppoll(&pollfds, 1, nullptr, &sigs);
 		if(rc == -1 and errno == EINTR)  // something more urgent came up
-			return std::nullopt;
+			return {};
 	}
 
 	std::string in;
@@ -86,7 +86,7 @@ std::optional<event::Event> Input::read()
 		if(eaten > 0)
 		{
 			revert(in.substr(mouse_prefix.size() + eaten));
-			return std::get<event::Event>(event);
+			return { std::get<event::Event>(event) };
 		}
 	}
 
@@ -97,10 +97,10 @@ std::optional<event::Event> Input::read()
 			// put the rest of the read chars
 			revert(in.substr(kseq.sequence.size()));
 
-			return event::Key{
+			return { event::Key{
 				.key = kseq.key,
 				.modifiers = kseq.mods,
-			};
+			} };
 		}
 	}
 
@@ -111,7 +111,25 @@ std::optional<event::Event> Input::read()
 	if(eaten > 0)
 	{
 		revert(in.substr(eaten));
-		return std::get<event::Event>(event);
+
+		const auto &iev { std::get<event::Input>(std::get<event::Event>(event)) };
+
+		std::vector<event::Event> evs { iev };
+
+		if(iev.codepoint >= 'A' and iev.codepoint <= 'Z')
+		{
+			evs.push_back(event::Key{
+				.key = key::Key(iev.codepoint - 'A' + key::A),
+			});
+		}
+		else if(iev.codepoint >= 'a' and iev.codepoint <= 'z')
+		{
+			evs.push_back(event::Key{
+				.key = key::Key(iev.codepoint - 'a' + key::A),
+			});
+		}
+
+		return evs;
 	}
 
 	fmt::print(g_log, "\x1b[33;1mparse failed: {}\x1b[m {}  ({})\n", safe(in), hex(in), in.size());
