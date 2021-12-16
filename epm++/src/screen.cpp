@@ -54,8 +54,8 @@ void Screen::print(std::size_t x, std::size_t y, const std::string_view s, const
 	//u8s.resize(s.size());
 	//::mbrtoc8(u8s.data(), s.c_str(), s.size(), nullptr);
 
-	auto num_updated { 0u };
-	auto total_width { 0ul };
+//	auto num_updated { 0u };
+//	auto total_width { 0ul };
 
 	for(const auto ch: s)
 	{
@@ -66,8 +66,8 @@ void Screen::print(std::size_t x, std::size_t y, const std::string_view s, const
 		const auto width = wch < 0x20? 0: static_cast<std::size_t>(::wcswidth(&wch, 1));
 
 		_back_buffer.set_cell(cx, y, ch, width, fg, bg, style);
-		++num_updated;
-		total_width += width;
+//		++num_updated;
+//		total_width += width;
 
 		cx += static_cast<std::size_t>(width);
 	}
@@ -246,6 +246,11 @@ Pos Screen::move_cursor(std::size_t x, std::size_t y)
 	}
 
 	return prev_pos;
+}
+
+void Screen::set_cell(std::size_t x, std::size_t y, wchar_t ch, std::size_t width, Color fg, Color bg, Style style)
+{
+	_back_buffer.set_cell(x, y, ch, width, fg, bg, style);
 }
 
 void Screen::flush_buffer()

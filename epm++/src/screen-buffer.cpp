@@ -33,10 +33,11 @@ void ScreenBuffer::clear(Color fg, Color bg)
 		for(auto &cell: *row)
 		{
 			cell.ch = '\0';
+			cell.width = 1;
 			if(fg != color::Unchanged)
-				cell.fg = color::Default;
+				cell.fg = fg;
 			if(bg != color::Unchanged)
-				cell.bg = color::Default;
+				cell.bg = bg;
 			cell.style = style::Default;
 		}
 	}

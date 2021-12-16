@@ -23,6 +23,9 @@ set(sources
 	src/screen-buffer.cpp
 	src/input.h
 	src/input.cpp
+	src/canvas.h
+	src/canvas.cpp
+	src/samplers.h
 	src/keycodes.h
 	src/keycodes.cpp
 )

@@ -13,13 +13,14 @@ struct Screen
 {
 	Screen(int fd);
 
-	inline void print(const std::string_view s, const Color fg, const Color bg, const Style style) { print(_cursor_x, _cursor_y, s, fg, bg, style); }
-	void print(std::size_t x, std::size_t y, const std::string_view s, Color fg=color::Default, Color bg=color::Default, Style style=style::Default);
-
 	inline void clear() { clear(color::Default, color::Default); }
 	void clear(Color fg=color::Unchanged, Color bg=color::Unchanged);
 
+	inline void print(const std::string_view s, const Color fg, const Color bg, const Style style) { print(_cursor_x, _cursor_y, s, fg, bg, style); }
+	void print(std::size_t x, std::size_t y, const std::string_view s, Color fg=color::Default, Color bg=color::Default, Style style=style::Default);
+
 	Pos move_cursor(std::size_t x, std::size_t y);
+	void set_cell(std::size_t x, std::size_t y, wchar_t ch, std::size_t width, Color fg=color::Default, Color bg=color::Default, Style style=style::Default);
 
 	void update();
 

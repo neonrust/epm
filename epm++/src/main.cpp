@@ -4,7 +4,6 @@
 #include <fmt/core.h>
 #include <variant>
 
-
 std::FILE *g_log { nullptr };
 
 // these are stolen from: https://en.cppreference.com/w/cpp/utility/variant/visit
@@ -26,6 +25,10 @@ int main()
 	App app(Fullscreen | MouseEvents | HideCursor);
 	if(not app)
 		return 1;
+
+	Canvas canvas(app);
+	const auto size = app.screen().size();
+	canvas.fill_rect({0, 0}, {size.width-1, size.height - 1}, color::Gradient(color::Cyan, color::Yellow, 45));
 
 	app.on_key_event.connect([&app](const event::Key &k) {
 		fmt::print(g_log, "[main]    key: {}\n", key::to_string(k.key, k.modifiers));
