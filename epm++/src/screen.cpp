@@ -172,14 +172,16 @@ void Screen::_out(const std::string_view text)
 	_output_buffer.append(text);
 }
 
-void Screen::move_cursor(std::size_t x, std::size_t y)
+Pos Screen::move_cursor(std::size_t x, std::size_t y)
 {
+	const Pos prev_pos { _cursor_x, _cursor_y };
 	if(x != _cursor_x or y != _cursor_y)
 	{
 		_out(fmt::format(esc::cup, x, y));
 		_cursor_x = x;
 		_cursor_y = y;
 	}
+	return prev_pos;
 }
 
 void Screen::flush_buffer()

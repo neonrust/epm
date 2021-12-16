@@ -19,7 +19,7 @@ struct Screen
 	inline void clear() { clear(color::Default, color::Default); }
 	void clear(Color fg=color::Unchanged, Color bg=color::Unchanged);
 
-	void move_cursor(std::size_t x, std::size_t y);
+	Pos move_cursor(std::size_t x, std::size_t y);
 
 	void update();
 
