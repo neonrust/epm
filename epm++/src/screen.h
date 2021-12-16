@@ -29,7 +29,7 @@ struct Screen
 
 
 private:
-	void draw_cell(std::size_t x, std::size_t y, const Cell &cell);
+	void draw_cell(const Cell &cell);
 	void _out(const std::string_view text);
 	void flush_buffer();
 

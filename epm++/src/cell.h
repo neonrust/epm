@@ -70,7 +70,7 @@ inline Style operator | (style::Bit a, style::Bit b)
 
 inline std::string escify(Color c)
 {
-	return fmt::format("8;5;{};{};{}"sv, color::red_part(c), color::green_part(c), color::blue_part(c));
+	return fmt::format("8;2;{};{};{}"sv, color::red_part(c), color::green_part(c), color::blue_part(c));
 }
 
 inline std::string escify(Style s)
@@ -97,10 +97,10 @@ inline std::string escify(Style s)
 
 struct Cell
 {
-	inline ~Cell()
-	{
-		fmt::print(g_log, "~Cell\n");
-	}
+//	inline ~Cell()
+//	{
+//		fmt::print(g_log, "~Cell\n");
+//	}
 
 	inline bool operator == (const Cell &that) const
 	{

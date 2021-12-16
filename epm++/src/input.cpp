@@ -375,6 +375,8 @@ static std::string safe(const std::string_view s)
 			res += "\\n";
 		else if(c == '\r')
 			res += "\\r";
+		else if(c >= 1 and c <= 26)
+			res += fmt::format("^{:c}", char(c + 'A' - 1));
 		else if(c < 0x20)
 			res += fmt::format("\\x{:02x}", (unsigned char)c);
 		else
