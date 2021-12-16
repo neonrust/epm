@@ -25,6 +25,7 @@ enum
 	Default =   0x01000000,
 	Unchanged = 0x02000000,
 
+	Black  = 0x000000,
 	Red    = 0xff0000,
 	Green  = 0x00ff00,
 	Blue   = 0x0000ff,
@@ -33,6 +34,7 @@ enum
 	Cyan   = 0x00ffff,
 	Purple = 0xcd00e0,
 	Pink   = 0xf797f8,
+	White  = 0xffffff,
 };
 
 static constexpr Color special_mask { 0xff000000 };
@@ -70,6 +72,8 @@ inline Style operator | (style::Bit a, style::Bit b)
 
 inline std::string escify(Color c)
 {
+	if(c == color::Default)
+		return "9";
 	return fmt::format("8;2;{};{};{}"sv, color::red_part(c), color::green_part(c), color::blue_part(c));
 }
 
@@ -91,6 +95,9 @@ inline std::string escify(Style s)
 
 	if(seq.empty())
 		return "0";
+
+	if(seq[seq.size() - 1] == ';')
+		seq.resize(seq.size() - 1);
 
 	return seq;
 }

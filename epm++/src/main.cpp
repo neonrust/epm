@@ -33,11 +33,21 @@ int main()
 //	color::Gradient gradient({ color::Cyan, color::Yellow }, 45);
 //	canvas.fill_rectangle({ 0, 0 }, { size.width-1, size.height - 1 }, &gradient);
 
-	app.on_key_event.connect([&app](const event::Key &k) {
+	int seq { 0 };
+	app.on_key_event.connect([&app,&seq](const event::Key &k) {
 		fmt::print(g_log, "[main]    key: {}\n", key::to_string(k.key, k.modifiers));
 
 		if(k.key == key::ESCAPE and k.modifiers == key::NoMod)
 			app.quit();
+
+		switch(seq++)
+		{
+		case 0: app.screen().print({ 4, 4 }, "TEST!", color::Blue, color::Unchanged, style::Default); break;
+		case 1: app.screen().print({ 4, 4 }, "TEST!", color::Blue, color::Unchanged, style::Bold); break;
+		case 2: app.screen().print({ 4, 4 }, "TEST!", color::Yellow, color::Unchanged, style::Bold); break;
+		case 3: app.screen().print({ 4, 4 }, "TEST!", color::Yellow, color::Red, style::Bold); break;
+		case 4: app.screen().print({ 4, 4 }, "TEST!", color::White, color::Red, style::Bold); break;
+		}
 	});
 	app.on_input_event.connect([](const event::Input &c) {
 		fmt::print(g_log, "[main]  input: '{}' 0x{:08x}\n", c.to_string(), std::uint32_t(c.codepoint));
@@ -46,7 +56,8 @@ int main()
 	app.on_mouse_move_event.connect([&app](const event::MouseMove &mm) {
 		fmt::print(g_log, "[main]  mouse: {},{}\n", mm.x, mm.y);
 
-		app.screen().print({ 10, 10 }, fmt::format("mouse: {},{}  ", mm.x, mm.y));
+		(void)app;
+		//app.screen().print({ 10, 10 }, fmt::format("mouse: {},{}  ", mm.x, mm.y));
 	});
 	app.on_mouse_button_event.connect([](const event::MouseButton &mb) {
 		fmt::print(g_log, "[main] button: {} {} @ {},{}\n",

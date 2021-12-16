@@ -139,7 +139,7 @@ void Screen::update()
 
 				// if colors and style are the same as before, keep them
 				if(back_cell.fg != curr_fg or back_cell.bg != curr_bg)
-					_out(fmt::format(esc::fg_bg, escify(back_cell.bg), escify(back_cell.fg)));
+					_out(fmt::format(esc::fg_bg, escify(back_cell.fg), escify(back_cell.bg)));
 				if(back_cell.style != curr_style)
 					_out(fmt::format(esc::style, escify(back_cell.style)));
 
