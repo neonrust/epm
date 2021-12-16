@@ -22,6 +22,8 @@ struct ScreenBuffer
 	const Cell &cell(std::size_t x, std::size_t y) const;
 	void set_cell(std::size_t x, std::size_t y, wchar_t ch, std::size_t width, Color fg=color::Default, Color bg=color::Default, Style style=style::Default);
 
+	ScreenBuffer &operator = (const ScreenBuffer &that);
+
 private:
 	using CellRow = std::vector<Cell>;
 	using CellRowRef = std::unique_ptr<CellRow>;

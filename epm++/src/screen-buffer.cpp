@@ -33,10 +33,11 @@ void ScreenBuffer::clear(Color fg, Color bg)
 		for(auto &cell: *row)
 		{
 			cell.ch = '\0';
+			cell.width = 1;
 			if(fg != color::Unchanged)
-				cell.fg = color::Default;
+				cell.fg = fg;
 			if(bg != color::Unchanged)
-				cell.bg = color::Default;
+				cell.bg = bg;
 			cell.style = style::Default;
 		}
 	}
@@ -68,6 +69,21 @@ void ScreenBuffer::set_cell(std::size_t x, std::size_t y, wchar_t ch, std::size_
 
 }
 
+ScreenBuffer &ScreenBuffer::operator = (const ScreenBuffer &src)
+{
+	// since the rows are pointers, we need to copy row by row
+
+	assert(src.size().operator == (size()));
+
+	auto iter = _rows.begin();
+	auto src_iter = src._rows.begin();
+
+	while(iter != _rows.end())
+		*(*iter++) = *(*src_iter++);
+
+	return *this;
+}
+
 void ScreenBuffer::set_size(Size new_size)
 {
 	const auto &[new_width, new_height] = new_size;
@@ -87,7 +103,7 @@ void ScreenBuffer::set_size(Size new_size)
 		for(auto idx = _height; idx < new_height; ++idx)
 		{
 			auto new_row = std::make_unique<CellRow>(new_width, Cell{});
-			fmt::print(g_log, "resize:   adding row {} ({})\n", idx, new_row->size());
+			//fmt::print(g_log, "resize:   adding row {} ({})\n", idx, new_row->size());
 			_rows[idx] = std::move(new_row);
 		}
 	}
@@ -98,7 +114,10 @@ void ScreenBuffer::set_size(Size new_size)
 		// if taller: resize only the "old" rows; new rows are sized upon creation, above. if not, all rows
 		const auto num_rows = new_height > _height? _height: new_height;
 		for(std::size_t row = 0; row < num_rows; ++row)
+		{
+			//fmt::print(g_log, "resize:   resizing row {}: {} -> {}\n", row, (*row_iter)->size(), new_width);
 			(*row_iter)->resize(new_width);
+		}
 	}
 
 	_width = new_width;
