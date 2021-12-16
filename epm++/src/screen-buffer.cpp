@@ -50,11 +50,12 @@ const Cell &ScreenBuffer::cell(std::size_t x, std::size_t y) const
 	return _rows[y]->operator[](x);
 }
 
-void ScreenBuffer::set_cell(std::size_t x, std::size_t y, wchar_t ch, std::size_t width, Color fg, Color bg, Style style)
+void ScreenBuffer::set_cell(Pos pos, wchar_t ch, std::size_t width, Color fg, Color bg, Style style)
 {
-	assert(x < _width and y < _height and width <= 2);
+	if(pos.x >= _width or pos.y >= _height)
+		return;
 
-	auto &cell = _rows[y]->operator[](x);
+	auto &cell = _rows[pos.y]->operator[](pos.x);
 
 
 	cell.ch = ch;

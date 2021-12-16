@@ -16,11 +16,11 @@ struct Screen
 	inline void clear() { clear(color::Default, color::Default); }
 	void clear(Color fg=color::Unchanged, Color bg=color::Unchanged);
 
-	inline void print(const std::string_view s, const Color fg, const Color bg, const Style style) { print(_cursor_x, _cursor_y, s, fg, bg, style); }
-	void print(std::size_t x, std::size_t y, const std::string_view s, Color fg=color::Default, Color bg=color::Default, Style style=style::Default);
+	inline void print(const std::string_view s, const Color fg, const Color bg, const Style style) { print(_cursor, s, fg, bg, style); }
+	void print(Pos pos, const std::string_view s, Color fg=color::Default, Color bg=color::Default, Style style=style::Default);
 
-	Pos move_cursor(std::size_t x, std::size_t y);
-	void set_cell(std::size_t x, std::size_t y, wchar_t ch, std::size_t width, Color fg=color::Default, Color bg=color::Default, Style style=style::Default);
+	Pos move_cursor(Pos pos);
+	void set_cell(Pos pos, wchar_t ch, std::size_t width, Color fg=color::Default, Color bg=color::Default, Style style=style::Default);
 
 	void update();
 
@@ -39,8 +39,7 @@ private:
 	ScreenBuffer _back_buffer;
 	ScreenBuffer _front_buffer;
 
-	std::size_t _cursor_x;
-	std::size_t _cursor_y;
+	Pos _cursor;
 
 	std::string _output_buffer;
 };

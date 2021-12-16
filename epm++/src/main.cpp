@@ -1,4 +1,6 @@
 #include "app.h"
+#include "canvas.h"
+#include "samplers.h"
 
 #include <tuple>
 #include <fmt/core.h>
@@ -26,9 +28,10 @@ int main()
 	if(not app)
 		return 1;
 
-	Canvas canvas(app);
-	const auto size = app.screen().size();
-	canvas.fill_rect({0, 0}, {size.width-1, size.height - 1}, color::Gradient(color::Cyan, color::Yellow, 45));
+//	Canvas canvas(app.screen());
+//	const auto size = app.screen().size();
+//	color::Gradient gradient({ color::Cyan, color::Yellow }, 45);
+//	canvas.fill_rectangle({ 0, 0 }, { size.width-1, size.height - 1 }, &gradient);
 
 	app.on_key_event.connect([&app](const event::Key &k) {
 		fmt::print(g_log, "[main]    key: {}\n", key::to_string(k.key, k.modifiers));
@@ -43,7 +46,7 @@ int main()
 	app.on_mouse_move_event.connect([&app](const event::MouseMove &mm) {
 		fmt::print(g_log, "[main]  mouse: {},{}\n", mm.x, mm.y);
 
-		app.screen().print(10, 10, fmt::format("mouse: {},{}  ", mm.x, mm.y));
+		app.screen().print({ 10, 10 }, fmt::format("mouse: {},{}  ", mm.x, mm.y));
 	});
 	app.on_mouse_button_event.connect([](const event::MouseButton &mb) {
 		fmt::print(g_log, "[main] button: {} {} @ {},{}\n",

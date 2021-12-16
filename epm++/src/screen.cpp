@@ -38,17 +38,17 @@ static std::string safe(const std::string_view s);
 Screen::Screen(int fd) :
 	_fd(fd)
 {
-	move_cursor(0, 0);
+	move_cursor({ 0, 0 });
 }
 
-void Screen::print(std::size_t x, std::size_t y, const std::string_view s, const Color fg, const Color bg, const Style style)
+void Screen::print(Pos pos, const std::string_view s, const Color fg, const Color bg, const Style style)
 {
 	auto size = _back_buffer.size();
 
-	if(y >= size.height)
+	if(pos.y >= size.height)
 		return;
 
-	auto cx = x;
+	auto cx = pos.x;
 
 	//std::u8string u8s;
 	//u8s.resize(s.size());
@@ -65,7 +65,7 @@ void Screen::print(std::size_t x, std::size_t y, const std::string_view s, const
 		wchar_t wch = ch;
 		const auto width = wch < 0x20? 0: static_cast<std::size_t>(::wcswidth(&wch, 1));
 
-		_back_buffer.set_cell(cx, y, ch, width, fg, bg, style);
+		_back_buffer.set_cell({ cx, pos.y }, ch, width, fg, bg, style);
 //		++num_updated;
 //		total_width += width;
 
@@ -79,7 +79,7 @@ void Screen::clear(Color fg, Color bg)
 {
 	_back_buffer.clear(fg, bg);
 
-	move_cursor(0, 0);
+	move_cursor({ 0, 0 });
 
 	// these are more an optimization...
 	// clearing only the back buffer will result in the correct screen content.
@@ -106,10 +106,8 @@ void Screen::update()
 
 	const auto size = _back_buffer.size();
 
-	auto prev_x { _cursor_x };
-	auto prev_y { _cursor_y };
-	auto last_drawn_x { 0ul };
-	auto last_drawn_y { 0ul };
+	auto prev_pos { _cursor };
+	Pos last_drawn { 0, 0 };
 
 	auto num_updated { 0u };
 
@@ -129,14 +127,14 @@ void Screen::update()
 
 			if(back_cell != front_cell)
 			{
-				const auto is_neighbor { cx == last_drawn_x + 1 and cy == last_drawn_y };
+				const auto is_neighbor { cx == last_drawn.x + 1 and cy == last_drawn.y };
 				if(not is_neighbor)
 				{
 					curr_fg = color::Default;
 					curr_bg = color::Default;
 					curr_style = style::Default;
 
-					move_cursor(cx, cy);
+					move_cursor({ cx, cy });
 				}
 
 				// if colors and style are the same as before, keep them
@@ -149,18 +147,18 @@ void Screen::update()
 				if(back_cell.ch <= 0x20 or (cx == size.width - 1 and back_cell.width > 1))  // <= 0x20  should actually be all "non-printable"
 				{
 					_output_buffer += ' ';
-					++_cursor_x;
+					++_cursor.x;
 				}
 				else
 				{
 					_out(fmt::format("{:c}"sv, char(back_cell.ch))); // TODO: one unicode codepoint
-					_cursor_x += back_cell.width;
+					_cursor.x += back_cell.width;
 				}
 
 				++num_updated;
 
-				last_drawn_x = cx;
-				last_drawn_y = cy;
+				last_drawn.x = cx;
+				last_drawn.y = cy;
 
 				curr_fg = back_cell.fg;
 				curr_bg = back_cell.bg;
@@ -172,7 +170,7 @@ void Screen::update()
 	}
 
 	if(num_updated)
-		move_cursor(prev_x, prev_y);
+		move_cursor(prev_pos);
 
 	// should always flush, even if we didn't output anything in this function
 	flush_buffer();
@@ -218,39 +216,38 @@ void Screen::_out(const std::string_view text)
 	_output_buffer.append(text);
 }
 
-Pos Screen::move_cursor(std::size_t x, std::size_t y)
+Pos Screen::move_cursor(Pos pos)
 {
-	const Pos prev_pos { _cursor_x, _cursor_y };
+	const Pos prev_pos { _cursor };
 
-	if(x != _cursor_x or y != _cursor_y)
+	if(pos.x != _cursor.x or pos.y != _cursor.y)
 	{
-		if(x != _cursor_x and y != _cursor_y)
-			_out(fmt::format(esc::cup, x, y));
-		else if(y == _cursor_y)
+		if(pos.x != _cursor.x and pos.y != _cursor.y)
+			_out(fmt::format(esc::cup, pos.x, pos.y));
+		else if(pos.y == _cursor.y)
 		{
-			if(x > _cursor_x)
-				_out(fmt::format(esc::cuf, x - _cursor_x));
-			else if(x < _cursor_x)
-				_out(fmt::format(esc::cub, _cursor_x - x));
+			if(pos.x > _cursor.x)
+				_out(fmt::format(esc::cuf, pos.x - _cursor.x));
+			else
+				_out(fmt::format(esc::cub, _cursor.x - pos.x));
 		}
 		else
 		{
-			if(y > _cursor_y)
-				_out(fmt::format(esc::cuu, y - _cursor_y));
-			else if(y < _cursor_y)
-				_out(fmt::format(esc::cud, _cursor_y - y));
+			if(pos.y > _cursor.y)
+				_out(fmt::format(esc::cuu, pos.y - _cursor.y));
+			else
+				_out(fmt::format(esc::cud, _cursor.y - pos.y));
 		}
 //		fmt::print(g_log, "cursor: {},{}  ->  {},{}\n", _cursor_x, _cursor_y, x, y);
-		_cursor_x = x;
-		_cursor_y = y;
+		_cursor = pos;
 	}
 
 	return prev_pos;
 }
 
-void Screen::set_cell(std::size_t x, std::size_t y, wchar_t ch, std::size_t width, Color fg, Color bg, Style style)
+void Screen::set_cell(Pos pos, wchar_t ch, std::size_t width, Color fg, Color bg, Style style)
 {
-	_back_buffer.set_cell(x, y, ch, width, fg, bg, style);
+	_back_buffer.set_cell(pos, ch, width, fg, bg, style);
 }
 
 void Screen::flush_buffer()
