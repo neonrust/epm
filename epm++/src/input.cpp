@@ -120,6 +120,7 @@ std::vector<event::Event> Input::read()
 		{
 			evs.push_back(event::Key{
 				.key = key::Key(iev.codepoint - 'A' + key::A),
+				.modifiers = key::SHIFT,
 			});
 		}
 		else if(iev.codepoint >= 'a' and iev.codepoint <= 'z')

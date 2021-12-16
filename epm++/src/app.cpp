@@ -86,6 +86,7 @@ int App::run()
 			{
 				if(mm->x == prev_mx and mm->y == prev_my)
 					continue;
+
 				prev_mx = mm->x;
 				prev_my = mm->y;
 			}
