@@ -16,7 +16,7 @@ struct Screen
 	inline void clear() { clear(color::Default, color::Default); }
 	void clear(Color fg=color::Unchanged, Color bg=color::Unchanged);
 
-	inline void print(const std::string_view s, const Color fg, const Color bg, const Style style) { print(_cursor, s, fg, bg, style); }
+	inline void print(const std::string_view s, const Color fg, const Color bg, const Style style) { print(_cursor.position, s, fg, bg, style); }
 	void print(Pos pos, const std::string_view s, Color fg=color::Default, Color bg=color::Default, Style style=style::Default);
 
 	Pos move_cursor(Pos pos);
@@ -39,7 +39,15 @@ private:
 	ScreenBuffer _back_buffer;
 	ScreenBuffer _front_buffer;
 
-	Pos _cursor;
+	struct Cursor
+	{
+		Pos position { 0, 0 };
+		Color fg { color::Default };
+		Color bg { color::Default };
+		Style style { style::Default };
+	} _cursor;
+
+	//Pos _cursor { 0, 0 };
 
 	std::string _output_buffer;
 };

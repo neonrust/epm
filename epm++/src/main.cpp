@@ -42,11 +42,11 @@ int main()
 
 		switch(seq++)
 		{
-		case 0: app.screen().print({ 4, 4 }, "TEST!", color::Blue, color::Unchanged, style::Default); break;
-		case 1: app.screen().print({ 4, 4 }, "TEST!", color::Blue, color::Unchanged, style::Bold); break;
-		case 2: app.screen().print({ 4, 4 }, "TEST!", color::Yellow, color::Unchanged, style::Bold); break;
-		case 3: app.screen().print({ 4, 4 }, "TEST!", color::Yellow, color::Red, style::Bold); break;
-		case 4: app.screen().print({ 4, 4 }, "TEST!", color::White, color::Red, style::Bold); break;
+		case 0: app.screen().print({ 4, 4 }, "blue              ", color::Blue, color::Unchanged, style::Default); break;
+		case 1: app.screen().print({ 4, 4 }, "purple          OB", color::Purple, color::Unchanged, style::Overstrike); break;
+		case 2: app.screen().print({ 4, 4 }, "yellow on blue   U", color::Yellow, color::Blue, style::Underline); break;
+		case 3: app.screen().print({ 4, 4 }, "green on (same) UI", color::Green, color::Unchanged, style::Underline | style::Italic); break;
+		case 4: app.screen().print({ 4, 4 }, "white on red     B", color::White, color::Red, style::Bold); break;
 		}
 	});
 	app.on_input_event.connect([](const event::Input &c) {

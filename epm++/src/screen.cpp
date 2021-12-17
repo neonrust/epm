@@ -26,7 +26,7 @@ namespace esc
 [[maybe_unused]] static constexpr auto el  { "\x1b[{}K"sv }; // erase line:  0 = before cursor, 1 = after cursor, 2 = entire line
 
 [[maybe_unused]] static constexpr auto fg_bg { "\x1b[3{:s};4{:s}m"sv };
-[[maybe_unused]] static constexpr auto style { "\x1b[{}m"sv };
+[[maybe_unused]] static constexpr auto style { "\x1b[22;23;24;25;26;27;29;{}m"sv };
 [[maybe_unused]] static constexpr auto clear_screen { "\x1b[2J"sv }; // ed[2]
 
 
@@ -106,8 +106,12 @@ void Screen::update()
 
 	const auto size = _back_buffer.size();
 
-	auto prev_pos { _cursor };
-	Pos last_drawn { 0, 0 };
+	const auto start_pos { _cursor.position };
+	_cursor.fg = color::Default;
+	_cursor.bg = color::Default;
+	_cursor.style = style::Default;
+
+//	Pos last_drawn { 0, 0 };
 
 	auto num_updated { 0u };
 
@@ -116,9 +120,9 @@ void Screen::update()
 
 	for(std::size_t cy = 0; cy < size.height; ++cy)
 	{
-		Color curr_fg { color::Default };
-		Color curr_bg { color::Default };
-		Style curr_style { style::Default };
+//		Color curr_fg { color::Default };
+//		Color curr_bg { color::Default };
+//		Style curr_style { style::Default };
 
 		for(std::size_t cx = 0; cx < size.width;)
 		{
@@ -127,42 +131,47 @@ void Screen::update()
 
 			if(back_cell != front_cell)
 			{
-				const auto is_neighbor { cx == last_drawn.x + 1 and cy == last_drawn.y };
-				if(not is_neighbor)
-				{
-					curr_fg = color::Default;
-					curr_bg = color::Default;
-					curr_style = style::Default;
+//				const auto is_neighbor { cx == last_drawn.x + 1 and cy == last_drawn.y };
+//				if(not is_neighbor)
+//				{
+//					curr_fg = color::Default;
+//					curr_bg = color::Default;
+//					curr_style = style::Default;
 
 					move_cursor({ cx, cy });
-				}
+//				}
 
 				// if colors and style are the same as before, keep them
-				if(back_cell.fg != curr_fg or back_cell.bg != curr_bg)
+				if(back_cell.fg != _cursor.fg or back_cell.bg != _cursor.fg)
+				{
 					_out(fmt::format(esc::fg_bg, escify(back_cell.fg), escify(back_cell.bg)));
-				if(back_cell.style != curr_style)
+					_cursor.bg= back_cell.bg;
+					_cursor.fg = back_cell.fg;
+				}
+				if(back_cell.style != _cursor.style)
+				{
+					// TODO: track & manage each style bit separately
 					_out(fmt::format(esc::style, escify(back_cell.style)));
+					_cursor.style = back_cell.style;
+				}
 
 				// if we're at the right edge of the screen and current cell is double width, it's not possible to draw it
-				if(back_cell.ch <= 0x20 or (cx == size.width - 1 and back_cell.width > 1))  // <= 0x20  should actually be all "non-printable"
+				if(back_cell.ch <= 0x20 or (cx == size.width - 1 and back_cell.width > 1))  // <= 0x20 should actually be "non-printable"
 				{
 					_output_buffer += ' ';
-					++_cursor.x;
+					++_cursor.position.x;
 				}
 				else
 				{
 					_out(fmt::format("{:c}"sv, char(back_cell.ch))); // TODO: one unicode codepoint
-					_cursor.x += back_cell.width;
+					_cursor.position.x += back_cell.width;
 				}
 
 				++num_updated;
 
-				last_drawn.x = cx;
-				last_drawn.y = cy;
+//				last_drawn.x = cx;
+//				last_drawn.y = cy;
 
-				curr_fg = back_cell.fg;
-				curr_bg = back_cell.bg;
-				curr_style = back_cell.style;
 			}
 
 			cx += back_cell.width? back_cell.width: 1;
@@ -170,7 +179,7 @@ void Screen::update()
 	}
 
 	if(num_updated)
-		move_cursor(prev_pos);
+		move_cursor(start_pos);
 
 	// should always flush, even if we didn't output anything in this function
 	flush_buffer();
@@ -218,28 +227,28 @@ void Screen::_out(const std::string_view text)
 
 Pos Screen::move_cursor(Pos pos)
 {
-	const Pos prev_pos { _cursor };
+	const Pos prev_pos { _cursor.position };
 
-	if(pos.x != _cursor.x or pos.y != _cursor.y)
+	if(pos.x != _cursor.position.x or pos.y != _cursor.position.y)
 	{
-		if(pos.x != _cursor.x and pos.y != _cursor.y)
+		if(pos.x != _cursor.position.x and pos.y != _cursor.position.y)
 			_out(fmt::format(esc::cup, pos.x, pos.y));
-		else if(pos.y == _cursor.y)
+		else if(pos.y == _cursor.position.y)
 		{
-			if(pos.x > _cursor.x)
-				_out(fmt::format(esc::cuf, pos.x - _cursor.x));
+			if(pos.x > _cursor.position.x)
+				_out(fmt::format(esc::cuf, pos.x - _cursor.position.x));
 			else
-				_out(fmt::format(esc::cub, _cursor.x - pos.x));
+				_out(fmt::format(esc::cub, _cursor.position.x - pos.x));
 		}
 		else
 		{
-			if(pos.y > _cursor.y)
-				_out(fmt::format(esc::cuu, pos.y - _cursor.y));
+			if(pos.y > _cursor.position.y)
+				_out(fmt::format(esc::cuu, pos.y - _cursor.position.y));
 			else
-				_out(fmt::format(esc::cud, _cursor.y - pos.y));
+				_out(fmt::format(esc::cud, _cursor.position.y - pos.y));
 		}
 //		fmt::print(g_log, "cursor: {},{}  ->  {},{}\n", _cursor_x, _cursor_y, x, y);
-		_cursor = pos;
+		_cursor.position = pos;
 	}
 
 	return prev_pos;

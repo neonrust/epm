@@ -18,23 +18,23 @@ extern std::FILE *g_log;
 
 namespace esc
 {
-const auto screen_alternate { "\x1b[?1049h"sv };
-const auto screen_normal { "\x1b[?1049l"sv };
+[[maybe_unused]] const auto screen_alternate { "\x1b[?1049h"sv };
+[[maybe_unused]] const auto screen_normal { "\x1b[?1049l"sv };
 
-const auto cursor_hide { "\x1b[?25l"sv };
-const auto cursor_show { "\x1b[?25h"sv };
+[[maybe_unused]] const auto cursor_hide { "\x1b[?25l"sv };
+[[maybe_unused]] const auto cursor_show { "\x1b[?25h"sv };
 
 // reporting of mouse buttons (including position)
 // https://invisible-island.net/xterm/ctlseqs/ctlseqs.pdf
-const auto mouse_buttons_on  { "\x1b[?1002h\x1b[?1015h\x1b[?1006h"sv };
-const auto mouse_buttons_off { "\x1b[?1002l\x1b[?1015l\x1b[?1006l"sv };
+[[maybe_unused]] const auto mouse_buttons_on  { "\x1b[?1000h\x1b[?1002h\x1b[?1015h\x1b[?1006h"sv };
+[[maybe_unused]] const auto mouse_buttons_off { "\x1b[?1000l\x1b[?1002l\x1b[?1015l\x1b[?1006l"sv };
 // reporting of mouse position
-const auto mouse_move_on  { "\x1b[?1003h"sv };
-const auto mouse_move_off { "\x1b[?1003l"sv };
+[[maybe_unused]] const auto mouse_move_on  { "\x1b[?1003h"sv };
+[[maybe_unused]] const auto mouse_move_off { "\x1b[?1003l"sv };
 
 // terminal synchronized output markers
-const auto synch_start { "\x1b[?2026h"sv };
-const auto synch_end   { "\x1b[?2026l"sv };
+[[maybe_unused]] const auto synch_start { "\x1b[?2026h"sv };
+[[maybe_unused]] const auto synch_end   { "\x1b[?2026l"sv };
 
 } // NS: esc
 
