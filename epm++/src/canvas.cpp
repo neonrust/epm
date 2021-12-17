@@ -30,7 +30,7 @@ void Canvas::fill_rectangle(Pos top_left, Size size, const color::Sampler *s)
 			const float u = static_cast<float>(x - top_left.x) / float(size.width);
 			const float v = static_cast<float>(y - top_left.y) / float(size.height);
 
-			_scr.set_cell({ x, y }, ' ', 1, color::Unchanged, s->sample(u, v));
+			_scr.set_cell({ x, y }, '\0', 1, color::Unchanged, s->sample(u, v));
 		}
 	}
 }

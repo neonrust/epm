@@ -58,7 +58,9 @@ void ScreenBuffer::set_cell(Pos pos, wchar_t ch, std::size_t width, Color fg, Co
 	auto &cell = _rows[pos.y]->operator[](pos.x);
 
 
-	cell.ch = ch;
+	if(ch != '\0')
+		cell.ch = ch;
+
 	cell.width = static_cast<std::uint_fast8_t>(width);
 
 	if(fg != color::Unchanged)
