@@ -12,13 +12,13 @@ namespace color
 
 struct Sampler
 {
-	virtual Color sample(Pos pos) const = 0;
+	virtual Color sample(float u, float v) const = 0;
 };
 
 struct Gradient : public Sampler
 {
 	Gradient(std::initializer_list<Color> colors, float rotation=0);
-	Color sample(Pos pos) const override;
+	Color sample(float u, float v) const override;
 };
 
 } // NS: color
