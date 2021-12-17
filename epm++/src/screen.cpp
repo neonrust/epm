@@ -25,8 +25,10 @@ namespace esc
 [[maybe_unused]] static constexpr auto ed  { "\x1b[{}J"sv }; // erase lines: 0 = before cursor, 1 = after cursor, 2 = entire screen
 [[maybe_unused]] static constexpr auto el  { "\x1b[{}K"sv }; // erase line:  0 = before cursor, 1 = after cursor, 2 = entire line
 
+[[maybe_unused]] static constexpr auto fg { "\x1b[3{:s}m"sv };
+[[maybe_unused]] static constexpr auto bg { "\x1b[4{:s}m"sv };
 [[maybe_unused]] static constexpr auto fg_bg { "\x1b[3{:s};4{:s}m"sv };
-[[maybe_unused]] static constexpr auto style { "\x1b[22;23;24;25;26;27;29;{}m"sv };
+[[maybe_unused]] static constexpr auto style { "\x1b[{}m"sv };
 [[maybe_unused]] static constexpr auto clear_screen { "\x1b[2J"sv }; // ed[2]
 
 
@@ -107,9 +109,9 @@ void Screen::update()
 	const auto size = _back_buffer.size();
 
 	const auto start_pos { _cursor.position };
-	_cursor.fg = color::Default;
-	_cursor.bg = color::Default;
-	_cursor.style = style::Default;
+	//_cursor.fg = color::Default;
+	//_cursor.bg = color::Default;
+	//_cursor.style = style::Default;
 
 //	Pos last_drawn { 0, 0 };
 
@@ -142,10 +144,14 @@ void Screen::update()
 //				}
 
 				// if colors and style are the same as before, keep them
-				if(back_cell.fg != _cursor.fg or back_cell.bg != _cursor.bg)
+				if(back_cell.fg != _cursor.fg)
 				{
-					_out(fmt::format(esc::fg_bg, escify(back_cell.fg), escify(back_cell.bg)));
+					_out(fmt::format(esc::fg, escify(back_cell.fg)));
 					_cursor.fg = back_cell.fg;
+				}
+				if(back_cell.bg != _cursor.bg)
+				{
+					_out(fmt::format(esc::bg, escify(back_cell.bg)));
 					_cursor.bg = back_cell.bg;
 				}
 				if(back_cell.style != _cursor.style)
@@ -250,6 +256,8 @@ void Screen::_out_style_change(Style current, Style target)
 	// remove final trailing semicolon
 	if(not seq.empty() and seq[seq.size() - 1] == ';')
 		seq.resize(seq.size() - 1);
+
+	fmt::print(g_log, "out_style_change: {:02x} -> {:02x}  >> '{}'\n", current, target, seq);
 
 	_output_buffer += fmt::format(esc::style, seq);
 }

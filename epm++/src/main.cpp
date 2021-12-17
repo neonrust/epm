@@ -24,7 +24,7 @@ int main()
 
 	using namespace term;
 
-	App app(Fullscreen | MouseEvents | HideCursor);
+	App app(Fullscreen /*| MouseEvents*/ | HideCursor);
 	if(not app)
 		return 1;
 
@@ -33,17 +33,21 @@ int main()
 //	color::Gradient gradient({ color::Cyan, color::Yellow }, 45);
 //	canvas.fill_rectangle({ 0, 0 }, { size.width-1, size.height - 1 }, &gradient);
 
-	int seq { 0 };
+	int seq { -1 };
 	app.on_key_event.connect([&app,&seq](const event::Key &k) {
 		fmt::print(g_log, "[main]    key: {}\n", key::to_string(k.key, k.modifiers));
 
 		if(k.key == key::ESCAPE and k.modifiers == key::NoMod)
 			app.quit();
 
-		switch(seq++)
+		if(k.key == key::RIGHT and seq < 4)
+			seq++;
+		else if(k.key == key::LEFT and seq > 0)
+			seq--;
+		switch(seq)
 		{
-		case 0: app.screen().print({ 4, 4 }, "blue              ", color::Blue, color::Unchanged, style::Default); break;
-		case 1: app.screen().print({ 4, 4 }, "purple          OB", color::Purple, color::Unchanged, style::Overstrike); break;
+		case 0: app.screen().print({ 4, 4 }, "blue              ", color::Blue, color::Default, style::Default); break;
+		case 1: app.screen().print({ 4, 4 }, "purple          OB", color::Purple, color::Default, style::Overstrike); break;
 		case 2: app.screen().print({ 4, 4 }, "yellow on blue   U", color::Yellow, color::Blue, style::Underline); break;
 		case 3: app.screen().print({ 4, 4 }, "green on (same) UI", color::Green, color::Unchanged, style::Underline | style::Italic); break;
 		case 4: app.screen().print({ 4, 4 }, "white on red     B", color::White, color::Red, style::Bold); break;
