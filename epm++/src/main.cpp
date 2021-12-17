@@ -40,9 +40,9 @@ int main()
 		if(k.key == key::ESCAPE and k.modifiers == key::NoMod)
 			app.quit();
 
-		if(k.key == key::RIGHT and seq < 4)
+		if(k.key == key::RIGHT and k.modifiers == key::NoMod and seq < 4)
 			seq++;
-		else if(k.key == key::LEFT and seq > 0)
+		else if(k.key == key::LEFT and k.modifiers == key::NoMod and seq > 0)
 			seq--;
 		switch(seq)
 		{
