@@ -19,7 +19,7 @@ struct Screen
 	inline void print(const std::string_view s, const Color fg, const Color bg, const Style style) { print(_cursor.position, s, fg, bg, style); }
 	void print(Pos pos, const std::string_view s, Color fg=color::Default, Color bg=color::Default, Style style=style::Default);
 
-	Pos move_cursor(Pos pos);
+	Pos cursor_move(Pos pos);
 	void set_cell(Pos pos, wchar_t ch, std::size_t width, Color fg=color::Default, Color bg=color::Default, Style style=style::Default);
 
 	void update();
@@ -32,7 +32,8 @@ struct Screen
 private:
 	void draw_cell(const Cell &cell);
 	void _out(const std::string_view text);
-	void _out_style_change(Style current, Style target);
+	void cursor_style(Style style);
+	void cursor_color(Color fg, Color bg);
 	void flush_buffer();
 
 private:
