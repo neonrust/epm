@@ -1,6 +1,7 @@
 #include "screen.h"
 
 #include <string_view>
+#include <algorithm>
 
 #include <sys/ioctl.h>
 
@@ -95,7 +96,7 @@ void Screen::clear(Color fg, Color bg)
 
 void Screen::set_size(Size size)
 {
-	_output_buffer.reserve(size.width*size.height*4);  // an over-estimate in an attempt to avoid re-allocation
+	_output_buffer.reserve(std::max(100ul, size.width)*std::max(100ul, size.height)*4);  // an over-estimate in an attempt to avoid re-allocation
 
 	_back_buffer.set_size(size);
 	_front_buffer.set_size(size);
