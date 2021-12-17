@@ -32,6 +32,7 @@ struct Screen
 private:
 	void draw_cell(const Cell &cell);
 	void _out(const std::string_view text);
+	void _out_style_change(Style current, Style target);
 	void flush_buffer();
 
 private:

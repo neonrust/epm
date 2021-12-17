@@ -142,16 +142,16 @@ void Screen::update()
 //				}
 
 				// if colors and style are the same as before, keep them
-				if(back_cell.fg != _cursor.fg or back_cell.bg != _cursor.fg)
+				if(back_cell.fg != _cursor.fg or back_cell.bg != _cursor.bg)
 				{
 					_out(fmt::format(esc::fg_bg, escify(back_cell.fg), escify(back_cell.bg)));
-					_cursor.bg= back_cell.bg;
 					_cursor.fg = back_cell.fg;
+					_cursor.bg = back_cell.bg;
 				}
 				if(back_cell.style != _cursor.style)
 				{
-					// TODO: track & manage each style bit separately
-					_out(fmt::format(esc::style, escify(back_cell.style)));
+					//_out(fmt::format(esc::style, escify(back_cell.style)));
+					_out_style_change(_cursor.style, back_cell.style);
 					_cursor.style = back_cell.style;
 				}
 
@@ -209,6 +209,50 @@ void Screen::update()
 //		_cursor_x += cell.width;  // store the width or call wcswidth() again ?
 //	}
 //}
+
+void Screen::_out_style_change(Style current, Style target)
+{
+	auto curr = [&current](style::Bit sb) -> bool { return (current & sb) > 0; };
+	auto to =   [&target] (style::Bit sb) -> bool { return (target  & sb) > 0; };
+
+	// TODO: would like to avoid heap allocation here...
+	std::string seq;
+	seq.reserve(13);
+
+	if(to(style::Bold) and not curr(style::Bold))
+		seq += '1';     // set bold
+	else if(to(style::Dim) and not curr(style::Dim))
+		seq += '2';     // set dim
+	else if(not to(style::Bold) and not to(style::Dim) and (curr(style::Bold) or curr(style::Dim)))
+		seq += "22"sv;  // clear intensity bit
+	if(not seq.empty() and seq[seq.size() - 1] != ';')
+		seq += ';';
+
+	if(to(style::Italic) and not curr(style::Italic))
+		seq += '3';     // set italic
+	if(not to(style::Italic) and curr(style::Italic))
+		seq += "23"sv;  // clear italic
+	if(not seq.empty() and seq[seq.size() - 1] != ';')
+		seq += ';';
+
+	if(to(style::Underline) and not curr(style::Underline))
+		seq += '4';     // set underline
+	if(not to(style::Underline) and curr(style::Underline))
+		seq += "24"sv;  // clear underline
+	if(not seq.empty() and seq[seq.size() - 1] != ';')
+		seq += ';';
+
+	if(to(style::Overstrike) and not curr(style::Overstrike))
+		seq += '9';     // set overstrike
+	if(not to(style::Overstrike) and curr(style::Overstrike))
+		seq += "29"sv;  // clear overstrike
+
+	// remove final trailing semicolon
+	if(not seq.empty() and seq[seq.size() - 1] == ';')
+		seq.resize(seq.size() - 1);
+
+	_output_buffer += fmt::format(esc::style, seq);
+}
 
 Size Screen::get_terminal_size()
 {
