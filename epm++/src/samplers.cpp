@@ -14,9 +14,11 @@ namespace term
 namespace color
 {
 
+[[maybe_unused]] static constexpr auto deg2rad = std::numbers::pi_v<float>/180.f;
+
 Gradient::Gradient(std::initializer_list<Color> colors, float rotation) :
 	 _colors(colors),
-	 _rotation(rotation)
+	 _rotation(std::fmod(std::fmod(rotation, 360.f) + 360.f, 360.f))  // ensure in range [0, 360]
 {
 	assert(_colors.size() > 0);
 
@@ -30,18 +32,45 @@ Color Gradient::sample(float u, float v) const
 {
 	assert(u >= 0.f and u <= 1.f and v >= 0.f and v <= 1.f);
 
-	// TODO: rotate the vector 'uv' by -_rotation degrees
-	//   and sample the colors using the rotated 'u'
+	// rotate the vector 'uv' by -_rotation degrees
 
 	if(_colors.size() == 1)
 		return _colors.front();
 
-	const auto radians = _rotation*std::numbers::pi_v<float>/180.f;
+	auto degrees = _rotation;
 
-//	result.x = v.x*cosf(angle) - v.y*sinf(angle);
-//	result.y = v.x*sinf(angle) + v.y*cosf(angle);
+	if(degrees >= 270)
+	{
+		degrees = 360 - degrees;
+		v = 1.f - v;
+	}
+	else if(degrees >= 180)
+	{
+		degrees = degrees - 180;
+		u = 1.f - u;
+		v = 1.f - v;
+	}
+	else if(degrees >= 90)
+	{
+		degrees = 180 - degrees;
+		u = 1.f - u;
+	}
 
-	const auto alpha = std::min(1.f, std::max(0.f, u*std::cos(-radians) - v*std::sin(-radians)));
+	auto radians = degrees*deg2rad;
+
+	auto rot_u = u*std::cos(-radians) - v*std::sin(-radians);
+	auto rot_v = u*std::sin(-radians) + v*std::cos(-radians);
+
+	fmt::print(g_log, "rot_uv: {:.2f},{:.2f}\n", rot_u, rot_v);
+
+	auto alpha = std::min(1.f, std::max(0.f, rot_u));
+
+	auto uv_len = std::sqrt(rot_u*rot_u + rot_v*rot_v);
+
+	rot_u *= 1.f / uv_len;
+	rot_v *= 1.f / uv_len;
+
+	//auto alpha = rot_u
 
 	assert(alpha >= 0 and alpha <= 1);
 

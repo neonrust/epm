@@ -34,7 +34,7 @@ struct Gradient : public Sampler
 
 private:
 	std::vector<Color> _colors {};
-	float _rotation { 0 };
+	const float _rotation { 0 };
 };
 
 } // NS: color
