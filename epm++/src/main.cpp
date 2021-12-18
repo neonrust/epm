@@ -24,7 +24,7 @@ int main()
 
 	using namespace term;
 
-	App app(Fullscreen /*| MouseEvents*/ | HideCursor);
+	App app(Fullscreen | HideCursor | MouseEvents);
 	if(not app)
 		return 1;
 
@@ -73,19 +73,19 @@ int main()
 		fmt::print(g_log, "[main]  input: '{}' 0x{:08x}\n", c.to_string(), std::uint32_t(c.codepoint));
 		return true;
 	});
-	app.on_mouse_move_event.connect([](const event::MouseMove &mm) {
+	app.on_mouse_move_event.connect([&canvas, &sampler](const event::MouseMove &mm) {
 		fmt::print(g_log, "[main]  mouse: {},{}\n", mm.x, mm.y);
 
 		//app.screen().print({ 10, 10 }, fmt::format("mouse: {},{}  ", mm.x, mm.y));
-//		canvas.clear();
-//		canvas.fill({ { 0, 0 }, { mm.x, mm.y } }, &sampler);
+		canvas.clear();
+		canvas.fill({ { 0, 0 }, { mm.x, mm.y } }, &sampler);
 	});
 	app.on_mouse_button_event.connect([](const event::MouseButton &mb) {
 		fmt::print(g_log, "[main] button: {} {} @ {},{}\n",
-				   mb.button,
-				   mb.pressed? "pressed": "released",
-				   mb.x,
-				   mb.y
+				mb.button,
+				mb.pressed? "pressed": "released",
+				mb.x,
+				mb.y
 		);
 	});
 	app.on_mouse_wheel_event.connect([](const event::MouseWheel &mw) {

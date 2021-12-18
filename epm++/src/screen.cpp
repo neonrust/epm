@@ -188,7 +188,7 @@ Pos Screen::cursor_move(Pos pos)
 
 	if(pos.x != _cursor.position.x or pos.y != _cursor.position.y)
 	{
-		fmt::print(g_log, "cursor: {},{}  ->  {},{}\n", _cursor.position.x, _cursor.position.y, pos.x, pos.y);
+//		fmt::print(g_log, "cursor: {},{}  ->  {},{}\n", _cursor.position.x, _cursor.position.y, pos.x, pos.y);
 		_cursor.position = pos;
 
 		pos.x++; // 1-based
