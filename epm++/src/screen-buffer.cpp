@@ -57,7 +57,6 @@ void ScreenBuffer::set_cell(Pos pos, wchar_t ch, std::size_t width, Color fg, Co
 
 	auto &cell = _rows[pos.y]->operator[](pos.x);
 
-
 	if(ch != '\0')
 		cell.ch = ch;
 
@@ -65,11 +64,12 @@ void ScreenBuffer::set_cell(Pos pos, wchar_t ch, std::size_t width, Color fg, Co
 
 	if(fg != color::Unchanged)
 		cell.fg = fg;
+
 	if(bg != color::Unchanged)
 		cell.bg = bg;
+
 	if(style != style::Unchanged)
 		cell.style = style;
-
 }
 
 ScreenBuffer &ScreenBuffer::operator = (const ScreenBuffer &src)

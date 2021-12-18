@@ -41,7 +41,7 @@ static std::string safe(const std::string_view s);
 Screen::Screen(int fd) :
 	_fd(fd)
 {
-	cursor_move({ 0, 0 });
+	_output_buffer.append(fmt::format(esc::cup, 1, 1)); // go to origin (b/c default _cursor.pos = 0,0)
 }
 
 void Screen::print(Pos pos, const std::string_view s, const Color fg, const Color bg, const Style style)
@@ -49,7 +49,10 @@ void Screen::print(Pos pos, const std::string_view s, const Color fg, const Colo
 	auto size = _back_buffer.size();
 
 	if(pos.y >= size.height)
+	{
+		fmt::print(g_log, "print: off-screen: y  ({})\n", pos.y);
 		return;
+	}
 
 	auto cx = pos.x;
 
@@ -57,28 +60,32 @@ void Screen::print(Pos pos, const std::string_view s, const Color fg, const Colo
 	//u8s.resize(s.size());
 	//::mbrtoc8(u8s.data(), s.c_str(), s.size(), nullptr);
 
-//	auto num_updated { 0u };
-//	auto total_width { 0ul };
+	auto num_updated { 0u };
+	auto total_width { 0ul };
 
 	for(const auto ch: s)
 	{
 		if(cx >= size.width)
+		{
+			fmt::print(g_log, "print: off-screen: x  ({})\n", cx);
 			break;
+		}
 
 		wchar_t wch = ch;
 		const auto width = wch < 0x20? 0: static_cast<std::size_t>(::wcswidth(&wch, 1));
 
 		_back_buffer.set_cell({ cx, pos.y }, ch, width, fg, bg, style);
-//		++num_updated;
-//		total_width += width;
+
+		++num_updated;
+		total_width += width;
 
 		cx += static_cast<std::size_t>(width);
 	}
 
-//	fmt::print(g_log, "print: updated cells: {}, width: {}\n", num_updated, total_width);
+	fmt::print(g_log, "print: updated cells: {}, width: {}\n", num_updated, total_width);
 }
 
-void Screen::clear(Color fg, Color bg)
+void Screen::clear(Color bg, Color fg)
 {
 	_back_buffer.clear(fg, bg);
 
@@ -156,7 +163,7 @@ void Screen::update()
 		// the terminal content is now in synch with back buffer, we can copy back -> front
 		_front_buffer = _back_buffer;
 
-//		fmt::print(g_log, "updated cells: {}\n", num_updated);
+		fmt::print(g_log, "updated cells: {}\n", num_updated);
 	}
 }
 
@@ -181,8 +188,15 @@ Pos Screen::cursor_move(Pos pos)
 
 	if(pos.x != _cursor.position.x or pos.y != _cursor.position.y)
 	{
+		fmt::print(g_log, "cursor: {},{}  ->  {},{}\n", _cursor.position.x, _cursor.position.y, pos.x, pos.y);
+		_cursor.position = pos;
+
+		pos.x++; // 1-based
+		pos.y++;
+
 		if(pos.x != _cursor.position.x and pos.y != _cursor.position.y)
 			_out(fmt::format(esc::cup, pos.x, pos.y));
+
 		else if(pos.y == _cursor.position.y)
 		{
 			if(pos.x > _cursor.position.x)
@@ -197,8 +211,6 @@ Pos Screen::cursor_move(Pos pos)
 			else
 				_out(fmt::format(esc::cud, _cursor.position.y - pos.y));
 		}
-//		fmt::print(g_log, "cursor: {},{}  ->  {},{}\n", _cursor_x, _cursor_y, x, y);
-		_cursor.position = pos;
 	}
 
 	return prev_pos;
@@ -288,15 +300,15 @@ static std::string safe(const std::string_view s)
 	for(const auto &c: s)
 	{
 		if(c == 0x1b)
-			res += "\\e";
+			res += "\x1b[33;1m\\e\x1b[m";
 		else if(c == '\n')
 			res += "\\n";
 		else if(c == '\r')
 			res += "\\r";
 		else if(c >= 1 and c <= 26)
-			res += fmt::format("^{:c}", char(c + 'A' - 1));
+			res += fmt::format("\x1b[1m^{:c}\x1b[m", char(c + 'A' - 1));
 		else if(c < 0x20)
-			res += fmt::format("\\x{:02x}", (unsigned char)c);
+			res += fmt::format("\x1b[1m\\x{:02x}\x1b[m", (unsigned char)c);
 		else
 			res += c;
 	}

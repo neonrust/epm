@@ -58,7 +58,7 @@ enum Bit
 	Italic     = 1 << 2,
 	Underline  = 1 << 3,
 	Overstrike = 1 << 4,
-	// dimnishing returns for remaining styles... and not widely supported.
+	// diminishing returns for remaining styles...
 
 	Unchanged  = 0xff,
 };

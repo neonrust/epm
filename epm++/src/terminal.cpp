@@ -68,42 +68,42 @@ bool init_terminal(Options opts)
 
 	//const std::string current_tty { ::ttyname(STDIN_FILENO) != NULL ? ::ttyname(STDIN_FILENO) : "unknown" };
 
-	fmt::print(g_log, "turning off stdio synch..\n");
+	fmt::print(g_log, "   \x1b[2mterm >> turning off stdio synch...\x1b[m\n");
 	std::cin.sync_with_stdio(false);
 	std::cout.sync_with_stdio(false);
 
-	fmt::print(g_log, "turning off tied stream...\n");
+	fmt::print(g_log, "   \x1b[2mterm >> turning off tied stream...\x1b[m\n");
 	std::cin.tie(nullptr);
 	std::cout.tie(nullptr);
 
-	fmt::print(g_log, "clear termios flags..\n");
+	fmt::print(g_log, "   \x1b[2mterm >> clear termios flags..\x1b[m\n");
 	clear_in_flags(LocalEcho | LineBuffering);
 	//modify_io_flags(true, EightBit | CRtoLF);
 
 	if((opts & NoSignalDecode) > 0)
 	{
-		fmt::print(g_log, "disabling signal sequence decoding...\n");
+		fmt::print(g_log, "   \x1b[2mterm >> disabling signal sequence decoding...\x1b[m\n");
 		clear_in_flags(SignalDecoding);
 	}
 
 	if((opts & Fullscreen) > 0)
 	{
-		fmt::print(g_log, "enabling alternate screen...\n");
+		fmt::print(g_log, "   \x1b[2mterm >> enabling alternate screen...\x1b[m\n");
 		write(esc::screen_alternate);
 	}
 	if((opts & HideCursor) > 0)
 	{
-		fmt::print(g_log, "hiding cursor...\n");
+		fmt::print(g_log, "   \x1b[2mterm >> hiding cursor...\x1b[m\n");
 		write(esc::cursor_hide);
 	}
 	if((opts & MouseButtonEvents) > 0)
 	{
-		fmt::print(g_log, "enabling mouse button events...\n");
+		fmt::print(g_log, "   \x1b[2mterm >> enabling mouse button events...\x1b[m\n");
 		write(esc::mouse_buttons_on);
 	}
 	if((opts & MouseMoveEvents) > 0)
 	{
-		fmt::print(g_log, "enabling mouse move events...\n");
+		fmt::print(g_log, "   \x1b[2mterm >> enabling mouse move events...\x1b[m\n");
 		write(esc::mouse_move_on);
 	}
 

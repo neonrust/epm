@@ -68,7 +68,13 @@ int App::run()
 
 			enqueue_resize_event(size);
 
+			const auto before = _screen.size();
+			bool first_resize = before.width == 0 and before.height == 0;
+
 			_screen.set_size(size);
+
+			if(first_resize)
+				on_app_start();
 		}
 
 		// first handle any internally queued events
@@ -77,7 +83,6 @@ int App::run()
 		_internal_events.clear();
 
 		_screen.update();
-
 
 		for(const auto &event: _input.read())
 		{
@@ -95,7 +100,7 @@ int App::run()
 		}
 	}
 
-	fmt::print(g_log, "\x1b[31;1mApp:loop exiting\x1b[m\n");
+	fmt::print(g_log, "\x1b[33;1mApp:loop exiting\x1b[m\n");
 
 	return 0;
 }
@@ -107,6 +112,8 @@ void App::quit()
 
 void App::shutdown()
 {
+	on_app_exit(0);
+
 	if(_initialized)
 	{
 		_initialized = false;

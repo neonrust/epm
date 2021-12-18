@@ -27,6 +27,9 @@ struct App
 	fteng::signal<void(const event::MouseMove)> on_mouse_move_event;
 	fteng::signal<void(const event::MouseButton)> on_mouse_button_event;
 	fteng::signal<void(const event::MouseWheel)> on_mouse_wheel_event;
+
+	fteng::signal<void()> on_app_start;
+	fteng::signal<void(int)> on_app_exit;
 	fteng::signal<void(const event::Resize)> on_resize_event;
 
 	int run();

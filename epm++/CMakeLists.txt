@@ -17,6 +17,8 @@ set(sources
 	src/terminal.cpp
 	src/cell.h
 	src/size.h
+	src/samplers.h
+	src/samplers.cpp
 	src/screen.h
 	src/screen.cpp
 	src/screen-buffer.h
@@ -25,7 +27,6 @@ set(sources
 	src/input.cpp
 	src/canvas.h
 	src/canvas.cpp
-	src/samplers.h
 	src/keycodes.h
 	src/keycodes.cpp
 )
