@@ -25,7 +25,7 @@ struct Canvas
 	inline Size size() const { return _scr.size(); };
 
 	void fill(Rectangle rect, Color c);
-	void fill(Rectangle rect, const color::Sampler *s);
+	void fill(Rectangle rect, const color::Sampler *s, float fill_angle=0);
 
 
 private:

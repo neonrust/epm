@@ -31,27 +31,26 @@ int main()
 
 	Canvas canvas(app.screen());
 	//color::Constant sampler(Color(0x206090));
+	color::LinearGradient sampler({ color::Red, color::Yellow, color::Green, color::Cyan, color::Blue, color::Purple });
 
-//	app.on_app_start.connect([&app]() {
-//		auto size = app.screen().size();
-//		app.screen().print({0, 0}, "A");
-//		app.screen().print({size.width - 1, size.height - 1}, "E");
-//	});
+	float rotation { 45 };
 
-	float rotation { 0 };
+	Size rect_size; // set in on_app_start
 
-	Pos last_pos { 0, 0 };
-
-	auto draw_rect = [&canvas, &rotation, &last_pos](Pos pos) {
-
-		last_pos = pos;
-		color::Gradient sampler({ color::Red, color::Cyan}, rotation);
+	auto draw_rect = [&canvas, &rotation, &sampler, &rect_size]() {
 		canvas.clear();
-		canvas.fill({ { 0, 0 }, { pos.x, pos.y } }, &sampler);
+		canvas.fill({ { 0, 0 }, rect_size }, &sampler, rotation);
 	};
 
+	app.on_app_start.connect([&app, &draw_rect, &rect_size]() {
+		auto size = app.screen().size();
+		rect_size.width = size.width;
+		rect_size.height = size.height;
+		draw_rect();
+	});
+
 	int seq { -1 };
-	app.on_key_event.connect([&app, &seq, &draw_rect, &last_pos, &rotation](const event::Key &k) {
+	app.on_key_event.connect([&app, &seq, &draw_rect, &rotation](const event::Key &k) {
 		fmt::print(g_log, "[main]    key: {}\n", key::to_string(k.key, k.modifiers));
 
 		if(k.key == key::ESCAPE and k.modifiers == key::NoMod)
@@ -63,7 +62,7 @@ int main()
 
 			rotation = std::fmod(std::fmod(rotation + 2.f, 360.f) + 360.f, 360.f);
 			fmt::print(g_log, "rotation: {}\n", rotation);
-			draw_rect(last_pos);
+			draw_rect();
 		}
 		else if(k.key == key::LEFT and k.modifiers == key::NoMod)
 		{
@@ -71,7 +70,7 @@ int main()
 
 			rotation = std::fmod(std::fmod(rotation - 2.f, 360.f) + 360.f, 360.f);
 			fmt::print(g_log, "rotation: {}\n", rotation);
-			draw_rect(last_pos);
+			draw_rect();
 		}
 
 //		fmt::print(g_log, "\x1b[97;32;1mtest seq: {}\x1b[m\n", seq);
@@ -98,11 +97,11 @@ int main()
 		fmt::print(g_log, "[main]  input: '{}' 0x{:08x}\n", c.to_string(), std::uint32_t(c.codepoint));
 		return true;
 	});
-	app.on_mouse_move_event.connect([&draw_rect](const event::MouseMove &mm) {
+	app.on_mouse_move_event.connect([](const event::MouseMove &mm) {
 		fmt::print(g_log, "[main]  mouse: {},{}\n", mm.x, mm.y);
 
 		//app.screen().print({ 10, 10 }, fmt::format("mouse: {},{}  ", mm.x, mm.y));
-		draw_rect({ mm.x, mm.y });
+//		draw_rect({ mm.x, mm.y });
 //		color::Gradient sampler({ color::Red, color::Cyan}, rotation);
 //		canvas.clear();
 //		canvas.fill({ { 0, 0 }, { mm.x, mm.y } }, &sampler);

@@ -14,27 +14,27 @@ namespace color
 
 struct Sampler
 {
-	virtual Color sample(float u, float v) const = 0;
+	virtual Color sample(float u, float v, float angle=0) const = 0;
 };
 
 struct Constant : public Sampler
 {
 	inline Constant(Color c) : _c(c) {};
 
-	inline Color sample(float, float) const override { return _c; }
+	inline Color sample(float, float, float) const override { return _c; }
 
 private:
 	Color _c;
 };
 
-struct Gradient : public Sampler
+struct LinearGradient : public Sampler
 {
-	Gradient(std::initializer_list<Color> colors, float rotation=0);
-	Color sample(float u, float v) const override;
+	LinearGradient(std::initializer_list<Color> colors);
+
+	Color sample(float u, float v, float angle) const override;
 
 private:
 	std::vector<Color> _colors {};
-	const float _rotation { 0 };
 };
 
 } // NS: color
