@@ -109,6 +109,8 @@ struct Cell
 //		fmt::print(g_log, "~Cell\n");
 //	}
 
+	static constexpr wchar_t Unchanged = '\0';
+
 	inline bool operator == (const Cell &that) const
 	{
 		return ch == that.ch and fg == that.fg and bg == that.bg and style == that.style;

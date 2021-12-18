@@ -21,7 +21,7 @@ namespace term
 //			if(bg != color::Unchanged)
 //				cell.bg = bg;
 //			cell.style = style::Default;
-//			cell.ch = '\0';
+//			cell.ch = Cell::Unchanged;
 //		}
 //	}
 //}
@@ -57,7 +57,7 @@ void ScreenBuffer::set_cell(Pos pos, wchar_t ch, std::size_t width, Color fg, Co
 
 	auto &cell = _rows[pos.y]->operator[](pos.x);
 
-	if(ch != '\0')
+	if(ch != Cell::Unchanged)
 		cell.ch = ch;
 
 	cell.width = static_cast<std::uint_fast8_t>(width);
