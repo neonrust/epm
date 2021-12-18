@@ -83,21 +83,27 @@ def main():
 	while args:
 		arg = args.pop(0)
 
-		print('check arg: "%s"' % arg)
+		#print('check arg: "%s"' % arg)
 		if not command:
-			print('  try cmd: "%s"' % arg)
+			#print('  try cmd: "%s"' % arg)
 			command = resolve_cmd(arg)
 			if command:
-				print('  -> cmd:', command)
+				#print('  -> cmd:', command)
 				continue
 
 		if arg.startswith('-'):
-			print('  opt:', arg, '(cmd: %s)' % command)
+			#print('  opt:', arg, '(cmd: %s)' % command)
 			if not eat_option(command, arg, args, options):
 				bad_opt(arg)
+			else:
+				continue
+
+		if not command:
+			command = default_command
+			#print('  -> cmd:', command)
 
 		if command:
-			print('  cmd opt:', arg)
+			#print('  cmd opt:', arg)
 			command_args.append(arg)
 
 	if not command:
