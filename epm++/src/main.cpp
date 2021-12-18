@@ -29,8 +29,8 @@ int main()
 		return 1;
 
 	Canvas canvas(app.screen());
-	//color::Gradient sampler({ color::Cyan, color::Yellow }, 0);
-	color::Constant sampler(Color(0x206090));
+	color::Gradient sampler({ color::Red, color::Cyan}, -20);
+	//color::Constant sampler(Color(0x206090));
 
 //	app.on_app_start.connect([&app]() {
 //		auto size = app.screen().size();

@@ -288,13 +288,13 @@ void Screen::flush_buffer()
 {
 	if(not _output_buffer.empty())
 	{
-		fmt::print(g_log, "write: {}\n", safe(_output_buffer));
+		//fmt::print(g_log, "write: {}\n", safe(_output_buffer));
 		::write(_fd, _output_buffer.c_str(), _output_buffer.size());
 		_output_buffer.clear();
 	}
 }
 
-static std::string safe(const std::string_view s)
+[[maybe_unused]] static std::string safe(const std::string_view s)
 {
 	std::string res;
 	for(const auto &c: s)
