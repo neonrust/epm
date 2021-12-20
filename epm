@@ -30,8 +30,8 @@ known_commands = (
 	('d', 'delete'),
 	('m', 'mark'),
 	('M', 'unmark', 'um'),
-	('A', 'archive'),
-	('R', 'restore'),
+	('A', 'Archive'),
+	('R', 'Restore'),
 	('r', 'refresh'),
 	('h', 'help'),
 )
@@ -62,10 +62,11 @@ def main():
 					return cmd
 				if cmd.startswith(name):
 					matching.append(cmd)
+
 			elif isinstance(cmd, tuple):
 				if name in cmd:
 					return cmd[0]
-				if [c.startswith(name) for c in cmd].count(True):
+				if True in [c.startswith(name) for c in cmd]:
 					return cmd[0]
 
 		if len(matching) == 1:
@@ -659,7 +660,7 @@ def cmd_restore_help():
 
 
 def cmd_refresh(series_config, args, opts, width=None):
-	refresh_all_episodes(series_config, args, width, { **opts, 'max-age': 0 })
+	refresh_all_episodes(series_config, args, opts={ **opts, 'max-age': 0 }, width=width)
 
 def cmd_refresh_help():
 	print(f'{_b}Refresh episode data of all non-archived series.{_n}')
