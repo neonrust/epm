@@ -23,11 +23,11 @@ def search(search, type='series', year=None):
 	if _bad_key in _base_url:
 		raise RuntimeError('API key not set')
 
-	search_mode = 's'  # search by title
+	search_mode = 't'  # search by title
 	if search.startswith('tt'): # assume it's an IMDb ID
 		search_mode = 'i' # search by IMDb ID
 
-	url = _base_url + f'&type={type}&{search_mode}={search}'
+	url = _base_url + f'&type={type}&{search_mode}={url_escape(search)}'
 	if year is not None:
 		url += f'&y={year}'
 
@@ -40,7 +40,7 @@ def search(search, type='series', year=None):
 	if resp.status_code != HTTPStatus.OK:
 		return []
 
-	data = json.loads(resp.content)
+	data = resp.json()
 	if search_mode == 's':
 		hits = data.get('Search', [])
 	else:
