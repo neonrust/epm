@@ -23,7 +23,7 @@ def search(search, type='series', year=None):
 	if _bad_key in _base_url:
 		raise RuntimeError('API key not set')
 
-	search_mode = 't'  # search by title
+	search_mode = 's'  # search by title
 	if search.startswith('tt'): # assume it's an IMDb ID
 		search_mode = 'i' # search by IMDb ID
 
