@@ -6,7 +6,7 @@ Command-line TV episode calendar/manager/scheduler/tracker (EPisode Manager)
 
 - requests [https://pypi.org/project/requests]
 
-It also uses omdbapi.com for information lookup. An API key is required.
+It also uses themoviedb.org for information lookup. An API key is required.
 
 ## Configuration
 
@@ -14,13 +14,15 @@ All cache and configuration is stored in:
 
     ~/.config/epm/series
 	
-## OMDb API key
+## TMDb API key
 
 Key is read from the environment:
 
-    OMDB_API_KEY
+    TMDB_API_KEY
 
 ## Usage
+
+NOTE: this is not up to date :(
 
     epm / Episode Manager / (c)2021 André Jonsson
     Version 0.4 (2021-11-16) 
@@ -64,6 +66,8 @@ Key is read from the environment:
 
 
 ## Examples
+
+NOTE: this is not up to date :(
 
 
 Add a series you'd like to monitor.
