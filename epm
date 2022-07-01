@@ -10,10 +10,10 @@ from datetime import datetime, date
 import concurrent.futures
 from tempfile import mkstemp
 
-import omdb
+import tmdb
 
-VERSION = '0.4'
-VERSION_DATE = '2021-12-07'
+VERSION = '0.5'
+VERSION_DATE = '2022-07-01'
 
 PRG = os.path.basename(sys.argv[0])
 
@@ -117,7 +117,13 @@ def main():
 		print_usage()
 
 	else:
-		err = cmd_handlers[command](series_config, command_args, options, width=term_width())
+		try:
+			handler = cmd_handlers[command]
+		except KeyError:
+			print('%s: Unknown command: %s' % (PRG, command))
+			sys.exit(1)
+
+		err = handler(series_config, command_args, options, width=term_width())
 
 	if err is not None:
 		print('\x1b[33;1m[\x1b[0;1m%s\x1b[33;1m]\x1b[m %s' % (command, err))
@@ -156,10 +162,10 @@ def cmd_unseen(series_config, args, opts, width=None):
 	#                 idx   year2+pad         dash pad eps                  margin
 	max_width = width - 5 - 3 - len('1968')*2 - 1 - 2 - 3 - len('episodes')
 	series_unseen = []
-	for index, imdb_id, series in series_list:
+	for index, series_id, series in series_list:
 		_, unseen = seen_unseen_episodes(series)
 		if unseen:
-			series_unseen.append((index, imdb_id, series, unseen))
+			series_unseen.append((index, series_id, series, unseen))
 			if max_width is None:
 				max_width = max(max_width or 0, len(series['title']))
 
@@ -202,7 +208,7 @@ def cmd_unseen(series_config, args, opts, width=None):
 		ep_max_width = max(len(unseen[0]['title']) if unseen else 0 for _, _, _, unseen in series_unseen for ep in unseen)
 		ep_max_width = min(ep_max_width, 25)
 
-	for index, imdb_id, series, unseen in series_unseen:
+	for index, series_id, series, unseen in series_unseen:
 
 		if search and not match_search(series):
 			continue
@@ -307,7 +313,7 @@ def cmd_list(series_config, args, opts, width=None):
 	num_shown = 0
 	num_archived = 0
 
-	for index, imdb_id, series in series_list:
+	for index, series_id, series in series_list:
 		archived = 'archived' in series
 		if archived:
 			num_archived += 1
@@ -326,7 +332,7 @@ def cmd_list(series_config, args, opts, width=None):
 			continue
 
 		num_shown += 1
-		print_series_title(index, series, imdb_id=imdb_id, title_width=max_width, gray=archived)
+		print_series_title(index, series, series_id=series_id, title_width=max_width, gray=archived)
 		if archived:
 			print('\x1b[2m       Archived: %s\x1b[m' % series.get('archived'))
 		print_seen_status(series, gray=archived)
@@ -358,7 +364,7 @@ def cmd_add(series_config, args, opts, width=None):
 	search = ' '.join(args)
 
 	print('- Searching series...', end='', flush=True)
-	hits = omdb.search(search, year=year)
+	hits = tmdb.search(search, year=year)
 	print('\r\x1b[J', end='')
 	if not hits:
 		return 'Nothing found. Try generalizing your search.'
@@ -375,14 +381,14 @@ def cmd_add(series_config, args, opts, width=None):
 					arch_tail = '  \x1b[33m(archived)\x1b[m'
 				else:
 					arch_tail = None
-				print_series_title(None, series_config[hit['id']], imdb_id=hit['id'], gray=True, tail=arch_tail)
+				print_series_title(None, series_config[hit['id']], series_id=hit['id'], gray=True, tail=arch_tail)
 
 		max_width = width - 5 - 3 - len('1968')*2 - 1 - 2 - 3 - len('episodes')
 		#max_width = max(len(series['title']) for series in hits)
 
 		print('\x1b[32;1mFound \x1b[0;1m%d\x1b[m \x1b[32;1mseries:\x1b[m' % len(hits))
 		for idx, hit in enumerate(hits):
-			print_series_title(idx + 1, hit, imdb_id=hit['id'], title_width=max_width)
+			print_series_title(idx + 1, hit, series_id=hit['id'], title_width=max_width)
 
 		last_num = len(hits)
 		while True:
@@ -409,19 +415,19 @@ def cmd_add(series_config, args, opts, width=None):
 		selected = 0
 
 	hit = hits[selected]
-	imdb_id = hit['id']
+	series_id = hit['id']
 
 	if hit['id'] in series_config:
 		print('\x1b[33;1mAlready added:\x1b[m')
-		for index, series_imdb_id, _ in get_series(series_config):
-			if series_imdb_id == imdb_id:
+		for index, sid, _ in get_series(series_config):
+			if sid == series_id:
 				break
 
-		if series_config[imdb_id].get('archived') is not None:
+		if series_config[series_id].get('archived') is not None:
 			arch_tail = '  \x1b[33m(archived)\x1b[m'
 		else:
 			arch_tail = None
-		print_series_title(index, series_config[imdb_id], imdb_id=imdb_id, tail=arch_tail)
+		print_series_title(index, series_config[series_id], series_id=series_id, tail=arch_tail)
 		return
 
 	hit['seen'] = {}
@@ -430,10 +436,10 @@ def cmd_add(series_config, args, opts, width=None):
 	hit.pop('id')
 	hit.pop('poster', 0)
 
-	series_config[imdb_id] = hit
+	series_config[series_id] = hit
 
 
-	refresh_episodes(imdb_id, series_config)
+	refresh_episodes(series_id, series_config)
 
 	# TODO: offer to mark seasons as seen?
 
@@ -441,11 +447,11 @@ def cmd_add(series_config, args, opts, width=None):
 
 	print('\x1b[1mSeries added:\x1b[m  \x1b[2m(series renumbered)\x1b[m')
 
-	for index, series_imdb_id, _ in get_series(series_config):
-		if series_imdb_id == imdb_id:
+	for index, sid, _ in get_series(series_config):
+		if sid == series_id:
 			break
 
-	print_series_title(index, {**hit, 'id': imdb_id}, imdb_id=imdb_id)
+	print_series_title(index, {**hit, 'id': series_id}, series_id=series_id)
 
 def cmd_add_help():
 	print(f'{_b}Search for a series and (optionally) add it.{_n}')
@@ -460,14 +466,14 @@ def cmd_delete(series_config, args, opts, width=None):
 	if not args:
 		return 'Required argument missing: #/<IMDb ID>'
 
-	index, imdb_id, series, err = find_series(series_config, args.pop(0))
+	index, series_id, series, err = find_series(series_config, args.pop(0))
 	if err is not None:
 		return err
 
-	del series_config[imdb_id]
+	del series_config[series_id]
 
 	print('\x1b[1mDeleting series:\x1b[m')
-	print_series_title(None, series, imdb_id=imdb_id)
+	print_series_title(None, series, series_id=series_id)
 
 	answer = input('\x1b[41;37;1mAre you sure? (can not be undone)\x1b[m [yes/No] ')
 	if answer.lower() not in ('y', 'yes'):
@@ -476,7 +482,7 @@ def cmd_delete(series_config, args, opts, width=None):
 	save_series_config(series_config)
 
 	print('\x1b[1mSeries deleted:\x1b[m \x1b[2m(series renumbered)\x1b[m')
-	print_series_title(index, series, imdb_id=imdb_id)
+	print_series_title(index, series, series_id=series_id)
 
 def cmd_delete_help():
 	print(f'{_b}Complete remove a series from EPM - non-recoverable!{_n}')
@@ -494,7 +500,7 @@ def cmd_mark(series_config, args, opts, marking=True, width=None):
 
 	find_id = args.pop(0)
 
-	index, imdb_id, series, err = find_series(series_config, find_id)
+	index, series_id, series, err = find_series(series_config, find_id)
 	if err is not None:
 		return err
 
@@ -616,7 +622,7 @@ def cmd_archive(series_config, args, opts, archiving=True, width=None):
 
 	find_id = args.pop(0)
 
-	index, imdb_id, series, err = find_series(series_config, find_id)
+	index, series_id, series, err = find_series(series_config, find_id)
 	if err is not None:
 		return err
 
@@ -638,7 +644,7 @@ def cmd_archive(series_config, args, opts, archiving=True, width=None):
 		print('\x1b[1mSeries restored:\x1b[m')
 		del series['archived']
 
-	print_series_title(index, series, imdb_id=imdb_id)
+	print_series_title(index, series, series_id=series_id)
 
 	save_series_config(series_config)
 
@@ -664,7 +670,7 @@ def cmd_refresh(series_config, args, opts, width=None):
 
 def cmd_refresh_help():
 	print(f'{_b}Refresh episode data of all non-archived series.{_n}')
-	print(f'Usage: %s {_c}.refresh{_n} <# / IMDb ID>' % PRG)
+	print(f'Usage: %s {_c}.refresh{_n} <# / IMDb ID> {_o}|{_n} <pattern>' % PRG)
 	print(f'    {_o}[#/<IMDb ID>]      {_n} Only specified series')
 	print(f'    {_o}[<pattern>]        {_n} Only matching series')
 
@@ -683,15 +689,15 @@ cmd_handlers = {
 	'r': cmd_refresh,
 }
 cmd_help = {
-	'add': cmd_add_help,
-	'delete': cmd_delete_help,
-	'list': cmd_list_help,
-	'unseen': cmd_unseen_help,
-	'mark': cmd_mark_help,
-	'unmark': cmd_unmark_help,
-	'archive': cmd_archive_help,
-	'restore': cmd_restore_help,
-	'refresh': cmd_refresh_help,
+	'a': cmd_add_help,
+	'd': cmd_delete_help,
+	'l': cmd_list_help,
+	'u': cmd_unseen_help,
+	'm': cmd_mark_help,
+	'M': cmd_unmark_help,
+	'A': cmd_archive_help,
+	'R': cmd_restore_help,
+	'r': cmd_refresh_help,
 }
 
 def find_series(series_config, find_id):
@@ -701,11 +707,11 @@ def find_series(series_config, find_id):
 	except:
 		pass
 
-	for index, imdb_id, series in get_series(series_config):
+	for index, series_id, series in get_series(series_config):
 		if isinstance(find_id, int) and find_id == index:
-			return index, imdb_id, series, None
-		elif imdb_id == find_id:
-			return index, imdb_id, series, None
+			return index, series_id, series, None
+		elif series_id == find_id:
+			return index, series_id, series, None
 
 	return None, None, None, f'Series not found: {find_id}'
 
@@ -718,30 +724,34 @@ def no_series(series_config):
 		return 'No series added. Use: \x1b[1m%s add <title> [<year>]\x1b[m' % PRG
 
 
-def refresh_episodes(imdb_id, series_config, progress=False):
+def refresh_episodes(series_id, series_config, progress=False):
 	if progress:
-		print('\x1b[2m(%d / %d) Refreshing episodes for %s...\x1b[m' % (progress[0], progress[1], imdb_id), end='', flush=True)
+		print('\x1b[2m(%d / %d) Refreshing episodes for %s...\x1b[m' % (progress[0], progress[1], series_id), end='', flush=True)
 	elif progress is False:
-		print('\x1b[2mRefreshing episodes for %s...\x1b[m' % imdb_id, end='', flush=True)
+		print('\x1b[2mRefreshing episodes for %s...\x1b[m' % series_id, end='', flush=True)
 
-	episodes = omdb.episodes(imdb_id)
+	episodes = tmdb.episodes(series_id)
 	if progress is not None:
 		print('\r\x1b[K', end='', flush=True)
 
 	for ep in episodes:
 		transform_episode_info(ep)
 
-	updated = len(episodes) > len(series_config[imdb_id].get('episodes', []))
+	updated = len(episodes) > len(series_config[series_id].get('episodes', []))
 
-	series_config[imdb_id]['episodes'] = episodes
-	series_config[imdb_id][episodes_refreshed_key] = now()
+	series_config[series_id]['episodes'] = episodes
+	series_config[series_id][episodes_refreshed_key] = now()
 
 	return len(episodes)
 
 
 def refresh_all_episodes(series_config, args=None, opts=None, width=None):
+
+	# TODO: also refresh the series info
+
 	opts = opts or {}
 	max_age = opts.get('max-age', default_max_episodes_refresh_age)
+	force = bool(opts.get('force'))
 
 	now_dt = now_datetime()
 
@@ -760,27 +770,27 @@ def refresh_all_episodes(series_config, args=None, opts=None, width=None):
 	all_series = get_series(series_config)
 	to_refresh = []
 
-	for idx, (_, imdb_id, series) in enumerate(all_series):
+	for idx, (_, series_id, series) in enumerate(all_series):
 		if 'archived' in series:
 			continue
 		if search and not match_search(series):
 			continue
 
 		last_refresh = series.get(episodes_refreshed_key)
-		if not last_refresh or age(last_refresh) > max_age:
-			to_refresh.append(imdb_id)
+		if force or (not last_refresh or age(last_refresh) > max_age):
+			to_refresh.append(series_id)
 
 	if not to_refresh:
 		return
 
 	t0 = time.time()
 	print('\x1b[2mRefreshing episodes of %d series...\x1b[m' % len(to_refresh), end='', flush=True)
-	promises = []
 
+	promises = []
 	with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
 		promises = [
-			executor.submit(refresh_episodes, imdb_id, series_config, progress=None)
-			for imdb_id in to_refresh
+			executor.submit(refresh_episodes, series_id, series_config, progress=None)
+			for series_id in to_refresh
 		]
 		concurrent.futures.wait(promises)
 
@@ -800,22 +810,22 @@ def refresh_all_episodes(series_config, args=None, opts=None, width=None):
 		save_series_config(series_config)
 
 
-useful_episode_fields = [ 'season', 'episode', 'title', 'date', 'plot', 'runtime' ]
+useful_episode_fields = [ 'season', 'episode', 'title', 'date', 'overview', 'runtime' ]
 
 def transform_episode_info(episode):
 	for field in list(episode.keys()):
 		if field not in useful_episode_fields:
 			episode.pop(field, 0)
 
-def print_series_title(num, info, title_width=0, imdb_id=None, gray=False, tail=None, archived=True):
+def print_series_title(num, info, title_width=0, series_id=None, gray=False, tail=None, archived=True):
 	infop = {**info}
 
 	# pad title string if width is specified
 	if title_width > 0:
 		infop['title'] = f'%-{title_width}s' % infop['title']
 
-	if imdb_id is not None:
-		infop['id'] = imdb_id
+	if series_id is not None:
+		infop['id'] = series_id
 
 	if 'year' in infop:
 		year = infop['year']
@@ -823,6 +833,8 @@ def print_series_title(num, info, title_width=0, imdb_id=None, gray=False, tail=
 			infop['year'] = '-'.join(str(y) for y in year)
 		else:
 			infop['year'] = '%d-' % year[0]
+	else:
+		infop['year'] = '????'
 
 	if num is not None:
 		infop['_num'] = '%5s' % f'{num}'
@@ -833,8 +845,8 @@ def print_series_title(num, info, title_width=0, imdb_id=None, gray=False, tail=
 			infop['added'] = infop['added'].split()[0]
 		s = ' \x1b[32;1m%(added)s\x1b[22;39m  \x1b[38;5;253m%(title)s\x1b[22;39m  \x1b[38;5;245m%(year)-9s\x1b[22;39m' % infop
 
-	if imdb_id is not None:
-		s += f'  \x1b[2m{imdb_id}\x1b[22;39m'
+	if series_id is not None:
+		s += f'  \x1b[2m{series_id}\x1b[22;39m'
 
 	if tail:
 		s += tail
@@ -1003,12 +1015,12 @@ def series_num_archived(series_config):
 
 
 def get_series(series_config):
-	imdb_ids = sorted(series_config, key=lambda imdb_id: (series_config[imdb_id]['title'].casefold(), series_config[imdb_id].get('year', '')))
+	series_ids = sorted(series_config, key=lambda series_id: (series_config[series_id]['title'].casefold(), series_config[series_id].get('year', '')))
 
 	series = []
 	index = 1
-	for imdb_id in imdb_ids:
-		series.append( (index, imdb_id, series_config[imdb_id]) )
+	for series_id in series_ids:
+		series.append( (index, series_id, series_config[series_id]) )
 		index += 1
 
 	return series
@@ -1123,7 +1135,13 @@ def print_usage(exit_code=0):
 
 
 def print_cmd_help(command, exit_code=0):
-	cmd_help[command]()
+	try:
+		show_help = cmd_help[command]
+	except KeyError:
+		print('%s: No help for command: %s' % (PRG, command))
+		sys.exit(1)
+
+	show_help()
 	sys.exit(exit_code)
 
 
