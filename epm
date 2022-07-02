@@ -197,7 +197,7 @@ def cmd_unseen(series_config, args, opts, width=None):
 		if search and not match_search(series):
 			continue
 
-		has_episodes_seen = len(series.get('seen', {})) > 0
+		has_episodes_seen = len(get_meta(series, 'seen', {})) > 0
 
 		if only_started and not has_episodes_seen:
 			continue
@@ -283,7 +283,7 @@ def cmd_list(series_config, args, opts, width=None):
 
 	# TODO: use 'width'
 	max_width = width - 5 - 3 - len('1968')*2 - 1 - 2 - 3 - len('episodes')
-	#max_width = max(map(lambda item: len(item[-1]['title']) if 'archived' not in item[-1] else 0, series_list))
+	#max_width = max(map(lambda item: len(item[-1]['title']) if not get_meta(item[-1], 'archived') else 0, series_list))
 
 	# TODO: print header/columns
 
@@ -300,7 +300,7 @@ def cmd_list(series_config, args, opts, width=None):
 	num_archived = 0
 
 	for index, series_id, series in series_list:
-		archived = 'archived' in series
+		archived = get_meta(series, 'archived')
 		if archived:
 			num_archived += 1
 		if archived and not (list_all or only_archived):
@@ -308,7 +308,7 @@ def cmd_list(series_config, args, opts, width=None):
 		if not archived and only_archived:
 			continue
 
-		has_episodes_seen = len(series.get('seen', {})) > 0
+		has_episodes_seen = len(get_meta(series, 'seen', {})) > 0
 		if only_started and not has_episodes_seen:
 			continue
 		if only_planned and has_episodes_seen:
@@ -365,7 +365,7 @@ def cmd_add(series_config, args, opts, width=None):
 		if already:
 			print('\x1b[2mAlready added: %d\x1b[m' % len(already))
 			for hit in already:
-				if series_config[hit['id']].get('archived') is not None:
+				if has_meta(series_config[hit['id']], 'archived'):
 					arch_tail = '  \x1b[33m(archived)\x1b[m'
 				else:
 					arch_tail = None
@@ -411,23 +411,23 @@ def cmd_add(series_config, args, opts, width=None):
 			if sid == series_id:
 				break
 
-		if series_config[series_id].get('archived') is not None:
+		if has_meta(series_config[series_id], 'archived'):
 			arch_tail = '  \x1b[33m(archived)\x1b[m'
 		else:
 			arch_tail = None
 		print_series_title(index, series_config[series_id], series_id=series_id, tail=arch_tail)
 		return
 
-	hit['seen'] = {}
-	hit['added'] = now()
+	hit[meta_key] = {}
+	set_meta(hit, 'seen', {})
+	set_meta(hit, 'added', now())
 
-	hit.pop('id')
-	hit.pop('poster', 0)
+	hit.pop('id', None)
 
 	series_config[series_id] = hit
 
 
-	refresh_episodes(series_id, series_config)
+	refresh_series(series_id, series_config)
 
 	# TODO: offer to mark seasons as seen?
 
@@ -547,7 +547,7 @@ def cmd_mark(series_config, args, opts, marking=True, width=None):
 		except:
 			return f'Bad episode number/range: {episode}'
 
-	seen = series.get('seen', {})
+	seen = get_meta(series, 'seen', {})
 
 	episodes = []
 	episodes_duration = 0
@@ -614,7 +614,19 @@ def _unmark_help() -> None:
 
 cmd_unmark.help = _unmark_help
 
-def cmd_archive(series_config, args, opts, archiving=True, width=None):
+def get_meta(series: dict, key: str, def_value=None):
+	return series.get(meta_key).get(key, def_value)
+
+def has_meta(series: dict, key: str):
+	return series.get(meta_key).get(key) is not None
+
+def set_meta(series: dict, key: str, value) -> None:
+	series[meta_key][key] = value
+
+def del_meta(series: dict, key: str) -> None:
+	series[meta_key].pop(key, None)
+
+def cmd_archive(series_config, args, opts, archiving=True, width=None) -> str|None:
 	if not args:
 		return 'Required argument missing: #/<IMDb ID>'
 
@@ -624,7 +636,7 @@ def cmd_archive(series_config, args, opts, archiving=True, width=None):
 	if err is not None:
 		return err
 
-	currently_archived = series.get('archived', False) == True
+	currently_archived = has_meta(series, 'archived')
 
 	# TODO: check if all episodes are seen or not?
 
@@ -637,10 +649,10 @@ def cmd_archive(series_config, args, opts, archiving=True, width=None):
 
 	if archiving:
 		print('\x1b[1mSeries archived:\x1b[m')
-		series['archived'] = True
+		set_meta(series, 'archived', True)
 	else:
 		print('\x1b[1mSeries restored:\x1b[m')
-		del series['archived']
+		del_meta(series, 'archived')
 
 	print_series_title(index, series, series_id=series_id)
 
@@ -720,12 +732,16 @@ def no_series(series_config):
 		return 'No series added. Use: \x1b[1m%s add <title> [<year>]\x1b[m' % PRG
 
 
-def refresh_episodes(series_id, series_config, progress=False):
-	if progress:
-		print('\x1b[2m(%d / %d) Refreshing episodes for %s...\x1b[m' % (progress[0], progress[1], series_id), end='', flush=True)
-	elif progress is False:
-		print('\x1b[2mRefreshing episodes for %s...\x1b[m' % series_id, end='', flush=True)
+meta_key = 'epm:meta'
+legacy_meta_keys = ('added', refreshed_key, 'seen', 'archived')
 
+def refresh_series(series_id:str, series_config:dict, progress:bool=False) -> int:
+	if progress:
+		print('\x1b[2m(%d / %d) Refreshing %s...\x1b[m' % (progress[0], progress[1], series_id), end='', flush=True)
+	elif progress is False:
+		print('\x1b[2mRefreshing %s...\x1b[m' % series_id, end='', flush=True)
+
+	details = tmdb.details(series_id)
 	episodes = tmdb.episodes(series_id)
 	if progress is not None:
 		print('\r\x1b[K', end='', flush=True)
@@ -733,15 +749,19 @@ def refresh_episodes(series_id, series_config, progress=False):
 	for ep in episodes:
 		transform_episode_info(ep)
 
-	updated = len(episodes) > len(series_config[series_id].get('episodes', []))
+	#updated = len(episodes) > len(series_config[series_id].get('episodes', []))
 
+	meta_data = series_config[series_id].get(meta_key, {})
+
+	series_config[series_id] = details
+	series_config[series_id][meta_key] = meta_data
+	set_meta(series_config[series_id], refreshed_key, now())
 	series_config[series_id]['episodes'] = episodes
-	series_config[series_id][episodes_refreshed_key] = now()
 
 	return len(episodes)
 
 
-def refresh_all_episodes(series_config, args=None, opts=None, width=None):
+def refresh_all(series_config:dict, args:list=None, opts:dict=None, width:int=None) -> None:
 
 	# TODO: also refresh the series info
 
@@ -772,8 +792,8 @@ def refresh_all_episodes(series_config, args=None, opts=None, width=None):
 		if search and not match_search(series):
 			continue
 
-		last_refresh = series.get(episodes_refreshed_key)
 		if force or (not last_refresh or age(last_refresh) > max_age):
+		last_refresh = get_meta(series, refreshed_key)
 			to_refresh.append(series_id)
 
 	if not to_refresh:
@@ -1016,7 +1036,12 @@ def get_series(series_config):
 	series = []
 	index = 1
 	for series_id in series_ids:
-		series.append( (index, series_id, series_config[series_id]) )
+		info = series_config[series_id]
+
+		if archived is not None and archived != has_meta(info, 'archived'):
+			continue
+
+		series.append( (index, series_id, info) )
 		index += 1
 
 	return series
@@ -1024,7 +1049,7 @@ def get_series(series_config):
 
 def seen_unseen_episodes(series, before=None):
 	episodes = series.get('episodes', [])
-	seen = series.get('seen', {})
+	seen = get_meta(series, 'seen', {})
 
 	seen_eps = []
 	unseen_eps = []
@@ -1169,6 +1194,23 @@ def load_series_config():
 	if os.path.exists(series_config_file) and os.path.getsize(series_config_file) > 1:
 		with open(series_config_file, 'rb') as fp:
 			config = orjson.loads(fp.read())
+
+	# migrate meta data to new structure
+	meta_migrated = 0
+	for series_id, series in config.items():
+		if not series.get(meta_key):
+			legacy_meta_data = {}
+			for key in legacy_meta_keys:
+				if key in series:
+					legacy_meta_data[key] = series.pop(key, None)
+
+			series[meta_key] = legacy_meta_data
+			meta_migrated += 1
+
+	if meta_migrated > 0:
+		print('\x1b[2mMigrated meta-data for %d series' % meta_migrated)
+		save_series_config(config)
+
 	return config
 
 
