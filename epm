@@ -318,10 +318,10 @@ def cmd_list(series_config, args, opts, width=None) -> str|None:
 			continue
 
 		num_shown += 1
-		print_series_title(index, series, series_id=series_id, title_width=max_width, gray=archived)
-		if archived:
-			print('\x1b[2m       Archived: %s\x1b[m' % series.get('archived'))
-		print_seen_status(series, gray=archived)
+		print_series_title(index, series, series_id=series_id, title_width=max_width, gray=archived and not only_archived)
+		if archived and not only_archived:
+			print('\x1b[2m       Archived\x1b[m')
+		print_seen_status(series, gray=archived and not only_archived)
 
 	print('%d series \x1b[2;3mTotal: %d   Archived: %d\x1b[m' % (num_shown, len(series_list), num_archived))
 
