@@ -723,20 +723,29 @@ cmd_handlers = {
 	'refresh': cmd_refresh,
 }
 
-	# if it's an int, search by index, else search by IMDB ID
 def find_series(series_config:dict, find_id:str) -> tuple[int|None, str|None, dict|None, str|None]:
+	nothing_found = None, None, None, f'Series not found: {find_id}'
+
+	# if it starts with '#' (and rest numerical), search by index, else search by IMDB ID
+	# hm, but '#' is a comment in shell, so requires escaping -> awkward to type :|
+
+	if not find_id:
+		return nothing_found
+
+	find_index = None
 	try:
-		find_id = int(find_id)
+		if find_id[0] == '#':
+			find_index = int(find_id[1:])
 	except:
 		pass
 
 	for index, series_id, series in get_series(series_config):
-		if isinstance(find_id, int) and find_id == index:
+		if find_index is not None and find_index == index:
 			return index, series_id, series, None
 		elif series_id == find_id:
 			return index, series_id, series, None
 
-	return None, None, None, f'Series not found: {find_id}'
+	return nothing_found
 
 
 def no_series(series_config:dict) -> str:
