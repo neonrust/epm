@@ -169,6 +169,13 @@ def details(title_id, type='series'):
 _f_details = details
 
 
+__parallel_requests = 10
+
+def set_parallel(num):
+	global __parallel_requests
+	__parallel_requests = max(1, int(num or 1))
+
+
 def episodes(series_id, details=False):
 
 	if _bad_key in _base_url:
@@ -218,7 +225,7 @@ def episodes(series_id, details=False):
 		return episodes
 
 	# then fetch all the seasons, in parallel
-	with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+	with concurrent.futures.ThreadPoolExecutor(max_workers=__parallel_requests) as executor:
 		promises = [
 			executor.submit(fetch_season, season)
 			for season in range(1, num_seasons + 1)
