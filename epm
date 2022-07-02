@@ -1173,7 +1173,7 @@ def print_usage(exit_code:int=0) -> None:
 	print(f'   {_b}A{_n}rchive   Archive series (still in config, but not normally shown)')
 	print(f'   {_b}R{_n}estore   Restore previously archived series')
 	print(f'   {_b}r{_n}efresh   Refresh episode data (forcibly)')
-	print(f'   {_b}h{_n}help     Show this help information')
+	print(f'   {_b}h{_n}elp      Show this help information')
 	print()
 	print(f'Also try: {_b}<mode>{_n} --help')
 	print()
