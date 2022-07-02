@@ -171,7 +171,7 @@ def details(title_id, type='series'):
 	})
 	_del_keys(data, ['genres'])
 
-	if data.get('status') == 'Ended' and data.get('last_air_date'):
+	if data.get('status') in ('Ended', 'Canceled') and data.get('last_air_date'):
 		data['year'] = data['year'] + [ int(data.get('last_air_date').split('-')[0]) ]
 		del data['last_air_date']
 
@@ -243,9 +243,10 @@ def episodes(series_id, details=False):
 	for promise in promises:
 		episodes += promise.result()
 
+	# if the series contains runtime info, populate each episode (unless already present)
 	if ep_runtime:
 		for ep in episodes:
-			if 'runtime' not in ep:
+			if not ep.get('runtime'):
 				ep['runtime'] = ep_runtime
 
 	return episodes
