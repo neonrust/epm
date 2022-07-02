@@ -18,7 +18,7 @@ VERSION_DATE = '2022-07-01'
 PRG = os.path.basename(sys.argv[0])
 
 default_max_episodes_refresh_age = 2*24*3600
-episodes_refreshed_key = 'episodes-refreshed'
+refreshed_key = 'refreshed-at'
 
 series_config_file = os.path.expandvars(f'$HOME/.config/{PRG}/series')
 num_config_backups = 10
