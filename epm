@@ -831,7 +831,7 @@ def refresh_all(series_config:dict, args:list=None, opts:dict=None, width:int=No
 	promises = []
 	with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
 		promises = [
-			executor.submit(refresh_episodes, series_id, series_config, progress=None)
+			executor.submit(refresh_series, series_id, series_config, progress=None)
 			for series_id in to_refresh
 		]
 		concurrent.futures.wait(promises)
