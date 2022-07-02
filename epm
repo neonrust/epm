@@ -23,25 +23,20 @@ episodes_refreshed_key = 'episodes-refreshed'
 series_config_file = os.path.expandvars(f'$HOME/.config/{PRG}/series')
 num_config_backups = 10
 
-known_commands = (
-	('u', 'unseen'),
-	('l', 'list', 'ls'),
-	('a', 'add'),
-	('d', 'delete'),
-	('m', 'mark'),
-	('M', 'unmark', 'um'),
-	('A', 'Archive'),
-	('R', 'Restore'),
-	('r', 'refresh'),
-	('h', 'help'),
-)
-default_command = known_commands[0][0]
 
-_b = '\x1b[1m'     # bold
-_c = '\x1b[33;1m'  # command
-_o = '\x1b[34;1m'  # option
-_f = '\x1b[2m'     # faint
-_n = '\x1b[m'      # normal
+default_command = 'unseen'
+known_commands = (
+	('unseen', ),
+	('list', 'ls'),
+	('add', ),
+	('delete', ),
+	('mark', ),
+	('unmark', 'M', 'um'),
+	('archive', ),
+	('restore', ),
+	('refresh', ),
+	('help', ),
+)
 
 def main():
 	command = None
@@ -53,21 +48,11 @@ def main():
 	def resolve_cmd(name):
 		matching = []
 
-		if name.startswith('-'):
-			name = name[1: ]
-
 		for cmd in known_commands:
-			if isinstance(cmd, str):
-				if name == cmd:
-					return cmd
-				if cmd.startswith(name):
-					matching.append(cmd)
-
-			elif isinstance(cmd, tuple):
-				if name in cmd:
-					return cmd[0]
-				if True in [c.startswith(name) for c in cmd]:
-					return cmd[0]
+			for alias in cmd:
+				if name == alias or alias.startswith(name):
+					matching.append(cmd[0])
+					break
 
 		if len(matching) == 1:
 			return matching[0]
@@ -75,9 +60,6 @@ def main():
 			ambiguous_cmd(name, matching)
 
 		return None
-		# no command matched, use it as argument to the default command
-		#command_args.append(name)
-		#return default_command
 
 
 	args = sys.argv[1: ]
@@ -85,14 +67,12 @@ def main():
 		arg = args.pop(0)
 
 		#print('check arg: "%s"' % arg)
-		if not command:
-			#print('  try cmd: "%s"' % arg)
-			command = resolve_cmd(arg)
-			if command:
-				#print('  -> cmd:', command)
-				continue
 
 		if arg.startswith('-'):
+			if not command:
+				command = default_command
+				#print('  -> cmd: %s' % command)
+
 			#print('  opt:', arg, '(cmd: %s)' % command)
 			if not eat_option(command, arg, args, options):
 				bad_opt(arg)
@@ -100,37 +80,41 @@ def main():
 				continue
 
 		if not command:
+			#print('  try cmd: "%s"' % arg)
+			command = resolve_cmd(arg)
+			if command:
+				#print('  -> cmd: %s [%s]' % (command, ' '.join(command_args)))
+				continue
+
+		if not command:
 			command = default_command
 			#print('  -> cmd:', command)
 
 		if command:
-			#print('  cmd opt:', arg)
+			#print('  cmd arg:', arg)
 			command_args.append(arg)
 
 	if not command:
 		command = default_command
 
-	series_config = load_series_config()
-
-
 	if command == 'help':
 		print_usage()
 
-	else:
-		try:
-			handler = cmd_handlers[command]
-		except KeyError:
-			print('%s: Unknown command: %s' % (PRG, command))
-			sys.exit(1)
+	series_config = load_series_config()
 
-		err = handler(series_config, command_args, options, width=term_width())
+	try:
+		handler = cmd_handlers[command]
+	except KeyError:
+		print('%s: Unknown command: %s' % (PRG, command))
+		sys.exit(1)
 
+	err = handler(series_config, command_args, options, width=term_width())
 	if err is not None:
 		print('\x1b[33;1m[\x1b[0;1m%s\x1b[33;1m]\x1b[m %s' % (command, err))
 		sys.exit(1)
 
 
-def eat_option(command, option, args, options):
+def eat_option(command, option, args, options) -> bool:
 	if option in ('-h', '--help'):
 		if command:
 			print_cmd_help(command)
@@ -277,7 +261,7 @@ def cmd_unseen(series_config, args, opts, width=None):
 	# this is wildly incorrect!
 	#print(f'\x1b[48;5;235m\x1b[J\rTotal unseen: \x1b[1m{total}\x1b[22;39m episodes  \x1b[2m{fmt_duration(total_duration)}\x1b[22;39m')
 
-def cmd_unseen_help():
+def _unseen_help() -> None:
 	print(f'{_b}Show unseen episodes of series{_n}')
 	print(f'Usage: %s {_c}.unseen{_n} <options> <search...>' % PRG)
 	print(f'    {_o}#/<IMDb ID>         {_n} Show only specific')
@@ -285,6 +269,8 @@ def cmd_unseen_help():
 	print(f'    {_o}--future            {_n} Also unreleased episodes (max 1)')
 
 	print_cmd_option_help('unseen')
+
+cmd_unseen.help = _unseen_help
 
 
 def cmd_list(series_config, args, opts, width=None):
@@ -339,12 +325,14 @@ def cmd_list(series_config, args, opts, width=None):
 
 	print('%d series \x1b[2;3mTotal: %d   Archived: %d\x1b[m' % (num_shown, len(series_list), num_archived))
 
-def cmd_list_help():
+def _list_help() -> None:
 	print(f'{_b}List series{_n}')
 	print(f'Usage: %s {_c}.list{_n} <options> [<search...>]' % PRG)
 	print(f'    {_o}[<search...>]     {_n} Show only matching series')
 
 	print_cmd_option_help('list')
+
+cmd_list.help = _list_help
 
 
 year_ptn = re.compile(r'^(\d{4})|\((\d{4})\)$')  # 1968 or (1968)
@@ -453,13 +441,15 @@ def cmd_add(series_config, args, opts, width=None):
 
 	print_series_title(index, {**hit, 'id': series_id}, series_id=series_id)
 
-def cmd_add_help():
+def _add_help() -> None:
 	print(f'{_b}Search for a series and (optionally) add it.{_n}')
 	print(f'Usage: %s {_c}.add{_n} <search>' % PRG)
 	print(f'    {_o}<title search>{_n}')
 	print(f'    {_o}<IMDb ID>{_n}')
 
 	print_cmd_option_help('add')
+
+cmd_add.help = _add_help
 
 
 def cmd_delete(series_config, args, opts, width=None):
@@ -484,12 +474,14 @@ def cmd_delete(series_config, args, opts, width=None):
 	print('\x1b[1mSeries deleted:\x1b[m \x1b[2m(series renumbered)\x1b[m')
 	print_series_title(index, series, series_id=series_id)
 
-def cmd_delete_help():
+def _delete_help() -> None:
 	print(f'{_b}Complete remove a series from EPM - non-recoverable!{_n}')
 	print(f'Usage: %s {_c}.delete{_n} <# / IMDb ID>' % PRG)
 	print(f'    {_o}#/<IMDb ID>{_n}')
 
 	print_cmd_option_help('delete')
+
+cmd_delete.help = _delete_help
 
 
 def cmd_mark(series_config, args, opts, marking=True, width=None):
@@ -592,7 +584,7 @@ def cmd_mark(series_config, args, opts, marking=True, width=None):
 		print('\x1b[33;1mNo episodes %smarked\x1b[m' % '' if marking else 'un')
 
 
-def cmd_mark_help():
+def _mark_help() -> None:
 	print(f'{_b}Mark a series, season or specific episode as seen.{_n}')
 	print(f'Usage: %s {_c}.mark{_n} <# / IMDb ID> [<season / episode specifier>]' % PRG)
 	print(f'    {_o}#/<IMDb ID> <season> <episode> {_n} Episodes')
@@ -603,8 +595,13 @@ def cmd_mark_help():
 
 	print_cmd_option_help('mark')
 
+cmd_mark.help = _mark_help
 
-def cmd_unmark_help():
+
+def cmd_unmark(*args, **kwargs):
+	return cmd_mark(*args, **kwargs, marking=False)
+
+def _unmark_help() -> None:
 	print(f'{_b}Unmark a series/season/episode - reverse of .mark command.{_n}')
 	print(f'Usage: %s {_c}.unmark{_n} <# / IMDb ID> [<season / episode specifier>]' % PRG)
 	print(f'    {_o}#/<IMDb ID> <season> <episode> {_n} Episodes')
@@ -615,6 +612,7 @@ def cmd_unmark_help():
 
 	print_cmd_option_help('unmark')
 
+cmd_unmark.help = _unmark_help
 
 def cmd_archive(series_config, args, opts, archiving=True, width=None):
 	if not args:
@@ -649,26 +647,33 @@ def cmd_archive(series_config, args, opts, archiving=True, width=None):
 	save_series_config(series_config)
 
 
-def cmd_archive_help():
+def _archive_help() -> None:
 	print(f'{_b}Archving series - hides from normal .list command.{_n}')
 	print(f'Usage: %s {_c}.archive{_n} <# / IMDb ID>' % PRG)
 	print(f'    {_o}#/<IMDb ID>{_n}')
 
 	print_cmd_option_help('archive')
 
+cmd_archive.help = _archive_help
 
-def cmd_restore_help():
+
+def cmd_restore(*args, **kwargs) -> None:
+	return cmd_archive(*args, **kwargs, archiving=False)
+
+def _restore_help() -> None:
 	print(f'{_b}Restore series - reverse of .archive command.{_n}')
 	print(f'Usage: %s {_c}.restore{_n} <# / IMDb ID>' % PRG)
 	print(f'    {_o}#/<IMDb ID>{_n}')
 
 	print_cmd_option_help('restore')
 
+cmd_restore.help = _restore_help
+
 
 def cmd_refresh(series_config, args, opts, width=None):
 	refresh_all_episodes(series_config, args, opts={ **opts, 'max-age': 0 }, width=width)
 
-def cmd_refresh_help():
+def _refresh_help() -> None:
 	print(f'{_b}Refresh episode data of all non-archived series.{_n}')
 	print(f'Usage: %s {_c}.refresh{_n} <# / IMDb ID> {_o}|{_n} <pattern>' % PRG)
 	print(f'    {_o}[#/<IMDb ID>]      {_n} Only specified series')
@@ -676,28 +681,19 @@ def cmd_refresh_help():
 
 	print_cmd_option_help('refresh')
 
+cmd_refresh.help = _refresh_help
+
 
 cmd_handlers = {
-	'a': cmd_add,
-	'd': cmd_delete,
-	'l': cmd_list,
-	'u': cmd_unseen,
-	'm': cmd_mark,
-	'M': lambda *args, **kwargs: cmd_mark(*args, **kwargs, marking=False),
-	'A': cmd_archive,
-	'R': lambda *args, **kwargs: cmd_archive(*args, **kwargs, archiving=False),
-	'r': cmd_refresh,
-}
-cmd_help = {
-	'a': cmd_add_help,
-	'd': cmd_delete_help,
-	'l': cmd_list_help,
-	'u': cmd_unseen_help,
-	'm': cmd_mark_help,
-	'M': cmd_unmark_help,
-	'A': cmd_archive_help,
-	'R': cmd_restore_help,
-	'r': cmd_refresh_help,
+	'add':     cmd_add,
+	'delete':  cmd_delete,
+	'list':    cmd_list,
+	'unseen':  cmd_unseen,
+	'mark':    cmd_mark,
+	'unmark':  cmd_unmark,
+	'archive': cmd_archive,
+	'restore': cmd_restore,
+	'refresh': cmd_refresh,
 }
 
 def find_series(series_config, find_id):
@@ -1060,14 +1056,14 @@ def term_width():
 known_options = {
 	None: {
 	},
-	'l': {
-		'--all':      { 'key': 'list:all', 'alias': ['-a'], 'help': 'Show also archived series' },
+	'list': {
+		'--all':      { 'key': 'list:all',      'alias': ['-a'], 'help': 'Show also archived series' },
 		'--archived': { 'key': 'list:archived', 'alias': ['-A'], 'help': 'Show only archived series' },
-		'--started':  { 'key': 'list:started', 'alias': ['-s'], 'help': 'Show only series with seen episodes.' },
-		'--planned':  { 'key': 'list:planned', 'alias': ['-p'], 'help': 'Show only series without seen episodes.' },
+		'--started':  { 'key': 'list:started',  'alias': ['-s'], 'help': 'Show only series with seen episodes.' },
+		'--planned':  { 'key': 'list:planned',  'alias': ['-p'], 'help': 'Show only series without seen episodes.' },
 	},
-	'u': {
-		'--future':  { 'key': 'unseen:future', 'alias': ['-f'], 'help': 'Show also future/unreleased episodes.' },
+	'unseen': {
+		'--future':  { 'key': 'unseen:future',  'alias': ['-f'], 'help': 'Show also future/unreleased episodes.' },
 		'--started': { 'key': 'unseen:started', 'alias': ['-s'], 'help': 'Show only series with seen episodes.' },
 		'--planned': { 'key': 'unseen:planned', 'alias': ['-p'], 'help': 'Show only series without seen episodes.' },
 	},
@@ -1123,20 +1119,20 @@ def print_usage(exit_code=0):
 	print(f'   {_b}A{_n}rchive   Archive series (still in config, but not normally shown)')
 	print(f'   {_b}R{_n}estore   Restore previously archived series')
 	print(f'   {_b}r{_n}efresh   Refresh episode data (forcibly)')
+	print(f'   {_b}h{_n}help     Show this help information')
 	print()
 	print(f'Also try: {_b}<mode>{_n} --help')
 	print()
 	print('Remarks:')
 	print(f'  # = Series number, as listed by e.g. the {_b}l{_n}isr or {_b}u{_n}nmark modes.')
-	print(f'  Marking/unmarking also supports ranges, e.g. {_b}%s m 1 2 1-10{_n}' % PRG)
-	print(f'  If the given command is not found, it is used as a pattern to the {_b}unseen{_n} command.')
+	print(f'  If an argument does not match a command, it will be used as an argument to the {_b}%s{_n} command.' % default_command)
 	print(f'  Only "shortest unique" part of the commands is required, e.g. ".ar"  for "archive".')
 	sys.exit(exit_code)
 
 
 def print_cmd_help(command, exit_code=0):
 	try:
-		show_help = cmd_help[command]
+		show_help = cmd_handlers[command].help
 	except KeyError:
 		print('%s: No help for command: %s' % (PRG, command))
 		sys.exit(1)
@@ -1236,6 +1232,12 @@ def plural(n):
 		n = len(n)
 	return '' if n == 1 else 's'
 
+
+_b = '\x1b[1m'     # bold
+_c = '\x1b[33;1m'  # command
+_o = '\x1b[34;1m'  # option
+_f = '\x1b[2m'     # faint
+_n = '\x1b[m'      # normal
 
 if __name__ == '__main__':
 	main()
