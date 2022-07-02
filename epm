@@ -256,7 +256,7 @@ def cmd_unseen(series_config, args, opts, width=None) -> str|None:
 			print()
 
 			total += 1
-			total_duration += unseen[0].get('runtime', 0)
+			total_duration += unseen[0].get('runtime') or 0
 
 	# this is wildly incorrect!
 	#print(f'\x1b[48;5;235m\x1b[J\rTotal unseen: \x1b[1m{total}\x1b[22;39m episodes  \x1b[2m{fmt_duration(total_duration)}\x1b[22;39m')
@@ -1004,7 +1004,7 @@ def print_seen_status(series: dict, gray: bool=False):
 		s += '\x1b[38;5;256mTotal: '
 
 	if seen:
-		seen_duration = sum(ep.get('runtime', 0) for ep in seen)
+		seen_duration = sum((ep.get('runtime') or 0) for ep in seen)
 		s += f'Seen: {len(seen)}  \x1b[2m{fmt_duration(seen_duration)}\x1b[m'
 		if all_seen:
 			s += '  \x1b[32;1mALL\x1b[m'
@@ -1013,7 +1013,7 @@ def print_seen_status(series: dict, gray: bool=False):
 		s += ' \x1b[34;1m-\x1b[m '
 
 	if unseen:
-		unseen_duration = sum(ep.get('runtime', 0) for ep in unseen)
+		unseen_duration = sum((ep.get('runtime') or 0) for ep in unseen)
 		s += f'Unseen: {len(unseen)}  \x1b[2m{fmt_duration(unseen_duration)}\x1b[m'
 
 	if seen or unseen:
