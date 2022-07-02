@@ -1280,20 +1280,22 @@ def save_series_config(config:dict) -> None:
 	def backup_name(idx):
 		return '%s.%d%s' % (series_config_file, idx, compression_extension)
 
-	# rotate backups
-	for idx in range(num_config_backups - 1, 0, -1):
-		if os.path.exists(backup_name(idx)):
-			os.rename(backup_name(idx), backup_name(idx + 1))
-
-	# current file becomes first backup (<name>.1)
-	mk_backup(series_config_file, backup_name(1))
-
 	# write to a temp file and then rename it afterwards
 	tmp_name = mkstemp(dir=os.path.dirname(series_config_file))[1]
 	try:
 		with open(tmp_name, 'wb') as fp:
 			fp.write(orjson.dumps(config, option=orjson.OPT_INDENT_2 | orjson.OPT_SORT_KEYS))
+
+		# rotate backups
+		for idx in range(num_config_backups - 1, 0, -1):
+			if os.path.exists(backup_name(idx)):
+				os.rename(backup_name(idx), backup_name(idx + 1))
+
+		# current file becomes first backup (<name>.1)
+		mk_backup(series_config_file, backup_name(1))
+
 		os.rename(tmp_name, series_config_file)
+
 	except Exception as e:
 		print('\x1b[41;97;1mERROR\x1b[m Failed saving series database: %s' % str(e))
 		os.remove(tmp_name)
