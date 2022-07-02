@@ -136,8 +136,8 @@ def eat_option(command, option, args, options) -> bool:
 	return True
 
 
-def cmd_unseen(series_config, args, opts, width=None):
-	refresh_all_episodes(series_config, opts=opts)
+def cmd_unseen(series_config, args, opts, width=None) -> str|None:
+	refresh_all(series_config, opts=opts)
 
 	series_list = get_series(series_config)
 	if not series_list:
@@ -273,8 +273,8 @@ def _unseen_help() -> None:
 cmd_unseen.help = _unseen_help
 
 
-def cmd_list(series_config, args, opts, width=None):
-	refresh_all_episodes(series_config, opts=opts, width=width)
+def cmd_list(series_config, args, opts, width=None) -> str|None:
+	refresh_all(series_config, opts=opts, width=width)
 
 	series_list = get_series(series_config)
 
@@ -337,7 +337,7 @@ cmd_list.help = _list_help
 
 year_ptn = re.compile(r'^(\d{4})|\((\d{4})\)$')  # 1968 or (1968)
 
-def cmd_add(series_config, args, opts, width=None):
+def cmd_add(series_config, args, opts, width=None) -> str|None:
 	if not args:
 		return 'required argument missing: <title> / <IMDb ID>'
 
@@ -452,7 +452,7 @@ def _add_help() -> None:
 cmd_add.help = _add_help
 
 
-def cmd_delete(series_config, args, opts, width=None):
+def cmd_delete(series_config, args, opts, width=None) -> str|None:
 	if not args:
 		return 'Required argument missing: #/<IMDb ID>'
 
@@ -484,8 +484,8 @@ def _delete_help() -> None:
 cmd_delete.help = _delete_help
 
 
-def cmd_mark(series_config, args, opts, marking=True, width=None):
-	refresh_all_episodes(series_config, opts=opts, width=width)
+def cmd_mark(series_config, args, opts, marking=True, width=None) -> str|None:
+	refresh_all(series_config, opts=opts, width=width)
 
 	if not args:
 		return 'Required argument missing: #/<IMDb ID>'
@@ -682,8 +682,8 @@ def _restore_help() -> None:
 cmd_restore.help = _restore_help
 
 
-def cmd_refresh(series_config, args, opts, width=None):
-	refresh_all_episodes(series_config, args, opts={ **opts, 'max-age': 0 }, width=width)
+def cmd_refresh(series_config, args, opts, width=None) -> None:
+	return refresh_all(series_config, args, opts={ **opts, 'max-age': 0 }, width=width)
 
 def _refresh_help() -> None:
 	print(f'{_b}Refresh episode data of all non-archived series.{_n}')
@@ -708,8 +708,8 @@ cmd_handlers = {
 	'refresh': cmd_refresh,
 }
 
-def find_series(series_config, find_id):
 	# if it's an int, search by index, else search by IMDB ID
+def find_series(series_config:dict, find_id:str) -> tuple[int|None, str|None, dict|None, str|None]:
 	try:
 		find_id = int(find_id)
 	except:
@@ -724,7 +724,7 @@ def find_series(series_config, find_id):
 	return None, None, None, f'Series not found: {find_id}'
 
 
-def no_series(series_config):
+def no_series(series_config:dict) -> str:
 	num_archived = series_num_archived(series_config)
 	if num_archived:
 		return 'No active series [but %d archived]. Use: \x1b[1m%s add <title search...> [<year>]\x1b[m' % (num_archived, PRG)
@@ -831,12 +831,12 @@ def refresh_all(series_config:dict, args:list=None, opts:dict=None, width:int=No
 
 useful_episode_fields = [ 'season', 'episode', 'title', 'date', 'overview', 'runtime' ]
 
-def transform_episode_info(episode):
+def transform_episode_info(episode:dict):
 	for field in list(episode.keys()):
 		if field not in useful_episode_fields:
 			episode.pop(field, 0)
 
-def print_series_title(num, info, title_width=0, series_id=None, gray=False, tail=None, archived=True):
+def print_series_title(num:int, info:dict, title_width:int=0, series_id:str=None, gray:bool=False, tail:str|None=None, archived:bool=True):
 	infop = {**info}
 
 	# pad title string if width is specified
@@ -880,7 +880,7 @@ def print_series_title(num, info, title_width=0, series_id=None, gray=False, tai
 
 
 
-def format_episode_title(series_title, episode, title_width=0, gray=False, remaining=0, today=False, only_released=False):
+def format_episode_title(series_title:str, episode:int, title_width:int=0, gray:bool=False, remaining:int=0, today:bool=False, only_released:bool=False):
 	s = ''
 
 	ep = {**episode}
@@ -926,7 +926,7 @@ def format_episode_title(series_title, episode, title_width=0, gray=False, remai
 	return s, not future
 
 
-def fmt_duration(seconds, roughly=False):
+def fmt_duration(seconds: int|float, roughly: bool=False):
 	months = int(seconds//(3600*24*30.4366666))
 	seconds -= months*3600*24*30.4366666
 	weeks = int(seconds//(3600*24*7))
@@ -967,15 +967,15 @@ def fmt_duration(seconds, roughly=False):
 	return ' '.join(parts)
 
 
-def strip_ansi(s):
+def strip_ansi(s: str):
 	return re.sub('\x1b\\[[0-9;]*[mJ]', '', s)
 
 
-def _ep_key(episode):
+def _ep_key(episode: dict):
 	return f'{episode["season"]}:{episode["episode"]}'
 
 
-def print_seen_status(series, gray=False):
+def print_seen_status(series: dict, gray: bool=False):
 	ind = '       '
 
 	print(f'{ind}', end='')
@@ -1029,15 +1029,16 @@ def print_seen_status(series, gray=False):
 			print(f'{ind}Next:', s)
 
 
-def series_num_archived(series_config):
-	return sum(1 if 'archived' in series else 0 for series in series_config.values())
+def series_num_archived(series_config: dict):
+	return sum(1 if get_meta('archived', series) else 0 for series in series_config.values())
 
 
-def get_series(series_config):
+def get_series(series_config: dict, archived:bool|None=None):
 	series_ids = sorted(series_config, key=lambda series_id: (series_config[series_id]['title'].casefold(), series_config[series_id].get('year', '')))
 
 	series = []
 	index = 1
+
 	for series_id in series_ids:
 		info = series_config[series_id]
 
@@ -1050,7 +1051,7 @@ def get_series(series_config):
 	return series
 
 
-def seen_unseen_episodes(series, before=None):
+def seen_unseen_episodes(series: dict, before=None) -> tuple[list,list]:
 	episodes = series.get('episodes', [])
 	seen = get_meta(series, 'seen', {})
 
@@ -1074,7 +1075,7 @@ def seen_unseen_episodes(series, before=None):
 	return seen_eps, unseen_eps
 
 
-def term_width():
+def term_width() -> int:
 	try:
 		return int(os.popen('stty size', 'r').read().split()[1])
 	except:
@@ -1100,7 +1101,7 @@ known_options = {
 	},
 }
 
-def get_option_key(command, option):
+def get_option_key(command:str, option:str):
 	cmd_opts = known_options.get(command)
 	if not cmd_opts:
 		return None
@@ -1110,7 +1111,7 @@ def get_option_key(command, option):
 	return None
 
 
-def options_help(command):
+def options_help(command:str):
 	cmd_opts = known_options.get(command)
 	if not cmd_opts:
 		return []
@@ -1125,7 +1126,7 @@ def options_help(command):
 	return opt_help
 
 
-def print_cmd_option_help(command):
+def print_cmd_option_help(command:str) -> None:
 	options = options_help(command)
 	if options:
 		print('\x1b[1mOptions:\x1b[m')
@@ -1135,7 +1136,7 @@ def print_cmd_option_help(command):
 			print('   %-20s %s' % (opt, text))
 
 
-def print_usage(exit_code=0):
+def print_usage(exit_code:int=0) -> None:
 	print(f'{_b}%s{_n} / Episode Manager / (c)2021 André Jonsson' % PRG)
 	print('Version %s (%s) ' % (VERSION, VERSION_DATE))
 	print(f'{_b}Usage:{_n} %s [<options>] [{_b}mode{_n}] [{_o}<args>{_n}]]' % PRG)
@@ -1161,7 +1162,7 @@ def print_usage(exit_code=0):
 	sys.exit(exit_code)
 
 
-def print_cmd_help(command, exit_code=0):
+def print_cmd_help(command:str, exit_code:int=0) -> None:
 	try:
 		show_help = cmd_handlers[command].help
 	except KeyError:
@@ -1172,30 +1173,30 @@ def print_cmd_help(command, exit_code=0):
 	sys.exit(exit_code)
 
 
-def bad_opt(opt):
+def bad_opt(opt:str) -> None:
 	print('Unknown option: \x1b[41;97;1m%s\x1b[m' % opt, file=sys.stderr)
 	sys.exit(1)
 
 
-def bad_cmd(cmd):
+def bad_cmd(cmd:str) -> None:
 	print('Unknown command: \x1b[41;97;1m%s\x1b[m' % cmd, file=sys.stderr)
 	sys.exit(1)
 
 
-def ambiguous_cmd(name, matching):
+def ambiguous_cmd(name:str, matching:str) -> None:
 	print('Ambiguous command: \x1b[41;97;1m%s\x1b[m  matches: %s' % (name, '\x1b[34;1m,\x1b[m '.join(sorted(matching))), file=sys.stderr)
 	sys.exit(1)
 
 
-def now():
+def now() -> str:
 	return str(now_datetime())
 
 
-def now_datetime():
+def now_datetime() -> datetime:
 	return datetime.fromtimestamp(int(time.time()))
 
 
-def load_series_config():
+def load_series_config() -> dict:
 	config = {}
 	if os.path.exists(series_config_file) and os.path.getsize(series_config_file) > 1:
 		with open(series_config_file, 'rb') as fp:
@@ -1228,10 +1229,10 @@ if not shutil.which(compressor):
 	compressor = None
 	compression_extension = ''
 
-# TODO: these should return a waitable promise (so we can do it in parallel with the serialization)
+# TODO: 'mk_backup' should return a waitable promise (so we can do it in parallel with the serialization)
 if compressor:
 	from subprocess import Popen
-	def mk_backup(filename, destination):
+	def mk_backup(filename:str, destination:str) -> None:
 		tmp_name = mkstemp( dir=os.path.dirname(filename))[1]
 		os.rename(filename, tmp_name)
 		try:
@@ -1246,10 +1247,10 @@ if compressor:
 
 		return exit_code == 0
 else:
-	def mk_backup(filename, destination):
+	def mk_backup(filename:str, destination:str) -> None:
 		os.rename(filename, destination)
 
-def save_series_config(config):
+def save_series_config(config:dict) -> None:
 	if not os.path.exists(series_config_file):
 		os.makedirs(os.path.dirname(series_config_file), exist_ok=True)
 
@@ -1275,7 +1276,7 @@ def save_series_config(config):
 		os.remove(tmp_name)
 
 
-def plural(n):
+def plural(n:int) -> str:
 	if isinstance(n, (list, tuple, dict)):
 		n = len(n)
 	return '' if n == 1 else 's'
