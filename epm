@@ -767,7 +767,7 @@ def refresh_all(series_config:dict, args:list=None, opts:dict=None, width:int=No
 
 	opts = opts or {}
 	max_age = opts.get('max-age', default_max_episodes_refresh_age)
-	force = bool(opts.get('force'))
+	forced = bool(opts.get('refresh:force'))
 
 	now_dt = now_datetime()
 
@@ -792,15 +792,18 @@ def refresh_all(series_config:dict, args:list=None, opts:dict=None, width:int=No
 		if search and not match_search(series):
 			continue
 
-		if force or (not last_refresh or age(last_refresh) > max_age):
 		last_refresh = get_meta(series, refreshed_key)
+		if forced or (not last_refresh or age(last_refresh) > max_age):
 			to_refresh.append(series_id)
 
 	if not to_refresh:
 		return
 
 	t0 = time.time()
-	print('\x1b[2mRefreshing episodes of %d series...\x1b[m' % len(to_refresh), end='', flush=True)
+
+	if forced:
+		print('\x1b[33m(forced)\x1b[m ', end='')
+	print('\x1b[2mRefreshing %d series...\x1b[m' % len(to_refresh), end='', flush=True)
 
 	promises = []
 	with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
@@ -1091,6 +1094,9 @@ known_options = {
 		'--future':  { 'key': 'unseen:future',  'alias': ['-f'], 'help': 'Show also future/unreleased episodes.' },
 		'--started': { 'key': 'unseen:started', 'alias': ['-s'], 'help': 'Show only series with seen episodes.' },
 		'--planned': { 'key': 'unseen:planned', 'alias': ['-p'], 'help': 'Show only series without seen episodes.' },
+	},
+	'refresh': {
+		'--force':   { 'key': 'refresh:force',  'alias': ['-f'], 'help': 'Refresh whether needed or not.' },
 	},
 }
 
