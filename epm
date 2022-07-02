@@ -292,9 +292,24 @@ def cmd_list(series_config, args, opts, width=None) -> str|None:
 	only_started = 'list:started' in opts
 	only_planned = 'list:planned' in opts
 
-	search = re.compile('.*?'.join(re.escape(a.casefold()) for a in ' '.join(args).split()))
-	def match_search(series):
-		return search.search(series['title'].casefold()) is not None
+	if args:
+		search = re.compile('.*?'.join(re.escape(a.casefold()) for a in ' '.join(args).split()))
+		def match_search(series):
+			return search.search(series['title'].casefold()) is not None
+	else:
+		search = None
+
+	print('\x1b[2mListing ', end='')
+	if only_started:
+		print('started ', end='')
+	elif only_planned:
+		print('planned ', end='')
+	elif only_archived:
+		print('archived ', end='')
+	print('series', end='')
+	if search:
+		print(', matching "%s"' % search.pattern, end='')
+	print('.\x1b[m')
 
 	num_shown = 0
 	num_archived = 0
