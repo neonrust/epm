@@ -807,12 +807,11 @@ def refresh_all(series_config:dict, args:list=None, opts:dict=None, width:int=No
 		search = None
 
 
-	all_series = get_series(series_config)
+	all_series = get_series(series_config, archived=False)
+
 	to_refresh = []
 
 	for idx, (_, series_id, series) in enumerate(all_series):
-		if 'archived' in series:
-			continue
 		if search and not match_search(series):
 			continue
 
