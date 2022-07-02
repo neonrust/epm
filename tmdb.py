@@ -16,8 +16,26 @@ _base_url = _base_url_tmpl % os.getenv('TMDB_API_KEY', _bad_key)
 def set_api_key(key):
 	global _base_url
 	_base_url = _base_url_tmpl % key
+	_update_query_func()
 
 __recent_searches = {}
+
+_query = None
+
+def _update_query_func():
+
+	def query(endpoint):
+		url = _base_url % { 'path': endpoint }
+		resp = requests.get(url)
+		if resp.status_code != HTTPStatus.OK:
+			return None
+		return resp.json()
+
+	global _query
+	_query = query
+
+_update_query_func()
+
 
 def search(search, type='series', year=None):
 
@@ -78,11 +96,9 @@ def search(search, type='series', year=None):
 __imdb_id_to_tmdb = {}
 
 def _get_tmdb_id(imdb_id):
-	url = _base_url % { 'path': '/find/%s' % imdb_id }
-	resp = requests.get(url)
-	if resp.status_code != HTTPStatus.OK:
+	data = _query('/find/%s' % imdb_id)
+	if data is None:
 		raise RuntimeError('Unknown IMDb ID: %s' % imdb_id)
-	data = resp.json()
 
 	series = data.get('tv_results', [])
 	if not series:
@@ -106,18 +122,15 @@ def details(title_id, type='series'):
 
 	data = __details.get(title_id)
 	if data is not None:
-		print('existing data:', json.dumps(data, indent=2))
 		return data
 
 	path = '/tv/%s' % title_id
 	if type == 'film':
 		path = '/movie/%s' % title_id
 
-	url = _base_url % { 'path': path }
-	resp = requests.get(url)
-	if resp.status_code != HTTPStatus.OK:
+	data = _query(path)
+	if data is None:
 		return None
-	data = resp.json()
 
 	_rename_keys(data, {
 		'name': 'title',
@@ -190,16 +203,11 @@ def episodes(series_id, details=False):
 	num_seasons = data.get('total_seasons', 1)
 
 	ep_runtime = data.get('episode_run_time')
-	print('%s : runtime: %s' % (series_id, ep_runtime))
 
 	def fetch_season(season):
-		url = _base_url % {'path': '/tv/%s/season/%d' % (series_id, season)}
-
-		resp = requests.get(url)
-		if resp.status_code != HTTPStatus.OK:
+		data = _query('/tv/%s/season/%d' % (series_id, season))
+		if data is None:
 			return []
-
-		data = json.loads(resp.content)
 		episodes = data.get('episodes', [])
 
 		_rename_keys(episodes, {
