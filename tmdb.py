@@ -212,7 +212,7 @@ def details(title_id, type='series'):
 _f_details = details
 
 
-__parallel_requests = 10
+__parallel_requests = 16
 
 def set_parallel(num):
 	global __parallel_requests
