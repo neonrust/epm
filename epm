@@ -2,7 +2,12 @@
 # -*- mode: python -*-
 
 import sys
-import orjson
+try:
+	import orjson
+except:
+	import json
+	orjson = None
+
 import os.path
 import re
 import time
@@ -1181,6 +1186,10 @@ def print_usage(exit_code:int=0) -> None:
 	print(f'  # = Series number, as listed by e.g. the {_b}l{_n}isr or {_b}u{_n}nmark modes.')
 	print(f'  If an argument does not match a command, it will be used as an argument to the {_b}%s{_n} command.' % default_command)
 	print(f'  Only "shortest unique" part of the commands is required, e.g. ".ar"  for "archive".')
+	if orjson is not None:
+		print(f'  Using {_b}orjson{_n} for faster load/save.')
+	else:
+		print(f'  {_f}Do \'pip3 install orjson\' for faster load/save{_n}')
 	sys.exit(exit_code)
 
 
@@ -1221,8 +1230,12 @@ def now_datetime() -> datetime:
 def load_series_config() -> dict:
 	config = {}
 	if os.path.exists(series_config_file) and os.path.getsize(series_config_file) > 1:
-		with open(series_config_file, 'rb') as fp:
-			config = orjson.loads(fp.read())
+		if orjson is not None:
+			with open(series_config_file, 'rb') as fp:
+				config = orjson.loads(fp.read())
+		else:
+			with open(series_config_file, 'r') as fp:
+				config = json.load(fp)
 
 	# migrate meta data to new structure
 	meta_migrated = 0
@@ -1282,8 +1295,12 @@ def save_series_config(config:dict) -> None:
 	# write to a temp file and then rename it afterwards
 	tmp_name = mkstemp(dir=os.path.dirname(series_config_file))[1]
 	try:
-		with open(tmp_name, 'wb') as fp:
-			fp.write(orjson.dumps(config, option=orjson.OPT_INDENT_2 | orjson.OPT_SORT_KEYS))
+		if orjson is not None:
+			with open(tmp_name, 'wb') as fp:
+				fp.write(orjson.dumps(config, option=orjson.OPT_INDENT_2 | orjson.OPT_SORT_KEYS))
+		else:
+			with open(tmp_name, 'w') as fp:
+				json.dump(config, fp, indent=2, sort_keys=True)
 
 		# rotate backups
 		for idx in range(num_config_backups - 1, 0, -1):
