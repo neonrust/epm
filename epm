@@ -268,8 +268,8 @@ def cmd_unseen(series_config, args, opts, width=None) -> str|None:
 
 def _unseen_help() -> None:
 	print(f'{_b}Show unseen episodes of series{_n}')
-	print(f'Usage: %s {_c}.unseen{_n} <options> <search...>' % PRG)
-	print(f'    {_o}#/<IMDb ID>         {_n} Show only specific')
+	print(f'Usage: %s {_c}unseen{_n} <options> <search...>' % PRG)
+	print(f'    {_o}# / .<Series ID>    {_n} Show only specific')
 	print(f'    {_o}[<pattern>]         {_n} Show only matching')
 	print(f'    {_o}--future            {_n} Also unreleased episodes (max 1)')
 
@@ -347,8 +347,8 @@ def cmd_list(series_config, args, opts, width=None) -> str|None:
 
 def _list_help() -> None:
 	print(f'{_b}List series{_n}')
-	print(f'Usage: %s {_c}.list{_n} <options> [<search...>]' % PRG)
-	print(f'    {_o}[<search...>]     {_n} Show only matching series')
+	print(f'Usage: %s {_c}list{_n} <options> [<title search>...]' % PRG)
+	print(f'    {_o}[<title search>]     {_n} Show only matching series')
 
 	print_cmd_option_help('list')
 
@@ -359,7 +359,7 @@ year_ptn = re.compile(r'^(\d{4})|\((\d{4})\)$')  # 1968 or (1968)
 
 def cmd_add(series_config, args, opts, width=None) -> str|None:
 	if not args:
-		return 'required argument missing: <title> / <IMDb ID>'
+		return 'required argument missing: <title> / <Series ID>'
 
 	args = list(a for a in ' '.join(args).split())
 	year = None
@@ -463,9 +463,7 @@ def cmd_add(series_config, args, opts, width=None) -> str|None:
 
 def _add_help() -> None:
 	print(f'{_b}Search for a series and (optionally) add it.{_n}')
-	print(f'Usage: %s {_c}.add{_n} <search>' % PRG)
-	print(f'    {_o}<title search>{_n}')
-	print(f'    {_o}<IMDb ID>{_n}')
+	print(f'Usage: %s {_c}add{_n} <title search> [<year>]' % PRG)
 
 	print_cmd_option_help('add')
 
@@ -474,7 +472,7 @@ cmd_add.help = _add_help
 
 def cmd_delete(series_config, args, opts, width=None) -> str|None:
 	if not args:
-		return 'Required argument missing: #/<IMDb ID>'
+		return 'Required argument missing: # / .<Series ID>'
 
 	index, series_id, series, err = find_series(series_config, args.pop(0))
 	if err is not None:
@@ -496,8 +494,8 @@ def cmd_delete(series_config, args, opts, width=None) -> str|None:
 
 def _delete_help() -> None:
 	print(f'{_b}Complete remove a series from EPM - non-recoverable!{_n}')
-	print(f'Usage: %s {_c}.delete{_n} <# / IMDb ID>' % PRG)
-	print(f'    {_o}#/<IMDb ID>{_n}')
+	print(f'Usage: %s {_c}delete{_n} # / .<Series ID>' % PRG)
+	print(f'    {_o}# / .<Series ID>{_n}')
 
 	print_cmd_option_help('delete')
 
@@ -508,7 +506,7 @@ def cmd_mark(series_config, args, opts, marking=True, width=None) -> str|None:
 	refresh_all(series_config, opts=opts, width=width)
 
 	if not args:
-		return 'Required argument missing: #/<IMDb ID>'
+		return 'Required argument missing: # / .<Series ID>'
 
 	find_id = args.pop(0)
 
@@ -606,10 +604,10 @@ def cmd_mark(series_config, args, opts, marking=True, width=None) -> str|None:
 
 def _mark_help() -> None:
 	print(f'{_b}Mark a series, season or specific episode as seen.{_n}')
-	print(f'Usage: %s {_c}.mark{_n} <# / IMDb ID> [<season / episode specifier>]' % PRG)
-	print(f'    {_o}#/<IMDb ID> <season> <episode> {_n} Episodes')
-	print(f'    {_o}#/<IMDb ID> <season>           {_n} Seasons')
-	print(f'    {_o}#/<IMDb ID>                    {_n} Whole series')
+	print(f'Usage: %s {_c}mark{_n} # / .<Series ID> [<season / episode specifier>]' % PRG)
+	print(f'    {_o}# / .<Series ID> <season> <episode> {_n} Episodes')
+	print(f'    {_o}# / .<Series ID> <season>           {_n} Seasons')
+	print(f'    {_o}# / .<Series ID>                    {_n} Whole series')
 	print('Also support ranges:   > %s .mark 42 1 1-5' % PRG)
 	print('And episode specifiers (with ranges): > %s .mark 42 s1e1-5' % PRG)
 
@@ -622,11 +620,11 @@ def cmd_unmark(*args, **kwargs):
 	return cmd_mark(*args, **kwargs, marking=False)
 
 def _unmark_help() -> None:
-	print(f'{_b}Unmark a series/season/episode - reverse of .mark command.{_n}')
-	print(f'Usage: %s {_c}.unmark{_n} <# / IMDb ID> [<season / episode specifier>]' % PRG)
-	print(f'    {_o}#/<IMDb ID> <season> <episode> {_n} Episodes')
-	print(f'    {_o}#/<IMDb ID> <season>           {_n} Seasons')
-	print(f'    {_o}#/<IMDb ID>                    {_n} Whole series')
+	print(f'{_b}Unmark a series/season/episode - reverse of mark command.{_n}')
+	print(f'Usage: %s {_c}unmark{_n} # / .<Series ID> [<season / episode specifier>]' % PRG)
+	print(f'    {_o}# / .<Series ID> <season> <episode> {_n} Episodes')
+	print(f'    {_o}# / .<Series ID> <season>           {_n} Seasons')
+	print(f'    {_o}# / .<Series ID>                    {_n} Whole series')
 	print('Also support ranges:   > %s .mark 42 1 1-5' % PRG)
 	print('And episode specifiers (with ranges): > %s .mark 42 s1e1-5' % PRG)
 
@@ -648,7 +646,7 @@ def del_meta(series: dict, key: str) -> None:
 
 def cmd_archive(series_config, args, opts, archiving=True, width=None) -> str|None:
 	if not args:
-		return 'Required argument missing: #/<IMDb ID>'
+		return 'Required argument missing: # / .<Series ID>'
 
 	find_id = args.pop(0)
 
@@ -680,9 +678,9 @@ def cmd_archive(series_config, args, opts, archiving=True, width=None) -> str|No
 
 
 def _archive_help() -> None:
-	print(f'{_b}Archving series - hides from normal .list command.{_n}')
-	print(f'Usage: %s {_c}.archive{_n} <# / IMDb ID>' % PRG)
-	print(f'    {_o}#/<IMDb ID>{_n}')
+	print(f'{_b}Archving series - hides from normal list command.{_n}')
+	print(f'Usage: %s {_c}archive{_n} # / .<Series ID>' % PRG)
+	print(f'    {_o}# / .<Series ID>{_n}')
 
 	print_cmd_option_help('archive')
 
@@ -693,9 +691,9 @@ def cmd_restore(*args, **kwargs) -> None:
 	return cmd_archive(*args, **kwargs, archiving=False)
 
 def _restore_help() -> None:
-	print(f'{_b}Restore series - reverse of .archive command.{_n}')
-	print(f'Usage: %s {_c}.restore{_n} <# / IMDb ID>' % PRG)
-	print(f'    {_o}#/<IMDb ID>{_n}')
+	print(f'{_b}Restore series - reverse of archive command.{_n}')
+	print(f'Usage: %s {_c}restore{_n} # / .<Series ID>' % PRG)
+	print(f'    {_o}# / .<Series ID>{_n}')
 
 	print_cmd_option_help('restore')
 
@@ -707,9 +705,9 @@ def cmd_refresh(series_config, args, opts, width=None) -> None:
 
 def _refresh_help() -> None:
 	print(f'{_b}Refresh episode data of all non-archived series.{_n}')
-	print(f'Usage: %s {_c}.refresh{_n} <# / IMDb ID> {_o}|{_n} <pattern>' % PRG)
-	print(f'    {_o}[#/<IMDb ID>]      {_n} Only specified series')
-	print(f'    {_o}[<pattern>]        {_n} Only matching series')
+	print(f'Usage: %s {_c}refresh{_n} # / .<Series ID> {_o}|{_n} <pattern>' % PRG)
+	print(f'    {_o}[# / .<Series ID>]  {_n} Only specified series')
+	print(f'    {_o}[<pattern>]         {_n} Only matching series')
 
 	print_cmd_option_help('refresh')
 
@@ -731,18 +729,18 @@ cmd_handlers = {
 def find_series(series_config:dict, find_id:str) -> tuple[int|None, str|None, dict|None, str|None]:
 	nothing_found = None, None, None, f'Series not found: {find_id}'
 
-	# if it starts with '#' (and rest numerical), search by index, else search by IMDB ID
-	# hm, but '#' is a comment in shell, so requires escaping -> awkward to type :|
+	# if it starts with ':' (and rest numerical), search by id,
+	# else search listing index (as dictated by get_series())
 
 	if not find_id:
 		return nothing_found
 
-	find_index = None
 	try:
-		if find_id[0] == '#':
-			find_index = int(find_id[1:])
+		find_index = int(find_id)
 	except:
-		pass
+		find_index = None
+		if find_id[0] == ':':
+			find_id = find_id[1:]
 
 	for index, series_id, series in get_series(series_config):
 		if find_index is not None and find_index == index:
@@ -1180,10 +1178,10 @@ def print_usage(exit_code:int=0) -> None:
 	print(f'   {_b}r{_n}efresh   Refresh episode data (forcibly)')
 	print(f'   {_b}h{_n}elp      Show this help information')
 	print()
-	print(f'Also try: {_b}<mode>{_n} --help')
+	print(f'See also: %s {_b}<mode>{_n} --help' % PRG)
 	print()
 	print('Remarks:')
-	print(f'  # = Series number, as listed by e.g. the {_b}l{_n}isr or {_b}u{_n}nmark modes.')
+	print(f'  # = Series listing number, e.g. as listed by the {_b}l{_n}ist command.')
 	print(f'  If an argument does not match a command, it will be used as an argument to the {_b}%s{_n} command.' % default_command)
 	print(f'  Only "shortest unique" part of the commands is required, e.g. ".ar"  for "archive".')
 	if orjson is not None:
