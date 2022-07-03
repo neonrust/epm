@@ -269,7 +269,7 @@ def cmd_unseen(series_config, args, opts, width=None) -> str|None:
 def _unseen_help() -> None:
 	print(f'{_b}Show unseen episodes of series{_n}')
 	print(f'Usage: %s {_c}unseen{_n} <options> <search...>' % PRG)
-	print(f'    {_o}# / .<Series ID>    {_n} Show only specific')
+	print(f'    {_o}# / <IMDb ID>       {_n} Show only specific')
 	print(f'    {_o}[<pattern>]         {_n} Show only matching')
 	print(f'    {_o}--future            {_n} Also unreleased episodes (max 1)')
 
@@ -338,12 +338,13 @@ def cmd_list(series_config, args, opts, width=None) -> str|None:
 			continue
 
 		num_shown += 1
-		print_series_title(index, series, series_id=series_id, title_width=max_width, gray=archived and not only_archived)
+		print_series_title(index, series, imdb_id=series.get('imdb_id'), title_width=max_width, gray=archived and not only_archived)
 		if archived and not only_archived:
 			print('\x1b[2m       Archived\x1b[m')
 		print_seen_status(series, gray=archived and not only_archived)
 
 	print('%d series \x1b[2;3mTotal: %d   Archived: %d\x1b[m' % (num_shown, len(series_list), num_archived))
+
 
 def _list_help() -> None:
 	print(f'{_b}List series{_n}')
@@ -389,14 +390,18 @@ def cmd_add(series_config, args, opts, width=None) -> str|None:
 					arch_tail = '  \x1b[33m(archived)\x1b[m'
 				else:
 					arch_tail = None
-				print_series_title(None, series_config[hit['id']], series_id=hit['id'], gray=True, tail=arch_tail)
+
+				imdb_id = series_config[hit['id']].get('imdb_id')
+				print_series_title(None, series_config[hit['id']], imdb_id=imdb_id, gray=True, tail=arch_tail)
 
 		max_width = width - 5 - 3 - len('1968')*2 - 1 - 2 - 3 - len('episodes')
 		#max_width = max(len(series['title']) for series in hits)
 
 		print('\x1b[32;1mFound \x1b[0;1m%d\x1b[m \x1b[32;1mseries:\x1b[m' % len(hits))
+		# TODO: fetch IMDb ID for all hits
 		for idx, hit in enumerate(hits):
-			print_series_title(idx + 1, hit, series_id=hit['id'], title_width=max_width)
+			imdb_id = None
+			print_series_title(idx + 1, hit, imdb_id=imdb_id, title_width=max_width)
 
 		last_num = len(hits)
 		while True:
@@ -427,15 +432,15 @@ def cmd_add(series_config, args, opts, width=None) -> str|None:
 
 	if hit['id'] in series_config:
 		print('\x1b[33;1mAlready added:\x1b[m')
-		for index, sid, _ in get_series(series_config):
-			if sid == series_id:
-				break
+		index = find_list_index(series_id)
 
 		if has_meta(series_config[series_id], 'archived'):
 			arch_tail = '  \x1b[33m(archived)\x1b[m'
 		else:
 			arch_tail = None
-		print_series_title(index, series_config[series_id], series_id=series_id, tail=arch_tail)
+
+		imdb_id = series_config[hit['id']].get('imdb_id')
+		print_series_title(index, series_config[series_id], imdb_id=imdb_id, tail=arch_tail)
 		return
 
 	hit[meta_key] = {}
@@ -455,11 +460,18 @@ def cmd_add(series_config, args, opts, width=None) -> str|None:
 
 	print('\x1b[1mSeries added:\x1b[m  \x1b[2m(series renumbered)\x1b[m')
 
+	# need to loop to figure out its list index
 	for index, sid, _ in get_series(series_config):
 		if sid == series_id:
+			imdb_id = series_config[series_id].get(imdb_id)
+			print_series_title(index, hit, imdb_id=imdb_id)
 			break
 
-	print_series_title(index, {**hit, 'id': series_id}, series_id=series_id)
+def find_list_index(series_id):
+	for index, sid, _ in get_series(series_config):
+		if sid == series_id:
+			return index
+	return None
 
 def _add_help() -> None:
 	print(f'{_b}Search for a series and (optionally) add it.{_n}')
@@ -472,7 +484,7 @@ cmd_add.help = _add_help
 
 def cmd_delete(series_config, args, opts, width=None) -> str|None:
 	if not args:
-		return 'Required argument missing: # / .<Series ID>'
+		return 'Required argument missing: # / <IMDb ID>'
 
 	index, series_id, series, err = find_series(series_config, args.pop(0))
 	if err is not None:
@@ -481,7 +493,7 @@ def cmd_delete(series_config, args, opts, width=None) -> str|None:
 	del series_config[series_id]
 
 	print('\x1b[1mDeleting series:\x1b[m')
-	print_series_title(None, series, series_id=series_id)
+	print_series_title(None, series, imdb_id=series.get('imdb_id'))
 
 	answer = input('\x1b[41;37;1mAre you sure? (can not be undone)\x1b[m [yes/No] ')
 	if answer.lower() not in ('y', 'yes'):
@@ -490,12 +502,12 @@ def cmd_delete(series_config, args, opts, width=None) -> str|None:
 	save_series_config(series_config)
 
 	print('\x1b[1mSeries deleted:\x1b[m \x1b[2m(series renumbered)\x1b[m')
-	print_series_title(index, series, series_id=series_id)
+	print_series_title(index, series, imdb_id=series.get('imdb_id'))
 
 def _delete_help() -> None:
 	print(f'{_b}Complete remove a series from EPM - non-recoverable!{_n}')
-	print(f'Usage: %s {_c}delete{_n} # / .<Series ID>' % PRG)
-	print(f'    {_o}# / .<Series ID>{_n}')
+	print(f'Usage: %s {_c}delete{_n} # / <IMDb ID>' % PRG)
+	print(f'    {_o}# / <IMDb ID>{_n}')
 
 	print_cmd_option_help('delete')
 
@@ -506,7 +518,7 @@ def cmd_mark(series_config, args, opts, marking=True, width=None) -> str|None:
 	refresh_all(series_config, opts=opts, width=width)
 
 	if not args:
-		return 'Required argument missing: # / .<Series ID>'
+		return 'Required argument missing: # / <IMDb ID>'
 
 	find_id = args.pop(0)
 
@@ -604,10 +616,10 @@ def cmd_mark(series_config, args, opts, marking=True, width=None) -> str|None:
 
 def _mark_help() -> None:
 	print(f'{_b}Mark a series, season or specific episode as seen.{_n}')
-	print(f'Usage: %s {_c}mark{_n} # / .<Series ID> [<season / episode specifier>]' % PRG)
-	print(f'    {_o}# / .<Series ID> <season> <episode> {_n} Episodes')
-	print(f'    {_o}# / .<Series ID> <season>           {_n} Seasons')
-	print(f'    {_o}# / .<Series ID>                    {_n} Whole series')
+	print(f'Usage: %s {_c}mark{_n} # / <IMDb ID> [<season / episode specifier>]' % PRG)
+	print(f'    {_o}# / <IMDb ID> <season> <episode> {_n} Episodes')
+	print(f'    {_o}# / <IMDb ID> <season>           {_n} Seasons')
+	print(f'    {_o}# / <IMDb ID>                    {_n} Whole series')
 	print('Also support ranges:   > %s .mark 42 1 1-5' % PRG)
 	print('And episode specifiers (with ranges): > %s .mark 42 s1e1-5' % PRG)
 
@@ -621,10 +633,10 @@ def cmd_unmark(*args, **kwargs):
 
 def _unmark_help() -> None:
 	print(f'{_b}Unmark a series/season/episode - reverse of mark command.{_n}')
-	print(f'Usage: %s {_c}unmark{_n} # / .<Series ID> [<season / episode specifier>]' % PRG)
-	print(f'    {_o}# / .<Series ID> <season> <episode> {_n} Episodes')
-	print(f'    {_o}# / .<Series ID> <season>           {_n} Seasons')
-	print(f'    {_o}# / .<Series ID>                    {_n} Whole series')
+	print(f'Usage: %s {_c}unmark{_n} # / <IMDb ID> [<season / episode specifier>]' % PRG)
+	print(f'    {_o}# / <IMDb ID> <season> <episode> {_n} Episodes')
+	print(f'    {_o}# / <IMDb ID> <season>           {_n} Seasons')
+	print(f'    {_o}# / <IMDb ID>                    {_n} Whole series')
 	print('Also support ranges:   > %s .mark 42 1 1-5' % PRG)
 	print('And episode specifiers (with ranges): > %s .mark 42 s1e1-5' % PRG)
 
@@ -646,7 +658,7 @@ def del_meta(series: dict, key: str) -> None:
 
 def cmd_archive(series_config, args, opts, archiving=True, width=None) -> str|None:
 	if not args:
-		return 'Required argument missing: # / .<Series ID>'
+		return 'Required argument missing: # / <IMDb ID>'
 
 	find_id = args.pop(0)
 
@@ -672,15 +684,15 @@ def cmd_archive(series_config, args, opts, archiving=True, width=None) -> str|No
 		print('\x1b[1mSeries restored:\x1b[m')
 		del_meta(series, 'archived')
 
-	print_series_title(index, series, series_id=series_id)
+	print_series_title(index, series, imdb_id=series.get('imdb_id'))
 
 	save_series_config(series_config)
 
 
 def _archive_help() -> None:
 	print(f'{_b}Archving series - hides from normal list command.{_n}')
-	print(f'Usage: %s {_c}archive{_n} # / .<Series ID>' % PRG)
-	print(f'    {_o}# / .<Series ID>{_n}')
+	print(f'Usage: %s {_c}archive{_n} # / <IMDb ID>' % PRG)
+	print(f'    {_o}# / <IMDb ID>{_n}')
 
 	print_cmd_option_help('archive')
 
@@ -692,8 +704,8 @@ def cmd_restore(*args, **kwargs) -> None:
 
 def _restore_help() -> None:
 	print(f'{_b}Restore series - reverse of archive command.{_n}')
-	print(f'Usage: %s {_c}restore{_n} # / .<Series ID>' % PRG)
-	print(f'    {_o}# / .<Series ID>{_n}')
+	print(f'Usage: %s {_c}restore{_n} # / <IMDb ID>' % PRG)
+	print(f'    {_o}# / <IMDb ID>{_n}')
 
 	print_cmd_option_help('restore')
 
@@ -705,8 +717,8 @@ def cmd_refresh(series_config, args, opts, width=None) -> None:
 
 def _refresh_help() -> None:
 	print(f'{_b}Refresh episode data of all non-archived series.{_n}')
-	print(f'Usage: %s {_c}refresh{_n} # / .<Series ID> {_o}|{_n} <pattern>' % PRG)
-	print(f'    {_o}[# / .<Series ID>]  {_n} Only specified series')
+	print(f'Usage: %s {_c}refresh{_n} # / <IMDb ID> {_o}|{_n} <pattern>' % PRG)
+	print(f'    {_o}[# / <IMDb ID>]     {_n} Only specified series')
 	print(f'    {_o}[<pattern>]         {_n} Only matching series')
 
 	print_cmd_option_help('refresh')
@@ -729,7 +741,7 @@ cmd_handlers = {
 def find_series(series_config:dict, find_id:str) -> tuple[int|None, str|None, dict|None, str|None]:
 	nothing_found = None, None, None, f'Series not found: {find_id}'
 
-	# if it starts with ':' (and rest numerical), search by id,
+	# if it starts with 'tt' (and rest numerical), search by IMDb ID
 	# else search listing index (as dictated by get_series())
 
 	if not find_id:
@@ -739,13 +751,15 @@ def find_series(series_config:dict, find_id:str) -> tuple[int|None, str|None, di
 		find_index = int(find_id)
 	except:
 		find_index = None
-		if find_id[0] == ':':
+		if find_id[0] == 'tt':
 			find_id = find_id[1:]
+		else:
+			return nothing_found
 
 	for index, series_id, series in get_series(series_config):
 		if find_index is not None and find_index == index:
 			return index, series_id, series, None
-		elif series_id == find_id:
+		elif series.get('imdb_id') == find_id:
 			return index, series_id, series, None
 
 	return nothing_found
@@ -861,15 +875,15 @@ def transform_episode_info(episode:dict):
 		if field not in useful_episode_fields:
 			episode.pop(field, 0)
 
-def print_series_title(num:int, info:dict, title_width:int=0, series_id:str=None, gray:bool=False, tail:str|None=None, archived:bool=True):
+def print_series_title(num:int, info:dict, title_width:int=0, imdb_id:str=None, gray:bool=False, tail:str|None=None, archived:bool=True):
 	infop = {**info}
 
 	# pad title string if width is specified
 	if title_width > 0:
 		infop['title'] = f'%-{title_width}s' % infop['title']
 
-	if series_id is not None:
-		infop['id'] = series_id
+	if imdb_id is not None:
+		infop['imdb_id'] = imdb_id
 
 	if 'year' in infop:
 		year = infop['year']
@@ -889,8 +903,8 @@ def print_series_title(num:int, info:dict, title_width:int=0, series_id:str=None
 			infop['added'] = infop['added'].split()[0]
 		s = ' \x1b[32;1m%(added)s\x1b[22;39m  \x1b[38;5;253m%(title)s\x1b[22;39m  \x1b[38;5;245m%(year)-9s\x1b[22;39m' % infop
 
-	if series_id is not None:
-		s += f'  \x1b[2m{series_id}\x1b[22;39m'
+	if imdb_id:
+		s += '  \x1b[2m%s\x1b[22;39m' % imdb_id
 
 	if tail:
 		s += tail
