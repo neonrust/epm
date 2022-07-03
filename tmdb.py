@@ -10,7 +10,7 @@ import os
 import builtins
 
 _bad_key = 'NO_TMDB_API_KEY_SET'
-_base_url_tmpl = 'https://api.themoviedb.org/3/%%(path)s?api_key=%s'
+_base_url_tmpl = 'https://api.themoviedb.org/3%%(path)s?api_key=%s'
 _base_url = _base_url_tmpl % os.getenv('TMDB_API_KEY', _bad_key)
 
 def set_api_key(key):
@@ -24,8 +24,19 @@ _query = None
 
 def _update_query_func():
 
-	def query(endpoint):
+	def query(endpoint, query=None):
 		url = _base_url % { 'path': endpoint }
+
+		if query is not None:
+			if type(query) is dict:
+				q = []
+				for k, v in query.items():
+					q.append('%s=%s' % (url_escape(k), url_escape(v)))
+				url += '&%s' % '&'.join(q)
+			elif type(query) is str:
+				url += '&' + url_escape(query)
+
+		print('\x1b[2murl: %s\x1b[m' % url)
 		resp = requests.get(url)
 		if resp.status_code != HTTPStatus.OK:
 			return None
@@ -96,7 +107,7 @@ def search(search, type='series', year=None):
 __imdb_id_to_tmdb = {}
 
 def _get_tmdb_id(imdb_id):
-	data = _query('/find/%s' % imdb_id)
+	data = _query('/find/%s' % imdb_id, query={'external_source': 'imdb_id'})
 	if data is None:
 		raise RuntimeError('Unknown IMDb ID: %s' % imdb_id)
 
@@ -331,5 +342,8 @@ if __name__ == '__main__':
 	#print(json.dumps(eps))
 	#print(len(eps))
 
-	info = details(sys.argv[1])
-	print(json.dumps(info))
+	#info = details(sys.argv[1])
+	#print(json.dumps(info))
+
+	data = _query('/find/%s' % sys.argv[1], query={'external_source': 'imdb_id'})
+	print(json.dumps(data, indent=2, sort_keys=True))
