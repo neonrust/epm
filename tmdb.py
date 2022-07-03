@@ -36,7 +36,6 @@ def _update_query_func():
 			elif type(query) is str:
 				url += '&' + url_escape(query)
 
-		print('\x1b[2murl: %s\x1b[m' % url)
 		resp = requests.get(url)
 		if resp.status_code != HTTPStatus.OK:
 			return None
@@ -135,13 +134,22 @@ def details(title_id, type='series'):
 	if data is not None:
 		return data
 
-	path = '/tv/%s' % title_id
+	detail_path = '/tv/%s' % title_id
 	if type == 'film':
-		path = '/movie/%s' % title_id
+		detail_path = '/movie/%s' % title_id
 
-	data = _query(path)
-	if data is None:
-		return None
+	with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+		detail_promise = executor.submit(_query, detail_path)
+		ext_promise = executor.submit(_query, '/tv/%s/external_ids' % title_id)
+
+		concurrent.futures.wait([ detail_promise, ext_promise ])
+
+	data = detail_promise.result()
+	ext_id = ext_promise.result() or {}
+
+	imdb_id = ext_id.get('imdb_id') or None
+	if imdb_id:
+		data['imdb_id'] = imdb_id
 
 	_rename_keys(data, {
 		'name': 'title',
@@ -342,8 +350,5 @@ if __name__ == '__main__':
 	#print(json.dumps(eps))
 	#print(len(eps))
 
-	#info = details(sys.argv[1])
-	#print(json.dumps(info))
-
-	data = _query('/find/%s' % sys.argv[1], query={'external_source': 'imdb_id'})
-	print(json.dumps(data, indent=2, sort_keys=True))
+	info = details(sys.argv[1])
+	print(json.dumps(info))
