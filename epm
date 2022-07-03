@@ -837,6 +837,8 @@ def refresh_all(series_config:dict, args:list=None, opts:dict=None, width:int=No
 		if forced or (not last_refresh or age(last_refresh) > max_age):
 			to_refresh.append(series_id)
 
+	#to_refresh = ['1402']
+
 	if not to_refresh:
 		return
 
@@ -1196,7 +1198,7 @@ def print_usage(exit_code:int=0) -> None:
 	print('Remarks:')
 	print(f'  # = Series listing number, e.g. as listed by the {_b}l{_n}ist command.')
 	print(f'  If an argument does not match a command, it will be used as an argument to the {_b}%s{_n} command.' % default_command)
-	print(f'  Only "shortest unique" part of the commands is required, e.g. ".ar"  for "archive".')
+	print(f'  Only "shortest unique" prefix of a command is needed, e.g. "ar"  for "archive".')
 	if orjson is not None:
 		print(f'  Using {_b}orjson{_n} for faster load/save.')
 	else:
