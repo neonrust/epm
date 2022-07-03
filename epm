@@ -823,11 +823,13 @@ def refresh_all(series_config:dict, args:list=None, opts:dict=None, width:int=No
 		search = None
 
 
-	all_series = get_series(series_config, archived=False)
+	all_series = get_series(series_config)
 
 	to_refresh = []
 
 	for idx, (_, series_id, series) in enumerate(all_series):
+		if has_meta(series, 'archived'):
+			continue
 		if search and not match_search(series):
 			continue
 
@@ -1072,7 +1074,7 @@ def series_num_archived(series_config: dict):
 	return sum(1 if get_meta('archived', series) else 0 for series in series_config.values())
 
 
-def get_series(series_config: dict, archived:bool|None=None):
+def get_series(series_config: dict) -> dict:
 	series_ids = sorted(series_config, key=lambda series_id: (series_config[series_id]['title'].casefold(), series_config[series_id].get('year', '')))
 
 	series = []
@@ -1080,9 +1082,6 @@ def get_series(series_config: dict, archived:bool|None=None):
 
 	for series_id in series_ids:
 		info = series_config[series_id]
-
-		if archived is not None and archived != has_meta(info, 'archived'):
-			continue
 
 		series.append( (index, series_id, info) )
 		index += 1
