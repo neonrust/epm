@@ -11,19 +11,30 @@ import builtins
 
 _bad_key = 'NO_TMDB_API_KEY_SET'
 _base_url_tmpl = 'https://api.themoviedb.org/3%%(path)s?api_key=%s'
-_base_url = _base_url_tmpl % os.getenv('TMDB_API_KEY', _bad_key)
+_api_key = os.getenv('TMDB_API_KEY', '')
+_base_url = None
+
+api_key_help = 'Set "TMDB_API_KEY" environment variable.'
+
+class NoAPIKey(RuntimeError):
+	pass
+
 
 def set_api_key(key):
-	global _base_url
-	_base_url = _base_url_tmpl % key
-	_update_query_func()
+	global _api_key
+	_api_key = key
+
+	if _api_key:
+		global _base_url
+		_base_url = _base_url_tmpl % _api_key
+
+		_update_query_func()
 
 __recent_searches = {}
 
 _query = None
 
 def _update_query_func():
-
 	def query(endpoint, query=None):
 		url = _base_url % { 'path': endpoint }
 
@@ -45,14 +56,16 @@ def _update_query_func():
 	_query = query
 
 _update_query_func()
+if _api_key:
+	set_api_key(_api_key)
 
 
 def search(search, type='series', year=None):
 
 	# /search/tv
 
-	if _bad_key in _base_url:
-		raise RuntimeError('API key not set')
+	if not _api_key:
+		raise NoAPIKey()
 
 	search_mode = 'query'  # search by title
 	 # TODO: other search modes?
@@ -122,8 +135,8 @@ __details = {}
 
 def details(title_id, type='series'):
 
-	if _bad_key in _base_url:
-		raise RuntimeError('API key not set')
+	if not _api_key:
+		raise NoAPIKey()
 
 	if title_id.startswith('tt'):
 		title_id = _get_tmdb_id(title_id)
@@ -208,8 +221,8 @@ def set_parallel(num):
 
 def episodes(series_id, details=False):
 
-	if _bad_key in _base_url:
-		raise RuntimeError('API key not set')
+	if not _api_key:
+		raise NoAPIKey()
 
 	if series_id.startswith('tt'):
 		series_id = _get_tmdb_id(series_id)

@@ -1328,4 +1328,9 @@ _f = '\x1b[2m'     # faint
 _n = '\x1b[m'      # normal
 
 if __name__ == '__main__':
-	main()
+	try:
+		main()
+	except tmdb.NoAPIKey:
+		print('No TMDb API key.', file=sys.stderr)
+		print(tmdb.api_key_help)
+		sys.exit(0)
