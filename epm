@@ -213,7 +213,7 @@ def cmd_unseen(series_config, args, opts, width=None) -> str|None:
 
 		tail = None
 		if not search:
-			tail = ' \x1b[2m%3d episode%s\x1b[22;39m' % (len(unseen), plural(unseen))
+			tail = ' \x1b[2m%3d unseen\x1b[22;39m' % len(unseen)
 
 		series_printed = False
 		def print_series(hilite=False):
