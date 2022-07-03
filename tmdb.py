@@ -107,15 +107,13 @@ __imdb_id_to_tmdb = {}
 
 def _get_tmdb_id(imdb_id):
 	data = _query('/find/%s' % imdb_id, query={'external_source': 'imdb_id'})
-	if data is None:
+	if data is None or not data.get('tv_results'):
 		raise RuntimeError('Unknown IMDb ID: %s' % imdb_id)
 
 	series = data.get('tv_results', [])
-	if not series:
-		raise RuntimeError('Unknown IMDb ID: %s' % imdb_id)
-
+	# "there can be only one"
 	title_id = series[0]['id']
-	__imdb_id_to_tmdb[imdb_id] = title_id
+	__imdb_id_to_tmdb[imdb_id] = str(title_id)
 
 	return title_id
 
