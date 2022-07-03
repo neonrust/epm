@@ -169,6 +169,7 @@ def details(title_id, type='series'):
 		'original_language': 'language',
 		'origin_country': 'country',
 		'number_of_seasons': 'total_seasons',
+		'number_of_episodes': 'total_episodes',
 	})
 	_del_keys(data, [
 		'backdrop_path',
@@ -180,7 +181,6 @@ def details(title_id, type='series'):
 		'production_countries',
 		'homepage',
 		'in_production',
-		'number_of_episodes',
 		'languages',
 		'spoken_languages',
 		'last_episode_to_air',
