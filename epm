@@ -242,7 +242,7 @@ def cmd_unseen(series_config, args, opts, width=None) -> str|None:
 					current_season = season
 				print(s)
 				total += 1
-				total_duration += ep.get('runtime', 0)
+				total_duration += ep.get('runtime') or 0
 
 		else:
 			s, released = format_episode_title(None, unseen[0], title_width=ep_max_width, today=True, only_released=False)
