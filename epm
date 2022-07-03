@@ -1187,7 +1187,7 @@ def print_usage(exit_code:int=0) -> None:
 	if orjson is not None:
 		print(f'  Using {_b}orjson{_n} for faster load/save.')
 	else:
-		print(f'  {_f}Do \'pip3 install orjson\' for faster load/save{_n}')
+		print(f'  {_f}Install \'orjson\' for faster load/save{_n}')
 	sys.exit(exit_code)
 
 
