@@ -20,6 +20,25 @@ class NoAPIKey(RuntimeError):
 	pass
 
 
+__parallel_requests = 16
+__executor = None
+
+def set_parallel(num):
+	if __executor is not None:
+		raise RuntimeError('Executor already initialized')
+
+	global __parallel_requests
+	__parallel_requests = max(1, int(num or 1))
+
+def __get_executor():
+	global __executor
+
+	if __executor is None:
+		__executor = concurrent.futures.ThreadPoolExecutor(max_workers=__parallel_requests, thread_name_prefix='tmdb-request')
+
+	return __executor
+
+
 def set_api_key(key):
 	global _api_key
 	_api_key = key
@@ -152,11 +171,12 @@ def details(title_id, type='series'):
 	if type == 'film':
 		detail_path = '/movie/%s' % title_id
 
-	with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-		detail_promise = executor.submit(_query, detail_path)
-		ext_promise = executor.submit(_query, '/tv/%s/external_ids' % title_id)
+	#with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+	executor = __get_executor()
+	detail_promise = executor.submit(_query, _qurl(detail_path))
+	ext_promise = executor.submit(_query, _qurl('/tv/%s/external_ids' % title_id))
 
-		concurrent.futures.wait([ detail_promise, ext_promise ])
+	concurrent.futures.wait([ detail_promise, ext_promise ])
 
 	data = detail_promise.result()
 	ext_id = ext_promise.result() or {}
@@ -215,13 +235,6 @@ def details(title_id, type='series'):
 _f_details = details
 
 
-__parallel_requests = 16
-
-def set_parallel(num):
-	global __parallel_requests
-	__parallel_requests = max(1, int(num or 1))
-
-
 def episodes(series_id, details=False):
 
 	if not _api_key:
@@ -266,15 +279,19 @@ def episodes(series_id, details=False):
 		return episodes
 
 	# then fetch all the seasons, in parallel
-	with concurrent.futures.ThreadPoolExecutor(max_workers=__parallel_requests) as executor:
-		promises = [
-			executor.submit(fetch_season, season)
-			for season in range(1, num_seasons + 1)
-		]
-		concurrent.futures.wait(promises)
+	executor = __get_executor()
+	promises = [
+		executor.submit(fetch_season, season)
+		for season in range(1, num_seasons + 1)
+	]
 
-	for promise in promises:
-		episodes += promise.result()
+	concurrent.futures.wait(promises)
+
+	episodes = [
+		episode
+		for promise in promises
+		for episode in promise.result()
+	]
 
 	# if the series contains runtime info, populate each episode (unless already present)
 	if ep_runtime:
@@ -351,6 +368,19 @@ def _set_values(data, new_values):
 					data.pop(key, None)
 			except Exception as e:
 				print('_set_values:', key, str(e), file=sys.stderr)
+
+def _parallel_query(func, arg_list):
+	executor = __get_executor()
+	promises = [
+		executor.submit(func, *args)
+		for args in arg_list
+	]
+	concurrent.futures.wait(promises)
+
+	return [
+		promise.result()
+		for promise in promises
+	]
 
 if __name__ == '__main__':
 	#if len(sys.argv) > 2:
