@@ -55,8 +55,8 @@ def main():
 
 		for cmd in known_commands:
 			for alias in cmd:
-				if name == alias or alias.startswith(name):
-					matching.append(cmd[0])
+				if name == alias or alias.startswith(name.lower()):
+					matching.append(cmd[0]) # the first alias is the "long version", guaranteed to be unique
 					break
 
 		if len(matching) == 1:
@@ -75,6 +75,7 @@ def main():
 
 		if arg.startswith('-'):
 			if not command:
+				# TODO: the --help should not do this, but  instead show the global help
 				command = default_command
 				#print('  -> cmd: %s' % command)
 
@@ -115,7 +116,7 @@ def main():
 
 	err = handler(series_config, command_args, options, width=term_width())
 	if err is not None:
-		print('\x1b[33;1m[\x1b[0;1m%s\x1b[33;1m]\x1b[m %s' % (command, err))
+		print(f'\x1b[33;1m[\x1b[0;1m{PRG} {command}\x1b[33;1m]\x1b[m {err}')
 		sys.exit(1)
 
 
@@ -133,7 +134,7 @@ def eat_option(command, option, args, options) -> bool:
 		options[opt_key] = True
 	else:
 		if command:
-			print(f'\x1b[33;1m[{PRG} {command}] Unknown option: {option}\x1b[m', file=sys.stderr)
+			print(f'\x1b[33;1m[\x1b[0;1m{PRG} {command}\x1b[33;1m]\x1b[m Unknown option: %s' % option, file=sys.stderr)
 		else:
 			print(f'\x1b[33;1m[{PRG} Option is not implemented: {option}\x1b[m', file=sys.stderr)
 		sys.exit(1)
@@ -159,6 +160,8 @@ def cmd_unseen(series_config, args, opts, width=None) -> str|None:
 				max_width = max(max_width or 0, len(series['title']))
 
 	if not series_unseen:
+		if match:
+			return 'Nothing matched: %s (or everything already seen)' % match.pattern
 		return 'Everything has been seen, better add some series!'
 
 	upto_future = 'unseen:future' in opts
@@ -271,7 +274,6 @@ def _unseen_help() -> None:
 	print(f'Usage: %s {_c}unseen{_n} <options> <search...>' % PRG)
 	print(f'    {_o}# / <IMDb ID>       {_n} Show only specific')
 	print(f'    {_o}[<pattern>]         {_n} Show only matching')
-	print(f'    {_o}--future            {_n} Also unreleased episodes (max 1)')
 
 	print_cmd_option_help('unseen')
 
@@ -620,8 +622,10 @@ def _mark_help() -> None:
 	print(f'    {_o}# / <IMDb ID> <season> <episode> {_n} Episodes')
 	print(f'    {_o}# / <IMDb ID> <season>           {_n} Seasons')
 	print(f'    {_o}# / <IMDb ID>                    {_n} Whole series')
-	print('Also support ranges:   > %s .mark 42 1 1-5' % PRG)
-	print('And episode specifiers (with ranges): > %s .mark 42 s1e1-5' % PRG)
+	print('Also support ranges:')
+	print('  > %s .mark 42 1 1-5' % PRG)
+	print('And episode specifiers (with ranges):')
+	print('  > %s unmark 42 s1e1-5' % PRG)
 
 	print_cmd_option_help('mark')
 
@@ -637,8 +641,10 @@ def _unmark_help() -> None:
 	print(f'    {_o}# / <IMDb ID> <season> <episode> {_n} Episodes')
 	print(f'    {_o}# / <IMDb ID> <season>           {_n} Seasons')
 	print(f'    {_o}# / <IMDb ID>                    {_n} Whole series')
-	print('Also support ranges:   > %s .mark 42 1 1-5' % PRG)
-	print('And episode specifiers (with ranges): > %s .mark 42 s1e1-5' % PRG)
+	print('Also support ranges:')
+	print('  > %s unmark 42 1 1-5' % PRG)
+	print('And episode specifiers (with ranges):')
+	print('  > %s unmark 42 s1e1-5' % PRG)
 
 	print_cmd_option_help('unmark')
 
@@ -767,10 +773,11 @@ def find_series(series_config:dict, find_id:str) -> tuple[int|None, str|None, di
 
 def no_series(series_config:dict) -> str:
 	num_archived = series_num_archived(series_config)
+	suffix = 'Use: \x1b[1m%s add <title search...> [<year>]\x1b[m' % PRG
 	if num_archived:
-		return 'No active series [but %d archived]. Use: \x1b[1m%s add <title search...> [<year>]\x1b[m' % (num_archived, PRG)
+		return 'No active series [but %d archived]. %s' % (num_archived, suffix)
 	else:
-		return 'No series added. Use: \x1b[1m%s add <title> [<year>]\x1b[m' % PRG
+		return 'No series added. %s' % suffix
 
 
 meta_key = 'epm:meta'
@@ -896,7 +903,7 @@ def print_series_title(num:int, info:dict, title_width:int=0, imdb_id:str=None, 
 		else:
 			infop['year'] = '%d-' % year[0]
 	else:
-		infop['year'] = '????'
+		infop['year'] = '  ? '
 
 	if num is not None:
 		infop['_num'] = '%5s' % f'{num}'
@@ -919,7 +926,7 @@ def print_series_title(num:int, info:dict, title_width:int=0, imdb_id:str=None, 
 	else:
 		print('%s' % s, end='')
 
-	print('\x1b[J')
+	print('\x1b[K')
 
 
 
@@ -1179,13 +1186,13 @@ def print_cmd_option_help(command:str) -> None:
 def print_usage(exit_code:int=0) -> None:
 	print(f'{_b}%s{_n} / Episode Manager / (c)2021 André Jonsson' % PRG)
 	print('Version %s (%s) ' % (VERSION, VERSION_DATE))
-	print(f'{_b}Usage:{_n} %s [<options>] [{_b}mode{_n}] [{_o}<args>{_n}]]' % PRG)
+	print(f'{_b}Usage:{_n} %s [<options>] [{_b}command{_n}] [{_o}<args>{_n}]]' % PRG)
 	print()
-	print(f'Where {_b}<mode>{_n} is:')
+	print(f'Where {_b}<command>{_n} is:')
 	print(f'   {_b}a{_n}dd       Add series')
-	print(f'   {_b}d{_n}elete    Delete series (completely remove from config)')
+	print(f'   delete    Delete series (completely remove from config)')
 	print(f'   {_b}u{_n}nseen    Show unseen episodes of series')
-	print(f'   {_b}l{_n}ist      List series')
+	print(f'   list      List series')
 	print(f'   {_b}m{_n}ark      Mark episode as seen')
 	print(f'   un{_b}M{_n}ark    Remove mark, as added by {_b}m{_n}')
 	print(f'   {_b}A{_n}rchive   Archive series (still in config, but not normally shown)')
@@ -1193,11 +1200,12 @@ def print_usage(exit_code:int=0) -> None:
 	print(f'   {_b}r{_n}efresh   Refresh episode data (forcibly)')
 	print(f'   {_b}h{_n}elp      Show this help information')
 	print()
-	print(f'See also: %s {_b}<mode>{_n} --help' % PRG)
+	print(f'See also: %s {_b}<command>{_n} --help' % PRG)
 	print()
 	print('Remarks:')
 	print(f'  # = Series listing number, e.g. as listed by the {_b}l{_n}ist command.')
-	print(f'  If an argument does not match a command, it will be used as an argument to the {_b}%s{_n} command.' % default_command)
+	print(f'  If command is omitted, {_b}{default_command}{_n} is used.')
+	print(f'  If an argument does not match a command, it will be used as argument to the default command.')
 	print(f'  Only "shortest unique" prefix of a command is needed, e.g. "ar"  for "archive".')
 	if orjson is not None:
 		print(f'  Using {_b}orjson{_n} for faster load/save.')
