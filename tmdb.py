@@ -188,6 +188,10 @@ def details(title_id, type='series'):
 	concurrent.futures.wait([ detail_promise, ext_promise ])
 
 	data = detail_promise.result()
+	if not data:
+		#print('[tmdb] no details for %s' % title_id, file=sys.stderr)
+		return None
+
 	ext_id = ext_promise.result() or {}
 
 	imdb_id = ext_id.get('imdb_id') or None
