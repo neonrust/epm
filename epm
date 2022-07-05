@@ -1021,11 +1021,11 @@ def strip_ansi(s: str):
 	return re.sub('\x1b\\[[0-9;]*[mJ]', '', s)
 
 
-def _ep_key(episode: dict):
+def _ep_key(episode:dict):
 	return f'{episode["season"]}:{episode["episode"]}'
 
 
-def print_seen_status(series: dict, gray: bool=False):
+def print_seen_status(series:dict, gray: bool=False):
 	ind = '       '
 
 	print(f'{ind}', end='')
@@ -1079,11 +1079,11 @@ def print_seen_status(series: dict, gray: bool=False):
 			print(f'{ind}Next:', s)
 
 
-def series_num_archived(series_config: dict):
-	return sum(1 if get_meta('archived', series) else 0 for series in series_config.values())
+def series_num_archived(series_config:dict):
+	return sum(1 if has_meta('archived', series) else 0 for series in series_config.values())
 
 
-def get_series(series_config: dict) -> dict:
+def get_series(series_config:dict) -> dict:
 	series_ids = sorted(series_config, key=lambda series_id: (series_config[series_id]['title'].casefold(), series_config[series_id].get('year', '')))
 
 	series = []
@@ -1098,7 +1098,7 @@ def get_series(series_config: dict) -> dict:
 	return series
 
 
-def seen_unseen_episodes(series: dict, before=None) -> tuple[list,list]:
+def seen_unseen_episodes(series:dict, before=None) -> tuple[list,list]:
 	episodes = series.get('episodes', [])
 	seen = get_meta(series, 'seen', {})
 
