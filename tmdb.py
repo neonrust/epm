@@ -32,28 +32,32 @@ def set_api_key(key):
 
 __recent_searches = {}
 
-_query = None
+_qurl = None
 
 def _update_query_func():
-	def query(endpoint, query=None):
+	def mk_url(endpoint, query=None):
 		url = _base_url % { 'path': endpoint }
 
 		if query is not None:
 			if type(query) is dict:
 				q = []
 				for k, v in query.items():
-					q.append('%s=%s' % (url_escape(k), url_escape(v)))
+					q.append('%s=%s' % (url_escape(k), url_escape(str(v))))
 				url += '&%s' % '&'.join(q)
 			elif type(query) is str:
 				url += '&' + url_escape(query)
 
-		resp = requests.get(url)
-		if resp.status_code != HTTPStatus.OK:
-			return None
-		return resp.json()
+		return url
 
-	global _query
-	_query = query
+	global _qurl
+	_qurl = mk_url
+
+def _query(url):
+	# print('\x1b[2mquery: %s\x1b[m' % url)
+	resp = requests.get(url)
+	if resp.status_code != HTTPStatus.OK:
+		return None
+	return resp.json()
 
 _update_query_func()
 if _api_key:
@@ -67,29 +71,28 @@ def search(search, type='series', year=None):
 	if not _api_key:
 		raise NoAPIKey()
 
-	search_mode = 'query'  # search by title
-	 # TODO: other search modes?
+	path = '/search'
+	if type == 'series':
+		path += '/tv'
+	else:
+		path += '/movie'
 
-	path = 'search/tv'
-	if type == 'film':
-		path = 'search/movie'
-
-	url = _base_url % { 'path': path } + f'&{search_mode}={url_escape(search)}'
+	query = {
+		'query': search,
+	}
 	if year is not None:
-		url += f'&first_air_date_year={year}'
+		query['first_air_date_year'] = year
+
+	url = _qurl(path, query=query)
 
 	if url in __recent_searches:
 		return __recent_searches.get(url)
 
-	resp = requests.get(url)
-	if resp.status_code != HTTPStatus.OK:
+	data = _query(url)
+	if not data:
 		return []
 
-	data = resp.json()
-	if search_mode == 'query':
-		hits = data.get('results', [])
-	else:
-		hits = [data]
+	hits = data.get('results', [])
 
 	_rename_keys(hits, {
 		'name': 'title',
@@ -119,7 +122,7 @@ def search(search, type='series', year=None):
 __imdb_id_to_tmdb = {}
 
 def _get_tmdb_id(imdb_id):
-	data = _query('/find/%s' % imdb_id, query={'external_source': 'imdb_id'})
+	data = _query(_qurl('/find/%s' % imdb_id, query={'external_source': 'imdb_id'}))
 	if data is None or not data.get('tv_results'):
 		raise RuntimeError('Unknown IMDb ID: %s' % imdb_id)
 
@@ -235,7 +238,7 @@ def episodes(series_id, details=False):
 	ep_runtime = data.get('episode_run_time')
 
 	def fetch_season(season):
-		data = _query('/tv/%s/season/%d' % (series_id, season))
+		data = _query(_qurl('/tv/%s/season/%d' % (series_id, season)))
 		if data is None:
 			return []
 		episodes = data.get('episodes', [])
