@@ -29,20 +29,6 @@ series_config_file = os.path.expandvars(f'$HOME/.config/{PRG}/series')
 num_config_backups = 10
 
 
-default_command = 'unseen'
-known_commands = (
-	('unseen', ),
-	('list', 'ls'),
-	('add', ),
-	('delete', ),
-	('mark', ),
-	('unmark', 'M', 'um'),
-	('archive', ),
-	('restore', ),
-	('refresh', ),
-	('help', ),
-)
-
 def main():
 	command = None
 	command_args = []
@@ -650,18 +636,6 @@ def _unmark_help() -> None:
 
 cmd_unmark.help = _unmark_help
 
-def get_meta(series: dict, key: str, def_value=None):
-	return series.get(meta_key).get(key, def_value)
-
-def has_meta(series: dict, key: str):
-	return series.get(meta_key).get(key) is not None
-
-def set_meta(series: dict, key: str, value) -> None:
-	series[meta_key][key] = value
-
-def del_meta(series: dict, key: str) -> None:
-	series[meta_key].pop(key, None)
-
 def cmd_archive(series_config, args, opts, archiving=True, width=None) -> str|None:
 	if not args:
 		return 'Required argument missing: # / <IMDb ID>'
@@ -732,6 +706,20 @@ def _refresh_help() -> None:
 cmd_refresh.help = _refresh_help
 
 
+
+def get_meta(series:dict, key: str, def_value=None):
+	return series.get(meta_key).get(key, def_value)
+
+def has_meta(series:dict, key: str):
+	return series.get(meta_key).get(key) is not None
+
+def set_meta(series:dict, key: str, value) -> None:
+	series[meta_key][key] = value
+
+def del_meta(series:dict, key: str) -> None:
+	series[meta_key].pop(key, None)
+
+
 cmd_handlers = {
 	'add':     cmd_add,
 	'delete':  cmd_delete,
@@ -743,6 +731,20 @@ cmd_handlers = {
 	'restore': cmd_restore,
 	'refresh': cmd_refresh,
 }
+default_command = 'unseen'
+known_commands = (
+	('add', 'a'),
+	('delete', ),
+	('list', 'ls'),
+	('unseen', 'u', 'us'),
+	('mark', 'm'),
+	('unmark', 'M', 'um'),
+	('archive', 'A'),
+	('restore', 'R'),
+	('refresh', 'r'),
+	('help', ),
+)
+
 
 def find_series(series_config:dict, find_id:str) -> tuple[int|None, str|None, dict|None, str|None]:
 	nothing_found = None, None, None, f'Series not found: {find_id}'
