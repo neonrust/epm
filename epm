@@ -855,8 +855,7 @@ def refresh_all(series_config:dict, args:list=None, opts:dict=None, width:int=No
 		print('\x1b[33m(forced)\x1b[m ', end='')
 	print('\x1b[2mRefreshing %d series...\x1b[m' % len(to_refresh), end='', flush=True)
 
-	promises = []
-	with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+	with concurrent.futures.ThreadPoolExecutor(max_workers=16, thread_name_prefix='%s-request' % PRG) as executor:
 		promises = [
 			executor.submit(refresh_series, series_id, series_config, progress=None)
 			for series_id in to_refresh
