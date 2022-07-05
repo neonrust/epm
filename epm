@@ -798,8 +798,7 @@ def refresh_series(series_id:str, series_config:dict, progress:bool=False) -> in
 	elif progress is False:
 		print('\x1b[2mRefreshing %s...\x1b[m' % series_id, end='', flush=True)
 
-	details = tmdb.details(series_id)
-	episodes = tmdb.episodes(series_id)
+	details, episodes = tmdb.episodes(series_id, with_details=True)
 	if progress is not None:
 		print('\r\x1b[K', end='', flush=True)
 
