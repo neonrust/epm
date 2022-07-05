@@ -389,10 +389,15 @@ def cmd_add(series_config, args, opts, width=None) -> str|None:
 		max_width = width - 5 - 3 - len('1968')*2 - 1 - 2 - 3 - len('episodes')
 		#max_width = max(len(series['title']) for series in hits)
 
+		hits = list(filter(lambda H: H['id'] not in series_config, hits))
 		print('\x1b[32;1mFound \x1b[0;1m%d\x1b[m \x1b[32;1mseries:\x1b[m' % len(hits))
-		# TODO: fetch IMDb ID for all hits
+
+		print('\x1b[2mFetching meta data...\x1b[m', end='', flush=True)
+		hit_details = tmdb.details([ hit['id'] for hit in hits ])
+		print('\r\x1b[K', end='')
 		for idx, hit in enumerate(hits):
-			imdb_id = None
+			hit.update(hit_details[idx])
+			imdb_id = hit.get('imdb_id')
 			print_series_title(idx + 1, hit, imdb_id=imdb_id, title_width=max_width)
 
 		last_num = len(hits)
