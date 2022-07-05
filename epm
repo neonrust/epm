@@ -360,7 +360,11 @@ def cmd_add(series_config, args, opts, width=None) -> str|None:
 
 	search = ' '.join(args)
 
-	print('- Searching series...', end='', flush=True)
+	print('\x1b[2m- Searching "%s"' % search, end='')
+	if year:
+		print(' (%d)' % year, end='')
+	print(' ...\x1b[m')
+
 	hits = tmdb.search(search, year=year)
 	print('\r\x1b[J', end='')
 	if not hits:
