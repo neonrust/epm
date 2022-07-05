@@ -120,14 +120,20 @@ def search(search, type='series', year=None):
 		'original_language': 'language',
 		'origin_country': 'country',
 	})
-	_del_keys(hits, ['backdrop_path', 'popularity', 'poster_path', 'vote_average', 'vote_count'])
+	_del_keys(hits, [
+		'backdrop_path',
+		'popularity',
+		'poster_path',
+		'vote_average',
+		'vote_count',
+		'genre_ids',   # for now (in this tool), we don't need these
+	])
 	_set_values(hits, {
 		'year': lambda hit: [int(hit.get('date', [0]).split('-')[0])] if hit.get('date') else None,
 		'id': lambda hit: str(hit['id']),
 		'country': lambda hit: ', '.join(hit.get('country')),
 	})
 	_del_empty(hits)
-	# TODO: resolve 'genre_ids' to their names
 
 	if builtins.type(hits) is dict:
 		hits = [ hits ]
@@ -159,6 +165,9 @@ def details(title_id, type='series'):
 
 	if not _api_key:
 		raise NoAPIKey()
+
+	if title_id.__class__ is list:
+		return _parallel_query(details, [ (tid,) for tid in title_id ])
 
 	if title_id.startswith('tt'):
 		title_id = _get_tmdb_id(title_id)
@@ -232,10 +241,8 @@ def details(title_id, type='series'):
 
 	return data
 
-_f_details = details
 
-
-def episodes(series_id, details=False):
+def episodes(series_id, with_details=False):
 
 	if not _api_key:
 		raise NoAPIKey()
@@ -243,12 +250,12 @@ def episodes(series_id, details=False):
 	if series_id.startswith('tt'):
 		series_id = _get_tmdb_id(series_id)
 
-	episodes = []
 
-	data = _f_details(series_id, type='series')
-	num_seasons = data.get('total_seasons', 1)
+	# unfortunately we must synchronously get the details first
+	ser_details = details(series_id, type='series')
 
-	ep_runtime = data.get('episode_run_time')
+	num_seasons = ser_details.get('total_seasons', 1)
+	ep_runtime = ser_details.get('episode_run_time')
 
 	def fetch_season(season):
 		data = _query(_qurl('/tv/%s/season/%d' % (series_id, season)))
@@ -298,6 +305,9 @@ def episodes(series_id, details=False):
 		for ep in episodes:
 			if not ep.get('runtime'):
 				ep['runtime'] = ep_runtime
+
+	if with_details:
+		return ser_details, episodes
 
 	return episodes
 
