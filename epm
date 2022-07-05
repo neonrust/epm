@@ -135,10 +135,19 @@ def cmd_unseen(series_config, args, opts, width=None) -> str|None:
 	if not series_list:
 		return no_series(series_config)
 
+	find_id, match = find_id_or_match(args)
+
 	#                 idx   year2+pad         dash pad eps                  margin
 	max_width = width - 5 - 3 - len('1968')*2 - 1 - 2 - 3 - len('episodes')
 	series_unseen = []
 	for index, series_id, series in series_list:
+		if find_id is not None:
+			if find_id != index:
+				continue
+		else:
+			if match and not match(series):
+				continue
+
 		_, unseen = seen_unseen_episodes(series)
 		if unseen:
 			series_unseen.append((index, series_id, series, unseen))
@@ -157,22 +166,15 @@ def cmd_unseen(series_config, args, opts, width=None) -> str|None:
 	if only_started and only_planned:
 		return 'Can\'t specify -s and -p at the same time'
 
-	if args:
-		search = re.compile('.*?'.join(re.escape(a.casefold()) for a in ' '.join(args).split()))
-		def match_search(series):
-			return search.search(series['title'].casefold()) is not None
 
-	else:
-		search = None
-
-	print('\x1b[2mListing ', end='')
+	print('\x1b[2mListing \x1b[m', end='')
 	if only_started:
 		print('started ', end='')
 	elif only_planned:
 		print('planned ', end='')
-	print('series with unseen episodes', end='')
-	if search:
-		print(', matching "%s"' % search.pattern, end='')
+	print('\x1b[2mseries with unseen episodes', end='')
+	if match:
+		print(', matching "%s"' % match.pattern, end='')
 	print('.\x1b[m')
 
 	# TODO: optionally sort series by "earliest" episode in summary mode
@@ -188,20 +190,16 @@ def cmd_unseen(series_config, args, opts, width=None) -> str|None:
 
 	for index, series_id, series, unseen in series_unseen:
 
-		if search and not match_search(series):
+		any_episodes_seen = bool(get_meta(series, 'seen', {}))
+		if only_started and not any_episodes_seen:
 			continue
-
-		has_episodes_seen = len(get_meta(series, 'seen', {})) > 0
-
-		if only_started and not has_episodes_seen:
-			continue
-		if only_planned and has_episodes_seen:
+		if only_planned and any_episodes_seen:
 			continue
 
 		hilite = (show_series % 2) == 0
 
 		tail = None
-		if not search:
+		if not match:
 			tail = ' \x1b[2m%3d unseen\x1b[22;39m' % len(unseen)
 
 		series_printed = False
@@ -213,7 +211,7 @@ def cmd_unseen(series_config, args, opts, width=None) -> str|None:
 			nonlocal series_printed
 			series_printed = True
 
-		if search:
+		if match:
 			show_series += 1
 
 			current_season = 0
@@ -285,12 +283,7 @@ def cmd_list(series_config, args, opts, width=None) -> str|None:
 	only_started = 'list:started' in opts
 	only_planned = 'list:planned' in opts
 
-	if args:
-		search = re.compile('.*?'.join(re.escape(a.casefold()) for a in ' '.join(args).split()))
-		def match_search(series):
-			return search.search(series['title'].casefold()) is not None
-	else:
-		search = None
+	find_id, match = find_id_or_match(args)
 
 	print('\x1b[2mListing ', end='')
 	if only_started:
@@ -300,8 +293,8 @@ def cmd_list(series_config, args, opts, width=None) -> str|None:
 	elif only_archived:
 		print('archived ', end='')
 	print('series', end='')
-	if search:
-		print(', matching "%s"' % search.pattern, end='')
+	if match:
+		print(', matching "%s"' % match.pattern, end='')
 	print('.\x1b[m')
 
 	num_shown = 0
@@ -309,27 +302,34 @@ def cmd_list(series_config, args, opts, width=None) -> str|None:
 
 	for index, series_id, series in series_list:
 		archived = get_meta(series, 'archived')
-		if archived:
-			num_archived += 1
-		if archived and not (list_all or only_archived):
-			continue
-		if not archived and only_archived:
-			continue
 
-		has_episodes_seen = len(get_meta(series, 'seen', {})) > 0
-		if only_started and not has_episodes_seen:
-			continue
-		if only_planned and has_episodes_seen:
-			continue
-
-		if search and not match_search(series):
-			continue
+		if find_id is not None:
+			if index != find_id:
+				continue
+		else:
+			if archived:
+				num_archived += 1
+			if archived and not (list_all or only_archived):
+				continue
+			if not archived and only_archived:
+				continue
+			has_episodes_seen = len(get_meta(series, 'seen', {})) > 0
+			if only_started and not has_episodes_seen:
+				continue
+			if only_planned and has_episodes_seen:
+				continue
+			if match and not match(series):
+				continue
 
 		num_shown += 1
 		print_series_title(index, series, imdb_id=series.get('imdb_id'), title_width=max_width, gray=archived and not only_archived)
 		if archived and not only_archived:
 			print('\x1b[2m       Archived\x1b[m')
 		print_seen_status(series, gray=archived and not only_archived)
+
+	if num_shown == 0:
+		if match:
+			return 'Nothing matched: %s' % match.pattern
 
 	print('%d series \x1b[2;3mTotal: %d   Archived: %d\x1b[m' % (num_shown, len(series_list), num_archived))
 
@@ -780,6 +780,21 @@ def find_series(series_config:dict, find_id:str) -> tuple[int|None, str|None, di
 	return nothing_found
 
 
+def find_id_or_match(args):
+	if not args:
+		return None, None
+
+	try:
+		find_id = int(args[0])
+		return find_id, None
+	except ValueError:
+		ptn = re.compile('.*?'.join(re.escape(a.casefold()) for a in ' '.join(args).split()))
+		def match(series):
+			return ptn.search(series['title'].casefold()) is not None
+		match.pattern = ptn.pattern
+		return None, match
+
+
 def no_series(series_config:dict) -> str:
 	num_archived = series_num_archived(series_config)
 	suffix = 'Use: \x1b[1m%s add <title search...> [<year>]\x1b[m' % PRG
@@ -819,42 +834,39 @@ def refresh_series(series_id:str, series_config:dict, progress:bool=False) -> in
 
 def refresh_all(series_config:dict, args:list=None, opts:dict=None, width:int=None) -> None:
 
-	# TODO: also refresh the series info
-
 	opts = opts or {}
 	max_age = opts.get('max-age', default_max_episodes_refresh_age)
 	forced = bool(opts.get('refresh:force'))
 
-	now_dt = now_datetime()
-
-	def age(dt):
-		return (now_dt - datetime.fromisoformat(dt)).total_seconds()
-
-	if args:
-		search = re.compile('.*?'.join(re.escape(a.casefold()) for a in ' '.join(args).split()))
-		def match_search(series):
-			return search.search(series['title'].casefold()) is not None
-	else:
-		search = None
+	find_id, match = find_id_or_match(args)
 
 
-	all_series = get_series(series_config)
+	series_list = get_series(series_config)
 
 	to_refresh = []
 
-	for idx, (_, series_id, series) in enumerate(all_series):
+	now_dt = now_datetime()
+	def age(dt):
+		return (now_dt - datetime.fromisoformat(dt)).total_seconds()
+
+	for index, series_id, series in series_list:
 		if has_meta(series, 'archived'):
 			continue
-		if search and not match_search(series):
-			continue
+
+		if find_id is not None:
+			if find_id != index:
+				continue
+		else:
+			if match and not match(series):
+				continue
 
 		last_refresh = get_meta(series, refreshed_key)
 		if forced or (not last_refresh or age(last_refresh) > max_age):
 			to_refresh.append(series_id)
 
-	#to_refresh = ['1402']
-
 	if not to_refresh:
+		if match:
+			return 'Nothing matched: %s' % match.pattern
 		return
 
 	t0 = time.time()
@@ -916,9 +928,9 @@ def print_series_title(num:int, info:dict, title_width:int=0, imdb_id:str=None, 
 		infop['_num'] = '%5s' % f'{num}'
 
 		s = '\x1b[3;38;2;200;160;100m%(_num)s\x1b[22;23;39m \x1b[38;5;253m%(title)s\x1b[22;39m  \x1b[38;5;245m%(year)-9s\x1b[22;39m' % infop
-	else:
-		if 'added' in infop:
-			infop['added'] = infop['added'].split()[0]
+
+	elif has_meta(infop, 'added'):
+		infop['added'] = get_meta(infop, 'added').split()[0]
 		s = ' \x1b[32;1m%(added)s\x1b[22;39m  \x1b[38;5;253m%(title)s\x1b[22;39m  \x1b[38;5;245m%(year)-9s\x1b[22;39m' % infop
 
 	if imdb_id:
