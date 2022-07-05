@@ -373,8 +373,6 @@ def cmd_add(series_config, args, opts, width=None) -> str|None:
 	if len(hits) > 1:
 		# exclude ones we already have in our config
 		already = list(filter(lambda H: H['id'] in series_config, hits))
-		hits = list(filter(lambda H: H['id'] not in series_config, hits))
-
 		if already:
 			print('\x1b[2mAlready added: %d\x1b[m' % len(already))
 			for hit in already:
