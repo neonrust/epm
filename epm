@@ -459,13 +459,12 @@ def cmd_add(series_config, args, opts, width=None) -> str|None:
 	print('\x1b[1mSeries added:\x1b[m  \x1b[2m(series renumbered)\x1b[m')
 
 	# need to loop to figure out its list index
-	for index, sid, _ in get_series(series_config):
-		if sid == series_id:
-			imdb_id = series_config[series_id].get(imdb_id)
-			print_series_title(index, hit, imdb_id=imdb_id)
-			break
+	imdb_id = series_config[series_id].get('imdb_id')
+	index = find_list_index(series_config, series_id)
+	print_series_title(index, hit, imdb_id=imdb_id)
 
-def find_list_index(series_id):
+
+def find_list_index(series_config, series_id):
 	for index, sid, _ in get_series(series_config):
 		if sid == series_id:
 			return index
