@@ -1300,11 +1300,11 @@ def ambiguous_cmd(name:str, matching:str) -> None:
 
 
 def now() -> str:
-	return str(now_datetime())
+	return now_datetime().isoformat(' ', timespec='seconds')
 
 
 def now_datetime() -> datetime:
-	return datetime.fromtimestamp(int(time.time()))
+	return datetime.now()
 
 
 def load_series_config() -> dict:
