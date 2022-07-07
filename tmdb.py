@@ -282,8 +282,8 @@ def episodes(series_id, with_details=False):
 			'episode_number': 'episode',
 		})
 		_set_values(episodes, {
-			'director': lambda ep: _job_person(ep.get('crew', []), 'Director'),
-			'writer': lambda ep: _job_person(ep.get('crew', []), 'Writer'),
+			'director': lambda ep: _job_persons(ep.get('crew', []), 'Director'),
+			'writer': lambda ep: _job_persons(ep.get('crew', []), 'Writer'),
 			'cast': lambda ep: ', '.join(map(lambda p: p.get('name'), ep.get('guest_stars', [])))
 		})
 		_del_keys(episodes, ['id', 'still_path', 'crew', 'guest_stars'])
@@ -317,11 +317,12 @@ def episodes(series_id, with_details=False):
 	return episodes
 
 
-def _job_person(people, job):
-	for person in people:
-		if person.get('job') == job:
-			return person.get('name')
-	return None
+def _job_persons(people, job):
+	return ', '.join(
+		person.get('name')
+		for person in people
+		if person.get('job') == job
+	)
 
 def _del_empty(data):
 	if type(data) is list:
