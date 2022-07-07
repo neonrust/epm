@@ -145,16 +145,27 @@ def eat_option(command, option, args, options) -> bool:
 
 
 def cmd_unseen(series_config, args, opts, width=None) -> str|None:
-	refresh_all(series_config, opts=opts)
+	refresh_all(series_config)
 
 	series_list = get_series(series_config)
 	if not series_list:
 		return no_series(series_config)
 
-	find_id, match = find_id_or_match(args)
-
 	#                 idx   year2+pad         dash pad eps                  margin
 	max_width = width - 5 - 3 - len('1968')*2 - 1 - 2 - 3 - len('episodes')
+
+	# TODO: print header/columns
+
+	upto_future = 'unseen:future' in opts
+	only_started = 'unseen:started' in opts
+	only_planned = 'unseen:planned' in opts
+	all_unseen = 'unseen:all_episodes' in  opts
+
+	if only_started and only_planned:
+		return 'Can\'t specify -s and -p at the same time'
+
+	find_id, match = find_id_or_match(args)
+
 	series_unseen = []
 	for index, series_id, series in series_list:
 		if find_id is not None:
@@ -174,13 +185,6 @@ def cmd_unseen(series_config, args, opts, width=None) -> str|None:
 		if match:
 			return 'Nothing matched: %s (or everything already seen)' % match.pattern
 		return 'Everything has been seen, better add some series!'
-
-	upto_future = 'unseen:future' in opts
-	only_started = 'unseen:started' in opts
-	only_planned = 'unseen:planned' in opts
-
-	if only_started and only_planned:
-		return 'Can\'t specify -s and -p at the same time'
 
 
 	print('\x1b[2mListing \x1b[m', end='')
@@ -214,18 +218,18 @@ def cmd_unseen(series_config, args, opts, width=None) -> str|None:
 
 		hilite = (show_series % 2) == 0
 
-		tail = None
-		if not match:
-			tail = ' \x1b[2m%3d unseen\x1b[22;39m' % len(unseen)
-
 		series_printed = False
-		def print_series(hilite=False):
+		def print_series():
 			if hilite:
 				print('\x1b[48;5;234m', end='')
 
 			print_series_title(index, series, title_width=max_width, tail=tail)
 			nonlocal series_printed
 			series_printed = True
+
+		tail = None
+		if not match:
+			tail = ' \x1b[2m%3d unseen\x1b[22;39m' % len(unseen)
 
 		if match:
 			show_series += 1
@@ -237,7 +241,7 @@ def cmd_unseen(series_config, args, opts, width=None) -> str|None:
 					break
 
 				if not series_printed:
-					print_series(hilite=hilite)
+					print_series()
 
 				season = ep['season']
 				if season != current_season:
@@ -248,6 +252,7 @@ def cmd_unseen(series_config, args, opts, width=None) -> str|None:
 				total_duration += ep.get('runtime') or 0
 
 		else:
+			# print first episode
 			s, released = format_episode_title(None, unseen[0], title_width=ep_max_width, today=True, only_released=False)
 			if not released:
 				#print('not released:', series['title'], unseen[0]['title'])
