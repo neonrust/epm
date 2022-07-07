@@ -9,12 +9,12 @@ import re
 import os
 import builtins
 
-_bad_key = 'NO_TMDB_API_KEY_SET'
-_base_url_tmpl = 'https://api.themoviedb.org/3%%(path)s?api_key=%s'
-_api_key = os.getenv('TMDB_API_KEY', '')
+# TODO: API version 4 ?
+_base_url_tmpl = 'https://api.themoviedb.org/3/%%(path)s?api_key=%s'
 _base_url = None
+_api_key = os.getenv('TMDB_API_KEY', '')
 
-api_key_help = 'Set "TMDB_API_KEY" environment variable.'
+api_key_help = 'Set "TMDB_API_KEY" environment variable for your account.'
 
 class NoAPIKey(RuntimeError):
 	pass
@@ -39,20 +39,6 @@ def __get_executor():
 	return __executor
 
 
-def set_api_key(key):
-	global _api_key
-	_api_key = key
-
-	if _api_key:
-		global _base_url
-		_base_url = _base_url_tmpl % _api_key
-
-		_update_query_func()
-
-__recent_searches = {}
-
-_qurl = None
-
 def _update_query_func():
 	def mk_url(endpoint, query=None):
 		url = _base_url % { 'path': endpoint }
@@ -71,6 +57,20 @@ def _update_query_func():
 	global _qurl
 	_qurl = mk_url
 
+def set_api_key(key):
+	global _api_key
+	_api_key = key
+
+	if _api_key:
+		global _base_url
+		_base_url = _base_url_tmpl % _api_key
+		_update_query_func()
+
+if _api_key:
+	set_api_key(_api_key)
+
+_qurl = None
+
 def _query(url):
 	# print('\x1b[2mquery: %s\x1b[m' % url)
 	resp = requests.get(url)
@@ -78,10 +78,8 @@ def _query(url):
 		return None
 	return resp.json()
 
-_update_query_func()
-if _api_key:
-	set_api_key(_api_key)
 
+__recent_searches = {}
 
 def search(search, type='series', year=None):
 
@@ -90,7 +88,7 @@ def search(search, type='series', year=None):
 	if not _api_key:
 		raise NoAPIKey()
 
-	path = '/search'
+	path = 'search'
 	if type == 'series':
 		path += '/tv'
 	else:
@@ -147,7 +145,7 @@ def search(search, type='series', year=None):
 __imdb_id_to_tmdb = {}
 
 def _get_tmdb_id(imdb_id):
-	data = _query(_qurl('/find/%s' % imdb_id, query={'external_source': 'imdb_id'}))
+	data = _query(_qurl('find/%s' % imdb_id, query={'external_source': 'imdb_id'}))
 	if data is None or not data.get('tv_results'):
 		raise RuntimeError('Unknown IMDb ID: %s' % imdb_id)
 
@@ -176,14 +174,14 @@ def details(title_id, type='series'):
 	if data is not None:
 		return data
 
-	detail_path = '/tv/%s' % title_id
+	detail_path = 'tv/%s' % title_id
 	if type == 'film':
-		detail_path = '/movie/%s' % title_id
+		detail_path = 'movie/%s' % title_id
 
 	#with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
 	executor = __get_executor()
 	detail_promise = executor.submit(_query, _qurl(detail_path))
-	ext_promise = executor.submit(_query, _qurl('/tv/%s/external_ids' % title_id))
+	ext_promise = executor.submit(_query, _qurl('tv/%s/external_ids' % title_id))
 
 	concurrent.futures.wait([ detail_promise, ext_promise ])
 
@@ -237,6 +235,8 @@ def details(title_id, type='series'):
 	})
 	_del_keys(data, ['genres'])
 
+	# TODO: cast, crew?
+
 	if data.get('status') in ('Ended', 'Canceled') and data.get('last_air_date'):
 		data['year'] = data['year'] + [ int(data.get('last_air_date').split('-')[0]) ]
 		del data['last_air_date']
@@ -262,9 +262,10 @@ def episodes(series_id, with_details=False):
 	ep_runtime = ser_details.get('episode_run_time')
 
 	def fetch_season(season):
-		data = _query(_qurl('/tv/%s/season/%d' % (series_id, season)))
+		data = _query(_qurl('tv/%s/season/%d' % (series_id, season)))
 		if data is None:
 			return []
+
 		episodes = data.get('episodes', [])
 
 		_rename_keys(episodes, {
