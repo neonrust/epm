@@ -301,6 +301,7 @@ def cmd_list(series_config, args, opts, width=None) -> str|None:
 	only_archived = 'list:archived' in opts
 	only_started = 'list:started' in opts
 	only_planned = 'list:planned' in opts
+	all_unseen = 'list:all_episodes' in  opts
 
 	find_id, match = find_id_or_match(args)
 
@@ -1116,7 +1117,7 @@ def _ep_key(episode:dict):
 	return f'{episode["season"]}:{episode["episode"]}'
 
 
-def print_seen_status(series:dict, gray: bool=False):
+def print_seen_status(series:dict, gray: bool=False, print_next=True):
 	ind = '       '
 
 	print(f'{ind}', end='')
@@ -1127,7 +1128,7 @@ def print_seen_status(series:dict, gray: bool=False):
 	s = ''
 
 	if seen or unseen:
-		s += '\x1b[38;5;256mTotal: '
+		s += '\x1b[38;5;256mSummary: '
 
 	if seen:
 		seen_duration = sum((ep.get('runtime') or 0) for ep in seen)
