@@ -606,7 +606,7 @@ def cmd_mark(series_config, args, opts, marking=True, width=None) -> str|None:
 			if marking and key not in seen:
 				seen[key] = now()
 				episodes.append(ep)
-				episodes_duration += ep.get('runtime', 0)
+				episodes_duration += ep.get('runtime') or 0
 
 			elif not marking and key in seen:
 				del seen[key]
