@@ -22,7 +22,7 @@ VERSION_DATE = '2022-07-07'
 
 PRG = os.path.basename(sys.argv[0])
 
-default_max_episodes_refresh_age = 2*24*3600
+default_max_refresh_age = 2  # days
 refreshed_key = 'refreshed-at'
 
 series_config_file = os.path.expandvars(f'$HOME/.config/{PRG}/series')
@@ -33,7 +33,7 @@ def main():
 	command = None
 	command_args = []
 	options = {
-		'max-age': default_max_episodes_refresh_age,
+		'max-age': default_max_refresh_age,
 	}
 
 	def resolve_cmd(name):
@@ -893,12 +893,16 @@ def refresh_series(series_id:str, series_config:dict, progress:bool=False) -> in
 
 def refresh_all(series_config:dict, args:list=None, opts:dict=None) -> None:
 
+	t0 = time.time()
+
 	opts = opts or {}
-	max_age = opts.get('max-age', default_max_episodes_refresh_age)
+	max_age = opts.get('max-age', default_max_refresh_age)
+	if max_age <= 0:
+		max_age = default_max_refresh_age
+	max_age_s = max_age*3600*24
 	forced = bool(opts.get('refresh:force'))
 
 	find_id, match = find_id_or_match(args)
-
 
 	series_list = get_series(series_config)
 
