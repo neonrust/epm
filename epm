@@ -119,27 +119,27 @@ def eat_option(command, option, args, options) -> bool:
 	if not opt_def:
 		bad_opt(command, option)
 
-	args_def = opt_def.get('args')
-	if args_def:
-		opt_args = []
-		for arg_type in args_def:
-			arg = args.pop(0)
-			if arg_type is int:
-				try:
-					arg = int(arg)
-				except ValueError:
-					bad_opt_arg(command, option, arg, arg_type)
-			elif arg_type is datetime:
-				try:
-					arg = datetime.fromisoformat(arg)
-				except ValueError:
-					bad_opt_arg(command, option, arg, arg_type)
+	arg_type = opt_def.get('arg')
+	if arg_type is not None:
+		arg = args.pop(0)
+		if arg_type is int:
+			try:
+				arg = int(arg)
+			except ValueError:
+				bad_opt_arg(command, option, arg, arg_type)
 
-			opt_args.append(arg)
+		elif arg_type is datetime:
+			try:
+				arg = datetime.fromisoformat(arg)
+			except ValueError:
+				bad_opt_arg(command, option, arg, arg_type)
+
+		opt_arg = arg
+
 	else:
-		opt_args = True
+		opt_arg = True
 
-	options[opt_def['key']] = opt_args
+	options[opt_def['key']] = opt_arg
 
 	return True
 
@@ -774,7 +774,7 @@ known_options = {
 	],
 	'refresh': [
 		{ 'option': ('-f', '--force'), 'key': 'refresh:force',  'help': 'Refresh whether needed or not.' },
-		{ 'option': ('--max-age',),    'key': 'max-age',  'args': (int,), 'help': 'Refresh older than N days (default: %s)' % (default_max_episodes_refresh_age//(3600*24)) },
+		{ 'option': ('--max-age',),    'key': 'max-age',  'arg': int, 'help': 'Refresh older than N days (default: %s)' % default_max_refresh_age },
 	],
 }
 
@@ -1219,7 +1219,7 @@ def print_cmd_option_help(command:str) -> None:
 			if type(option) is tuple:
 				option = ', '.join(option)
 
-			arg_string = ', '.join(arg_placeholder(a) for a in opt.get('args', ()))
+			arg_string = arg_placeholder(opt.get('arg'))
 
 			option = '%s %s' % (option, arg_string)
 
