@@ -1473,3 +1473,6 @@ if __name__ == '__main__':
 		print('No TMDb API key.', file=sys.stderr)
 		print(tmdb.api_key_help)
 		sys.exit(0)
+	except KeyboardInterrupt:
+		print('** User beak', file=sys.stderr)
+		sys.exit(1)
