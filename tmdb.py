@@ -40,22 +40,22 @@ def __get_executor():
 
 
 def _update_query_func():
-	def mk_url(endpoint, query=None):
+	def mk_url(endpoint, **query):
 		url = _base_url % { 'path': endpoint }
 
 		if query is not None:
-			if type(query) is dict:
-				q = []
-				for k, v in query.items():
-					q.append('%s=%s' % (url_escape(k), url_escape(str(v))))
-				url += '&%s' % '&'.join(q)
-			elif type(query) is str:
-				url += '&' + url_escape(query)
+			q = []
+			for k, v in query.items():
+				q.append('%s=%s' % (url_escape(k), url_escape(str(v))))
+			url += '&%s' % '&'.join(q)
 
 		return url
 
 	global _qurl
 	_qurl = mk_url
+
+
+_qurl = None
 
 def set_api_key(key):
 	global _api_key
@@ -68,8 +68,6 @@ def set_api_key(key):
 
 if _api_key:
 	set_api_key(_api_key)
-
-_qurl = None
 
 def _query(url):
 	# print('\x1b[2mquery: %s\x1b[m' % url)
@@ -100,7 +98,7 @@ def search(search, type='series', year=None):
 	if year is not None:
 		query['first_air_date_year'] = year
 
-	url = _qurl(path, query=query)
+	url = _qurl(path, **query)
 
 	if url in __recent_searches:
 		return __recent_searches.get(url)
@@ -145,7 +143,7 @@ def search(search, type='series', year=None):
 __imdb_id_to_tmdb = {}
 
 def _get_tmdb_id(imdb_id):
-	data = _query(_qurl('find/%s' % imdb_id, query={'external_source': 'imdb_id'}))
+	data = _query(_qurl('find/%s' % imdb_id, external_source='imdb_id'))
 	if data is None or not data.get('tv_results'):
 		raise RuntimeError('Unknown IMDb ID: %s' % imdb_id)
 
