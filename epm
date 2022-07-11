@@ -908,6 +908,8 @@ def refresh_all(series_config:dict, args:list=None, opts:dict=None) -> None:
 	def age(dt):
 		return (now_dt - datetime.fromisoformat(dt)).total_seconds()
 
+	earliest_refresh = None
+
 	for index, series_id, series in series_list:
 		if has_meta(series, 'archived'):
 			continue
@@ -920,16 +922,28 @@ def refresh_all(series_config:dict, args:list=None, opts:dict=None) -> None:
 				continue
 
 		last_refresh = get_meta(series, refreshed_key)
-		if forced or (not last_refresh or age(last_refresh) > max_age):
+		#print('%s last refresh: %s' % (series_id, last_refresh))
+		if forced or (not last_refresh or age(last_refresh) > max_age_s):
 			to_refresh.append(series_id)
+			if not earliest_refresh or last_refresh < earliest_refresh:
+				earliest_refresh = last_refresh
 
 	if not to_refresh:
 		if match:
 			return 'Nothing matched: %s' % match.pattern
-		return
+		return 'Nothing to update (max age: %d days)' % max_age
 
-	t0 = time.time()
+	if not forced:
+		print(f'\r{_f}Checking for updates (%d series)...{_0}{_K}' % len(to_refresh), end='', flush=True)
+		changes = tmdb.changes(to_refresh, datetime.fromisoformat(earliest_refresh))
+		for series_id, changes in zip(to_refresh, changes):
+			if not changes:
+				to_refresh.remove(series_id)
 
+	if not to_refresh:
+		return 'No updates'
+
+	print('\r', end='')
 	if forced:
 		print(f'\x1b[33m(forced){_0} ', end='')
 	print(f'{_f}Refreshing %d series...{_0}{_K}' % len(to_refresh), end='', flush=True)
