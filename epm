@@ -1073,7 +1073,7 @@ def fmt_duration(seconds: int|float, roughly: bool=False):
 	hours = int(seconds//3600)
 	seconds -= hours*3600
 	minutes = int(seconds//60)
-	seconds = int(seconds%60)
+	seconds = 0 #int(seconds%60)
 
 	units = {
 		'short': { 'm': 'm', 'w': 'w', 'd': 'd', 'h': 'h', 'min': 'min', 's': 's' },
@@ -1096,7 +1096,7 @@ def fmt_duration(seconds: int|float, roughly: bool=False):
 	if not roughly:
 		if hours > 0:
 			parts.append(templ % (hours, unit['h'], plural(hours if roughly else 1)))
-		if minutes:
+		if minutes or (hours > 0 or seconds > 0):
 			parts.append(templ % (minutes, unit['min'], plural(minutes if roughly else 1)))
 		if seconds:
 			parts.append(templ % (seconds, unit['s'], plural(seconds if roughly else 1)))
