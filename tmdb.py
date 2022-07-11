@@ -163,7 +163,7 @@ def details(title_id, type='series'):
 		raise NoAPIKey()
 
 	if title_id.__class__ is list:
-		return _parallel_query(details, [ (tid,) for tid in title_id ])
+		return _parallel_query(details, map(lambda I: ( (I,), {} ) , title_id))
 
 	if title_id.startswith('tt'):
 		title_id = _get_tmdb_id(title_id)
@@ -176,7 +176,6 @@ def details(title_id, type='series'):
 	if type == 'film':
 		detail_path = 'movie/%s' % title_id
 
-	#with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
 	executor = __get_executor()
 	detail_promise = executor.submit(_query, _qurl(detail_path))
 	ext_promise = executor.submit(_query, _qurl('tv/%s/external_ids' % title_id))
@@ -386,8 +385,8 @@ def _set_values(data, new_values):
 def _parallel_query(func, arg_list):
 	executor = __get_executor()
 	promises = [
-		executor.submit(func, *args)
-		for args in arg_list
+		executor.submit(func, *args, **kw)
+		for args, kw in arg_list
 	]
 	concurrent.futures.wait(promises)
 
