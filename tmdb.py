@@ -4,7 +4,7 @@ from urllib.parse import quote as url_escape
 from http import HTTPStatus
 import json
 import concurrent.futures
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import re
 import os
 import builtins
@@ -314,6 +314,17 @@ def episodes(series_id, with_details=False):
 	return episodes
 
 
+def changes(series_id:str|list, after:datetime) -> list:
+
+	if series_id.__class__ is list:
+		return _parallel_query(changes, map(lambda I: ( (I, after), {} ), series_id))
+
+	now = datetime.now().date().isoformat()
+	after = after.date().isoformat()
+
+	return _query(_qurl('tv/%s/changes' % series_id, start_date=after, end_date=now)) or None
+
+
 def _job_persons(people, job):
 	return ', '.join(
 		person.get('name')
@@ -395,17 +406,19 @@ def _parallel_query(func, arg_list):
 		for promise in promises
 	]
 
+
 if __name__ == '__main__':
 	#if len(sys.argv) > 2:
-	#	hits = search(sys.argv[1], year=int(sys.argv[2]))
+	#	info = search(sys.argv[1], year=int(sys.argv[2]))
 	#else:
-	#	hits = search(sys.argv[1])
-	#print(json.dumps(hits))
-	#print(len(hits))
+	#	info = search(sys.argv[1])
 
-	#eps = episodes(sys.argv[1])
-	#print(json.dumps(eps))
-	#print(len(eps))
+	#info = episodes(sys.argv[1])
 
-	info = details(sys.argv[1])
+	#info = details(sys.argv[1])
+
+	dt = datetime.now() - timedelta(days=1)
+	info = changes('76479', after=dt)
+
 	print(json.dumps(info))
+	print(len(info))
