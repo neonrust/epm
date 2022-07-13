@@ -206,11 +206,12 @@ def cmd_unseen(series_config, args, opts, width=None) -> str|None:
 
 	num_shown = 0
 	total_duration = 0
-	#                                                   pad                    margin
-	ep_max_width = width - len('       Next: s10e10 ') - 1 - len('1968-04-02') - 2
-	if not ep_max_width:
-		ep_max_width = max(len(unseen[0]['title']) if unseen else 0 for _, _, _, unseen in series_unseen for ep in unseen)
-		ep_max_width = min(ep_max_width, 25)
+	next_header = '       Next: '
+
+	ep_max_width = width - len(next_header) - 1
+	#if not ep_max_width:
+	#	ep_max_width = max(len(unseen[0]['title']) if unseen else 0 for _, _, _, unseen in series_unseen for ep in unseen)
+	#	ep_max_width = min(ep_max_width, 25)
 
 	for index, series_id, series, unseen in series_unseen:
 
@@ -261,7 +262,7 @@ def cmd_unseen(series_config, args, opts, width=None) -> str|None:
 
 		else:
 			# print first episode
-			s, released = format_episode_title(None, unseen[0], title_width=ep_max_width, today=True, only_released=False, always_date=True)
+			s, released = format_episode_title(None, unseen[0], width=ep_max_width, today=True, only_released=False, always_date=True)
 			if not released:
 				#print('not released:', series['title'], unseen[0]['title'])
 				continue
@@ -269,7 +270,7 @@ def cmd_unseen(series_config, args, opts, width=None) -> str|None:
 			if not series_printed:
 				print_series()
 
-			print(f'       Next: ', end='')
+			print(next_header, end='')
 			print(s)
 
 			num_shown += 1
@@ -359,14 +360,14 @@ def cmd_list(series_config, args, opts, width=None) -> str|None:
 		if archived and not only_archived:
 			print(f'{_f}       Archived{_0fg}')
 
-		print_seen_status(series, gray=archived and not only_archived, print_next=not all_unseen)
+		print_seen_status(series, gray=archived and not only_archived, print_next=not all_unseen, width=max_width)
 
 		if all_unseen:
 			_, unseen = seen_unseen_episodes(series)
 			current_season = 0
 			for idx, ep in enumerate(unseen):
-				remaining = len(unseen) - idx - 1
-				s, released = format_episode_title('\x1b[6C', ep, title_width=max_width, remaining=remaining, today=True, always_date=True)
+				remaining = len(unseen) - idx - 1  # what's this for?
+				s, released = format_episode_title('\x1b[6C', ep, width=max_width, remaining=remaining, today=True, always_date=True)
 				if not released:
 					break
 
@@ -625,11 +626,11 @@ def cmd_mark(series_config, args, opts, marking=True, width=None) -> str|None:
 			print('Unmarked ', end='')
 
 		print(f'{_c}{len(episodes)}{_0}', end='')
-		print(f' episode{plural(episodes)} as seen:  {_0}{_f}{fmt_duration(episodes_duration)}{_0}')
-		max_width = max(len(ep['title']) for ep in episodes)
+		print(f' episode{plural(episodes)} as seen:  {_0}{_f}{fmt_duration(episodes_runtime)}{_0}')
+		max_width = width #max(len(ep['title']) for ep in episodes)
 
 		for ep in episodes:
-			print(format_episode_title(series['title'], ep, title_width=max_width)[0])
+			print(format_episode_title(series['title'], ep, width=max_width)[0])
 
 		save_series_config(series_config)
 
@@ -1021,27 +1022,25 @@ def print_series_title(num:int, info:dict, title_width:int=0, imdb_id:str=None, 
 
 
 
-def format_episode_title(series_title:str, episode:int, title_width:int=0, gray:bool=False, remaining:int=0, today:bool=False, only_released:bool=False, always_date=False):
+def format_episode_title(series_title:str, episode:dict, width:int=0, gray:bool=False, remaining:int=0, today:bool=False, only_released:bool=False, always_date=False) -> tuple[str, bool]:
 
-	# this function should never tough the BG color
+	# this function should never touch the BG color
 
-	s = ''
+	# print('width 0:', width)
 
 	ep = {**episode}
 
-	if series_title:
-		s += f'  {series_title} '
+	season_ep = f'\x1b[33ms{_b}{ep["season"]}\x1b[22me{_b}{ep["episode"]:02}{_0fg}'
+	season_ep_w = len('s10e100 ')
+	width -= season_ep_w
 
-	if title_width == 0:
-		title_width = len(ep['title'])
-	elif len(ep['title']) > title_width:
-		title_width -= 2
-		ep['title'] = ep['title'][:title_width] + '…'
-
-	s += f'\x1b[33ms{_b}{ep["season"]}\x1b[22me{_b}{ep["episode"]:02}{_0fg} {_o}{ep["title"]:{title_width}}{_0fg}  '
+	# print('width 1:', width)
 
 	future = False
-	if 'date' in episode:
+	if 'date' in ep:
+		# ep['date'] = '2026-11-11'
+		# ep['date'] = now_datetime().date().isoformat()
+
 		dt = date.fromisoformat(ep.get('date'))
 		now_date = now_datetime().date()
 		diff = (dt - now_date).total_seconds()
@@ -1050,22 +1049,68 @@ def format_episode_title(series_title:str, episode:int, title_width:int=0, gray:
 			return None, False
 		if today:
 			today = dt == now_date
+			if today:
+				future = False
 	else:
 		today = False
 
+	ep_time_w = 1 + len('999 months')  # the longest variant
+	ep_time = None
+	time_style = ''
 	if future:
-		s += f' {_b}{dt}{_0fg}'
-		if diff > 24*3600:
-			s += f'\x1b[38;5;244m/{fmt_duration(diff, roughly=True)}{_0fg}'
-		if remaining:
-			s += f'  {_g}+%d{_0fg}' % remaining
-	elif today:
-		s += f'{_g}TODAY{_0fg}'
-	elif always_date:
-		s += f' {_f}%s{_0fg}' % episode['date']
+		ep_time = f' {dt}'
+		time_style = _b
 
-	#else:
-	#	s += f'{_f}{fmt_duration(episode.get("runtime", 0))}{_0}'
+		if diff > 24*3600:  # longer than 24 hours
+			ep_time = fmt_duration(diff, roughly=True)
+			time_style = '\x1b[38;5;244m'
+
+		# what's this for?
+		# if remaining:
+		# 	rem_str = '+%d' % remaining
+		# 	ep_time += f'  {_g}{rem_str:>{ep_time_w}}{_0fg}'
+
+	elif today:
+		ep_time = f' TODAY'
+		time_style = _g
+
+	elif 'date'in ep:
+		ep_time = f' {ep["date"]}'
+		time_style = _f
+
+	if not ep_time:
+		ep_time_w = 0
+
+	if ep_time:
+		width -= ep_time_w
+		ep_time = f' {time_style}{ep_time:>{ep_time_w}}{_0fg}'
+
+	# print('width 2:', width)
+
+	runtime = ''
+	if ep.get('runtime'):
+		runtime = ' %dmin' % ep.get('runtime')  # could use fmt_duration() but we only want minutes here
+		width -= len(runtime)
+
+	width -= 2
+
+	# print('width 3:', width)
+
+	s = ''
+	if series_title:
+		s += f'  {series_title} '
+		width -= len(series_title) - 3
+
+	# print('width 4:', width)
+
+	# not enough space: truncate & ellipt
+	if len(ep['title']) > width:
+		width -= 2
+		ep['title'] = ep['title'][:width] + '…'
+
+	# print('width 5:', width)
+
+	s += f'{season_ep:>{season_ep_w}} {_o}{ep["title"]:{width}}{_f}{runtime}{_0fg}{ep_time}'
 
 	if gray:
 		s = strip_ansi(s)
@@ -1122,7 +1167,7 @@ def _ep_key(episode:dict):
 	return f'{episode["season"]}:{episode["episode"]}'
 
 
-def print_seen_status(series:dict, gray: bool=False, print_next=True):
+def print_seen_status(series:dict, gray: bool=False, print_next=True, width:int=0):
 	ind = '       '
 
 	print(f'{ind}', end='')
@@ -1156,9 +1201,13 @@ def print_seen_status(series:dict, gray: bool=False, print_next=True):
 	else:
 		print(s)
 
-	title_width = 0
-	if seen and unseen:
-		title_width = max(len(seen[-1]['title']), len(unseen[0]['title']))
+	title_width = max(
+		width,
+		len(seen[-1]['title']) if seen else 0,
+		len(unseen[0]['title']) if unseen else 0,
+	)
+
+	# print('title_width:', title_width)
 
 	if seen:# and not all_seen:
 		# show the last *in sequence* episode marked as seen,
@@ -1166,10 +1215,10 @@ def print_seen_status(series:dict, gray: bool=False, print_next=True):
 		if gray:
 			print(_f, end='')
 		print(f'{ind}Last: ', end='')
-		print(format_episode_title('', seen[-1], gray=gray, title_width=title_width)[0])
+		print(format_episode_title('', seen[-1], gray=gray, width=title_width)[0])
 
 	if print_next and unseen:
-		s, future = format_episode_title('', unseen[0], gray=gray, title_width=title_width)
+		s, future = format_episode_title('', unseen[0], gray=gray, width=title_width)
 		if s:
 			if gray:
 				print(_f, end='')
