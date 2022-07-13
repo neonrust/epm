@@ -604,7 +604,7 @@ def cmd_mark(series_config, args, opts, marking=True, width=None) -> str|None:
 	seen = get_meta(series, 'seen', {})
 
 	episodes = []
-	episodes_duration = 0
+	episodes_runtime = 0
 
 	for ep in series.get('episodes', []):
 		if (season is None or ep['season'] in season) and (episode is None or ep['episode'] in episode):
@@ -613,7 +613,7 @@ def cmd_mark(series_config, args, opts, marking=True, width=None) -> str|None:
 			if marking and key not in seen:
 				seen[key] = now()
 				episodes.append(ep)
-				episodes_duration += ep.get('runtime') or 0
+				episodes_runtime += ep.get('runtime') or 0
 
 			elif not marking and key in seen:
 				del seen[key]
