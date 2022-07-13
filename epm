@@ -17,8 +17,8 @@ from tempfile import mkstemp
 
 import tmdb
 
-VERSION = '0.5'
-VERSION_DATE = '2022-07-07'
+VERSION = '0.6'
+VERSION_DATE = '2022-07-14'
 
 PRG = os.path.basename(sys.argv[0])
 
