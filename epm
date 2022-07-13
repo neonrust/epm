@@ -1307,25 +1307,32 @@ def options_help(command:str):
 def print_cmd_option_help(command:str) -> None:
 	options = options_help(command)
 	if options:
-		def arg_placeholder(arg_type):
-			if arg_type is int:
-				return 'N'
-			if arg_type is datetime:
-				return 'YYYY-MM-DD'
-			return 'string'
-
 		print(f'{_b}Options:{_0}')
 		for opt in options:
 			option = opt.get('option')
 			if type(option) is tuple:
 				option = ', '.join(option)
 
-			arg_string = arg_placeholder(opt.get('arg'))
-
-			option = '%s %s' % (option, arg_string)
+			arg_type = opt.get('arg')
+			if arg_type is not None:
+				arg_string = arg_placeholder(arg_type)
+				option = '%s %s' % (option, arg_string)
 
 			text = opt.get('help', '')
 			print('   %-20s %s' % (option, text))
+
+
+def arg_placeholder(arg_type):
+	if arg_type is int:
+		return 'N'
+	if arg_type is float:
+		return 'F'
+	if arg_type is datetime:
+		return 'YYYY-MM-DD'
+	if arg_type is not None:
+		return 'string'
+
+	raise RuntimeError('argument placeholder type can not be None')
 
 
 def print_usage(exit_code:int=0) -> None:
