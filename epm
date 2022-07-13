@@ -241,8 +241,8 @@ def cmd_unseen(series_config, args, opts, width=None) -> str|None:
 			# print all unseen episodes
 			current_season = 0
 			for idx, ep in enumerate(unseen):
-				remaining = len(unseen) - idx - 1
-				s, released = format_episode_title('\x1b[6C', ep, title_width=ep_max_width, remaining=remaining, today=True, always_date=True)
+				remaining = len(unseen) - idx - 1  # what's this for?
+				s, released = format_episode_title('\x1b[6C', ep, width=ep_max_width, remaining=remaining, today=True, only_released=False, always_date=True)
 				if not released:
 					break
 
@@ -298,6 +298,7 @@ def cmd_list(series_config, args, opts, width=None) -> str|None:
 	if not series_list:
 		return no_series(series_config)
 
+	# TODO: someone should explain what these numbers are... b/c I don't know
 	max_width = width - 5 - 3 - len('1968')*2 - 1 - 2 - 3 - len('episodes')
 	#max_width = max(map(lambda item: len(item[-1]['title']) if not get_meta(item[-1], 'archived') else 0, series_list))
 
