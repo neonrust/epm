@@ -65,7 +65,7 @@ def main():
 					print_usage()
 
 				command = default_command
-				#print('  -> cmd: %s' % command)
+				#print('  -> cmd: %s (default)' % command)
 
 			#print('  opt:', arg, '(cmd: %s)' % command)
 			if not eat_option(command, arg, args, options):
@@ -73,7 +73,7 @@ def main():
 			else:
 				continue
 
-		if not command:
+		if not command and not arg.startswith('.'):
 			#print('  try cmd: "%s"' % arg)
 			command = resolve_cmd(arg)
 			if command:
@@ -81,8 +81,11 @@ def main():
 				continue
 
 		if not command:
+			if arg.startswith('.'):
+				arg = arg[1: ]
+
 			command = default_command
-			#print('  -> cmd:', command)
+			#print('  -> cmd: %s (default)' % command)
 
 		if command:
 			#print('  cmd arg:', arg)
