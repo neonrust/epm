@@ -61,7 +61,9 @@ def main():
 
 		if arg.startswith('-'):
 			if not command:
-				# TODO: the --help option should not do this, but instead show the global help
+				if arg in '--help':
+					print_usage()
+
 				command = default_command
 				#print('  -> cmd: %s' % command)
 
