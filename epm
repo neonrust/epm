@@ -251,7 +251,7 @@ def cmd_unseen(series_config, args, opts, width=None) -> str|None:
 
 				season = ep['season']
 				if season != current_season:
-					print('    S%d\r' % season, end='')
+					print(f'    {_f}s{_0fg}%d\r' % season, end='')
 					current_season = season
 
 				print(s)
