@@ -538,7 +538,7 @@ def cmd_delete(series_config, args, opts, width=None) -> str|None:
 	print_series_title(index, series, imdb_id=series.get('imdb_id'))
 
 def _delete_help() -> None:
-	print(f'{_b}Complete remove a series from EPM - non-recoverable!{_0}')
+	print(f'{_b}Complete remove a series - permanently!{_0}')
 	print_cmd_usage('delete', '# / <IMDb ID>')
 	print(f'    {_o}# / <IMDb ID>{_0}')
 
