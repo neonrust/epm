@@ -314,15 +314,23 @@ def episodes(series_id, with_details=False):
 	return episodes
 
 
-def changes(series_id:str|list, after:datetime) -> list:
+def changes(series_id:str|list, after:datetime, ignore:tuple=None) -> list:
 
 	if series_id.__class__ is list:
-		return _parallel_query(changes, map(lambda I: ( (I, after), {} ), series_id))
+		return _parallel_query(changes, map(lambda I: ( (I, after), {'ignore': ignore} ), series_id))
 
 	now = datetime.now().date().isoformat()
 	after = after.date().isoformat()
 
-	return _query(_qurl('tv/%s/changes' % series_id, start_date=after, end_date=now)) or None
+	data = _query(_qurl('tv/%s/changes' % series_id, start_date=after, end_date=now)) or None
+
+	# remove change entries that was requested to ignore
+	if data.get('changes') and isinstance(ignore, (tuple, list)):
+		def non_ignored(entry):
+			return entry.get('key') not in ignore
+		data['changes'] = list(filter(non_ignored, data['changes']))
+
+	return data
 
 
 def _job_persons(people, job):
@@ -418,7 +426,7 @@ if __name__ == '__main__':
 	#info = details(sys.argv[1])
 
 	dt = datetime.now() - timedelta(days=1)
-	info = changes('76479', after=dt)
+	info = changes('76479', after=dt, ignore=('images',))
 
 	print(json.dumps(info))
 	print(len(info))
