@@ -2,6 +2,8 @@
 
 Command-line TV episode calendar/manager/scheduler/tracker (EPisode Manager)
 
+Requires python 3.9, because type hints are used (the lower-case variants).
+
 ## Dependencies
 
 - requests [https://pypi.org/project/requests]
