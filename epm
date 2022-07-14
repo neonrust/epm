@@ -24,13 +24,25 @@ VERSION_DATE = '2022-07-14'
 
 
 def main():
+	command, command_args, options = parse_args(sys.argv[1: ])
+
+	handler = cmd_handlers[command]
+
+	series_config = load_series_config()
+
+	err = handler(series_config, command_args, options, width=term_width())
+	if err is not None:
+		print(f'{_c}[{_0}{_b}{PRG} {command}{_c}]{_0} {err}')
+		sys.exit(1)
+
+
+def parse_args(args:list) -> tuple[str, list, dict]:
 	command = None
 	command_args = []
 	options = {
-		'max-age': default_max_refresh_age,
+			'max-age': default_max_refresh_age,
 	}
 
-	args = sys.argv[1: ]
 	while args:
 		arg = args.pop(0)
 
@@ -45,10 +57,7 @@ def main():
 				#print('  -> cmd: %s (default)' % command)
 
 			#print('  opt:', arg, '(cmd: %s)' % command)
-			if not eat_option(command, arg, args, options):
-				bad_opt(command, arg)
-			else:
-				continue
+			eat_option(command, arg, args, options)  # will exit if not correct
 
 		if not command and not arg.startswith('.'):
 			#print('  try cmd: "%s"' % arg)
@@ -74,18 +83,7 @@ def main():
 	if command == 'help':
 		print_usage()
 
-	series_config = load_series_config()
-
-	try:
-		handler = cmd_handlers[command]
-	except KeyError:
-		print('%s: Unknown command: %s' % (PRG, command))
-		sys.exit(1)
-
-	err = handler(series_config, command_args, options, width=term_width())
-	if err is not None:
-		print(f'{_c}[{_0}{_b}{PRG} {command}{_c}]{_0} {err}')
-		sys.exit(1)
+	return command, command_args, options
 
 
 def resolve_cmd(name):
@@ -105,8 +103,8 @@ def resolve_cmd(name):
 
 	return None
 
-long_option_arg_ptn = re.compile(r'''^(?P<option>--[^= ]+)(?:=(?P<arg>.*))$''')
 
+long_option_arg_ptn = re.compile(r'^(?P<option>--[^= ]+)(?:=(?P<arg>.*))$')
 
 def eat_option(command, option, args, options) -> bool:
 	if option in ('-h', '--help'):
@@ -155,8 +153,6 @@ def eat_option(command, option, args, options) -> bool:
 		option_arg = True
 
 	options[opt_def['key']] = option_arg
-
-	return True
 
 
 def cmd_unseen(series_config, args, opts, width=None) -> str|None:
