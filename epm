@@ -948,7 +948,7 @@ def refresh_all(series_config:dict, args:list=None, opts:dict=None) -> None:
 
 	if not forced:
 		print(f'\r{_f}Checking for updates (%d series)...{_0}{_K}' % len(to_refresh), end='', flush=True)
-		changes = tmdb.changes(to_refresh, datetime.fromisoformat(earliest_refresh))
+		changes = tmdb.changes(to_refresh, datetime.fromisoformat(earliest_refresh), ignore=ignore_changes)
 		for series_id, changes in zip(to_refresh, changes):
 			if not changes:
 				to_refresh.remove(series_id)
@@ -1544,6 +1544,8 @@ _K = '\x1b[K'      # clear end-of-line
 _E = '\x1b[41;97;1m' # ERROR (white on red)
 
 today_date = date.today()
+
+ignore_changes = ('images',)
 
 if __name__ == '__main__':
 	try:
