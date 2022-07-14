@@ -8,10 +8,11 @@ from datetime import datetime, date, timedelta
 import re
 import os
 import builtins
+from typing import Callable, Any
 
 # TODO: API version 4 ?
 _base_url_tmpl = 'https://api.themoviedb.org/3/%%(path)s?api_key=%s'
-_base_url = None
+_base_url:str|None = None
 _api_key = os.getenv('TMDB_API_KEY', '')
 
 api_key_help = 'Set "TMDB_API_KEY" environment variable for your account.'
@@ -40,7 +41,10 @@ def __get_executor():
 
 
 def _update_query_func():
-	def mk_url(endpoint, **query):
+	def mk_url(endpoint:str, query:dict) -> str:
+		if _base_url is None:
+			raise RuntimeError('_base_url is None, which should never happen!')
+
 		url = _base_url % { 'path': endpoint }
 
 		if query is not None:
@@ -55,7 +59,7 @@ def _update_query_func():
 	_qurl = mk_url
 
 
-_qurl = None
+_qurl:Callable[[str, dict], str]|None = None
 
 def set_api_key(key):
 	global _api_key
@@ -69,7 +73,7 @@ def set_api_key(key):
 if _api_key:
 	set_api_key(_api_key)
 
-def _query(url):
+def _query(url) -> dict[str, Any]|None:
 	# print('\x1b[2mquery: %s\x1b[m' % url)
 	resp = requests.get(url)
 	if resp.status_code != HTTPStatus.OK:
@@ -77,7 +81,7 @@ def _query(url):
 	return resp.json()
 
 
-__recent_searches = {}
+__recent_searches:dict = {}
 
 def search(search, type='series', year=None):
 
@@ -98,7 +102,7 @@ def search(search, type='series', year=None):
 	if year is not None:
 		query['first_air_date_year'] = year
 
-	url = _qurl(path, **query)
+	url = _qurl(path, query)
 
 	if url in __recent_searches:
 		return __recent_searches.get(url)
@@ -140,10 +144,10 @@ def search(search, type='series', year=None):
 
 
 
-__imdb_id_to_tmdb = {}
+__imdb_id_to_tmdb:dict = {}
 
 def _get_tmdb_id(imdb_id):
-	data = _query(_qurl('find/%s' % imdb_id, external_source='imdb_id'))
+	data = _query(_qurl('find/%s' % imdb_id, {'external_source':'imdb_id'}))
 	if data is None or not data.get('tv_results'):
 		raise RuntimeError('Unknown IMDb ID: %s' % imdb_id)
 
@@ -155,7 +159,7 @@ def _get_tmdb_id(imdb_id):
 	return title_id
 
 
-__details = {}
+__details:dict = {}
 
 def details(title_id, type='series'):
 
@@ -196,6 +200,7 @@ def details(title_id, type='series'):
 	_rename_keys(data, {
 		'name': 'title',
 		'first_air_date': 'date',
+		'last_air_date': 'end_date',
 		'original_name': 'original_title',
 		'original_language': 'language',
 		'origin_country': 'country',
@@ -234,9 +239,10 @@ def details(title_id, type='series'):
 
 	# TODO: cast, crew?
 
-	if data.get('status') in ('Ended', 'Canceled') and data.get('last_air_date'):
-		data['year'] = data['year'] + [ int(data.get('last_air_date').split('-')[0]) ]
-		del data['last_air_date']
+	if data.get('status') in ('Ended', 'Canceled') and data.get('end_date'):
+		data['year'] = data['year'] + [ int(data.get('end_date').split('-')[0]) ]
+	else:
+		del data['end_date']
 
 	__details[title_id] = data
 
@@ -316,21 +322,24 @@ def episodes(series_id, with_details=False):
 
 def changes(series_id:str|list, after:datetime, ignore:tuple=None) -> list:
 
+	if _qurl is None:
+		return []
+
 	if series_id.__class__ is list:
 		return _parallel_query(changes, map(lambda I: ( (I, after), {'ignore': ignore} ), series_id))
 
 	now = datetime.now().date().isoformat()
-	after = after.date().isoformat()
+	after_str = after.date().isoformat()
 
-	data = _query(_qurl('tv/%s/changes' % series_id, start_date=after, end_date=now)) or None
+	data = _query(_qurl('tv/%s/changes' % series_id, {'start_date': after_str, 'end_date': now}))
 
 	# remove change entries that was requested to ignore
-	if data.get('changes') and isinstance(ignore, (tuple, list)):
+	if data and data.get('changes') and isinstance(ignore, (tuple, list)):
 		def non_ignored(entry):
 			return entry.get('key') not in ignore
 		data['changes'] = list(filter(non_ignored, data['changes']))
 
-	return data
+	return (data or {}).get('changes', [])
 
 
 def _job_persons(people, job):
@@ -415,18 +424,34 @@ def _parallel_query(func, arg_list):
 	]
 
 
+def _self_test(args):
+	def next(required=True):
+		if required:
+			return args.pop(0)
+		else:
+			return args.pop(0, None)
+
+	op = next()
+
+	if op.startswith('s'):
+		info = search(next(), year=int(next()))
+
+	elif op.startswith('e'):
+		info = episodes(next())
+
+	elif op.startswith('d'):
+		info = details(next())
+
+	elif op.startswith('c'):
+		dt = datetime.now() - timedelta(days=1)
+		info = changes(next(), after=dt, ignore=('images',))
+
+	else:
+		print('_self_test: <op> [args...]', file=sys.stderr)
+		print('   <op> one of s(earch) e(pisodes) d(etails) c(hanges)', file=sys.stderr)
+
+	print(json.dumps(info, indent=2))
+	print('ENTRIES: %d' % len(info), file=sys.stderr)
+
 if __name__ == '__main__':
-	#if len(sys.argv) > 2:
-	#	info = search(sys.argv[1], year=int(sys.argv[2]))
-	#else:
-	#	info = search(sys.argv[1])
-
-	#info = episodes(sys.argv[1])
-
-	#info = details(sys.argv[1])
-
-	dt = datetime.now() - timedelta(days=1)
-	info = changes('76479', after=dt, ignore=('images',))
-
-	print(json.dumps(info))
-	print(len(info))
+	_self_test(sys.argv[1:])
