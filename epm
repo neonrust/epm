@@ -1,13 +1,6 @@
 #! /usr/bin/env python3
 # -*- mode: python -*-
 
-import sys
-try:
-	import orjson
-except:
-	import json
-	orjson = None
-
 import os.path
 import re
 import time
@@ -17,16 +10,17 @@ from tempfile import mkstemp
 
 import tmdb
 
+import sys
+# use orjson if available
+try:
+	import orjson
+except ImportError:
+	import json
+	orjson = None
+
+
 VERSION = '0.6'
 VERSION_DATE = '2022-07-14'
-
-PRG = os.path.basename(sys.argv[0])
-
-default_max_refresh_age = 2  # days
-refreshed_key = 'refreshed-at'
-
-series_config_file = os.path.expandvars(f'$HOME/.config/{PRG}/series')
-num_config_backups = 10
 
 
 def main():
@@ -35,23 +29,6 @@ def main():
 	options = {
 		'max-age': default_max_refresh_age,
 	}
-
-	def resolve_cmd(name):
-		matching = []
-
-		for cmd in known_commands:
-			for alias in cmd:
-				if name == alias or alias.startswith(name.lower()):
-					matching.append(cmd[0]) # the first alias is the "long version", guaranteed to be unique
-					break
-
-		if len(matching) == 1:
-			return matching[0]
-		if len(matching) > 1:
-			ambiguous_cmd(name, matching)
-
-		return None
-
 
 	args = sys.argv[1: ]
 	while args:
@@ -110,6 +87,23 @@ def main():
 		print(f'{_c}[{_0}{_b}{PRG} {command}{_c}]{_0} {err}')
 		sys.exit(1)
 
+
+def resolve_cmd(name):
+	matching = []
+
+	for cmd in known_commands:
+		for alias in cmd:
+			if name == alias or alias.startswith(name.lower()):
+				matching.append(cmd[0]) # use the first alias as unique key
+				break  # next command
+
+	if len(matching) == 1:
+		return matching[0]
+
+	if len(matching) > 1:
+		ambiguous_cmd(name, matching)
+
+	return None
 
 long_option_arg_ptn = re.compile(r'''^(?P<option>--[^= ]+)(?:=(?P<arg>.*))$''')
 
@@ -795,6 +789,8 @@ cmd_handlers = {
 		'refresh': cmd_refresh,
 }
 
+default_max_refresh_age = 2  # days
+
 known_options = {
 	None: {
 	},
@@ -888,9 +884,6 @@ def no_series(series_config:dict) -> str:
 		return 'No series added. %s' % suffix
 
 
-meta_key = 'epm:meta'
-legacy_meta_keys = ('added', refreshed_key, 'seen', 'archived')
-
 def refresh_series(series_id:str, series_config:dict, progress:bool=False) -> int:
 	if progress:
 		print(f'{_f}(%d / %d) Refreshing %s...{_0}' % (progress[0], progress[1], series_id), end='', flush=True)
@@ -910,7 +903,7 @@ def refresh_series(series_id:str, series_config:dict, progress:bool=False) -> in
 
 	series_config[series_id] = details
 	series_config[series_id][meta_key] = meta_data
-	set_meta(series_config[series_id], refreshed_key, now())
+	set_meta(series_config[series_id], updated_key, now())
 	series_config[series_id]['episodes'] = episodes
 
 	return len(episodes)
@@ -950,7 +943,7 @@ def refresh_all(series_config:dict, args:list=None, opts:dict=None) -> None:
 			if match and not match(series):
 				continue
 
-		last_refresh = get_meta(series, refreshed_key)
+		last_refresh = get_meta(series, updated_key)
 		#print('%s last refresh: %s' % (series_id, last_refresh))
 		if forced or (not last_refresh or age(last_refresh) > max_age_s):
 			to_refresh.append(series_id)
@@ -1473,16 +1466,15 @@ def load_series_config() -> dict:
 			with open(series_config_file, 'r') as fp:
 				config = json.load(fp)
 
-	# migrate meta data to new structure
+	# migrate meta data to the current structure
 	meta_migrated = 0
 	for series_id, series in config.items():
-		if not series.get(meta_key):
-			legacy_meta_data = {}
-			for key in legacy_meta_keys:
-				if key in series:
-					legacy_meta_data[key] = series.pop(key, None)
-
-			series[meta_key] = legacy_meta_data
+		if meta_key not in series:
+			series[meta_key] = {
+				key: series.pop(key)
+				for key in legacy_meta_keys
+				if key in series
+			}
 			meta_migrated += 1
 
 	if meta_migrated > 0:
@@ -1558,6 +1550,7 @@ def plural(n:int) -> str:
 		n = len(n)
 	return '' if n == 1 else 's'
 
+
 _0 = '\x1b[m'      # normal (reset all)
 _0fg = '\x1b[22;23;39m' # normal FG style
 _b = '\x1b[1m'     # bold
@@ -1570,9 +1563,19 @@ _fi = '\x1b[2;3m'  # faint & italic
 _K = '\x1b[K'      # clear end-of-line
 _E = '\x1b[41;97;1m' # ERROR (white on red)
 
+
 today_date = date.today()
 
+updated_key = 'updated'
+meta_key = 'epm:meta'
+legacy_meta_keys = ('added', updated_key, 'seen', 'archived')
 ignore_changes = ('images',)
+
+PRG = os.path.basename(sys.argv[0])
+
+series_config_file = os.path.expandvars(f'$HOME/.config/{PRG}/series')
+num_config_backups = 10
+
 
 if __name__ == '__main__':
 	try:
