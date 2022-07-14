@@ -111,12 +111,25 @@ def main():
 		sys.exit(1)
 
 
+long_option_arg_ptn = re.compile(r'''^(?P<option>--[^= ]+)(?:=(?P<arg>.*))$''')
+
+
 def eat_option(command, option, args, options) -> bool:
 	if option in ('-h', '--help'):
 		if command:
 			print_cmd_help(command)
 		else:
 			print_usage()
+
+	option_arg = None
+
+	# check if it's a long option combined with an argument, i.e. --option=argument
+	m = long_option_arg_ptn.search(option)
+	if m:
+		option = m.group('option')
+		option_arg = m.groupdict().get('arg', None)
+		if not option_arg:
+			option_arg = args.pop(0, None)
 
 	command = command or default_command
 	opt_def = option_def(command, option)
@@ -126,25 +139,28 @@ def eat_option(command, option, args, options) -> bool:
 
 	arg_type = opt_def.get('arg')
 	if arg_type is not None:
-		arg = args.pop(0)
+		if option_arg is None:
+			bad_opt_arg(command, option, None, arg_type)
+
 		if arg_type is int:
 			try:
-				arg = int(arg)
+				option_arg = int(option_arg)
 			except ValueError:
-				bad_opt_arg(command, option, arg, arg_type)
+				bad_opt_arg(command, option, option_arg, arg_type)
 
 		elif arg_type is datetime:
 			try:
-				arg = datetime.fromisoformat(arg)
+				option_arg = datetime.fromisoformat(option_arg)
 			except ValueError:
-				bad_opt_arg(command, option, arg, arg_type)
-
-		opt_arg = arg
+				bad_opt_arg(command, option, option_arg, arg_type)
 
 	else:
-		opt_arg = True
+		if option_arg:
+			bad_opt_arg(command, option, option_arg, None)
 
-	options[opt_def['key']] = opt_arg
+		option_arg = True
+
+	options[opt_def['key']] = option_arg
 
 	return True
 
@@ -1419,7 +1435,18 @@ def bad_opt_arg(command:str, option, arg, arg_type) -> None:
 		print(f'{_c}[{_0}{_b}{PRG} {command}{_c}]{_0} ', end='', file=sys.stderr)
 	else:
 		print(f'{_c}[{_0}{_b}{PRG}{_c}]{_0} ', end='', file=sys.stderr)
-	print(f'Bad option argument for {option}: {_b}{arg}{_0}  (%s expected)' % arg_type.__name__, file=sys.stderr)
+
+	expected = None
+	if arg_type is not None:
+		expected = arg_type.__name__
+
+	if expected is None:
+		print(f'Unexpected argument for {option}: {_b}{arg}{_0}', file=sys.stderr)
+	elif arg is None:
+		print(f'Required argument missing for {option}', file=sys.stderr)
+	else:
+		print(f'Bad option argument for {option}: {_b}{arg}{_0}  (%s expected)' % expected, file=sys.stderr)
+
 	sys.exit(1)
 
 
