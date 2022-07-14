@@ -54,16 +54,17 @@ def parse_args(args:list) -> tuple[str, list, dict]:
 					print_usage()
 
 				command = default_command
-				#print('  -> cmd: %s (default)' % command)
+				# print('  -> cmd: %s (default)' % command)
 
-			#print('  opt:', arg, '(cmd: %s)' % command)
+			# print('  opt:', arg, '(cmd: %s)' % command)
 			eat_option(command, arg, args, options)  # will exit if not correct
+			continue
 
 		if not command and not arg.startswith('.'):
-			#print('  try cmd: "%s"' % arg)
+			# print('  try cmd: "%s"' % arg)
 			command = resolve_cmd(arg)
 			if command:
-				#print('  -> cmd: %s [%s]' % (command, ' '.join(command_args)))
+				# print('  -> cmd: %s [%s]' % (command, ' '.join(command_args)))
 				continue
 
 		if not command:
