@@ -935,7 +935,7 @@ def refresh_all(series_config:dict, args:list=None, opts:dict=None) -> str|None:
 
 	find_id, match = find_id_or_match(args)
 
-	series_list = get_series(series_config)
+	series_list = get_series(series_config, archived=False)
 
 	to_refresh = []
 
@@ -946,9 +946,6 @@ def refresh_all(series_config:dict, args:list=None, opts:dict=None) -> str|None:
 	earliest_refresh = '2022-07-01'  # can never be earlier than this
 
 	for index, series_id, series in series_list:
-		if has_meta(series, 'archived'):
-			continue
-
 		if find_id is not None:
 			if find_id != index:
 				continue
@@ -1305,19 +1302,22 @@ def series_num_archived(series_config:dict) -> int:
 	return sum(1 if has_meta(series, 'archived') else 0 for series in series_config.values())
 
 
-def get_series(series_config:dict) -> list[tuple[int, str, dict]]:
+def get_series(series_config:dict, archived:bool|None=None) -> list[tuple[int, str, dict]]:
 	series_ids = sorted(series_config, key=lambda series_id: (series_config[series_id]['title'].casefold(), series_config[series_id].get('year', '')))
 
-	series:list[tuple[int, str, dict]] = []
-	index = 1
+	all_series:list[tuple[int, str, dict]] = []
+	index = 0
 
 	for series_id in series_ids:
-		info = series_config[series_id]
-
-		series.append( (index, series_id, info) )
 		index += 1
+		series = series_config[series_id]
 
-	return series
+		if archived is not None and archived == has_meta(series, 'archived'):
+			continue
+
+		all_series.append( (index, series_id, series) )
+
+	return all_series
 
 
 def seen_unseen_episodes(series:dict, before=None) -> tuple[list,list]:
