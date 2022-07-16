@@ -41,7 +41,7 @@ def __get_executor():
 
 
 def _update_query_func():
-	def mk_url(endpoint:str, query:dict) -> str:
+	def mk_url(endpoint:str, query:dict|None=None) -> str:
 		if _base_url is None:
 			raise RuntimeError('_base_url is None, which should never happen!')
 
