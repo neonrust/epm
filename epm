@@ -178,7 +178,7 @@ def cmd_unseen(series_config:dict, args:list[str], opts:dict[str, Any], width:in
 
 	# TODO: print header/columns
 
-	upto_future = 'unseen:future' in opts
+	also_future = 'unseen:future' in opts
 	only_started = 'unseen:started' in opts
 	only_planned = 'unseen:planned' in opts
 	all_unseen = 'unseen:all_episodes' in  opts
