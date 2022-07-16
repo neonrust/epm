@@ -184,7 +184,7 @@ def cmd_unseen(series_config:dict, args:list[str], opts:dict[str, Any], width:in
 	all_unseen = 'unseen:all_episodes' in  opts
 
 	if only_started and only_planned:
-		return 'Can\'t specify -s and -p at the same time'
+		return 'Can\'t specify "started" and "planned" at the same time (try "list" command)'
 
 	find_id, match = find_id_or_match(args)
 
