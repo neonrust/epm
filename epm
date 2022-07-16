@@ -402,7 +402,7 @@ def print_unseen_episodes(series:dict, width:bool, pre_print:Callable|None=None,
 
 		season = ep['season']
 		if season != current_season:
-			print(f'{_c}%{indent}s{_0fg}\r' % (f'S%d' % season), end='')
+			print(f'{_c}%{indent}s{_0fg}\r' % (f's%d' % season), end='')
 			current_season = season
 
 		# use cursor move instead of writing spaces, so we don't overwrite the season label
