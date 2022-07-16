@@ -210,13 +210,10 @@ def cmd_unseen(series_config:dict, args:list[str], opts:dict[str, Any], width:in
 
 
 	print(f'{_f}Listing {_0}', end='')
-	if only_started:
-		print('started ', end='')
-	elif only_planned:
-		print('planned ', end='')
+	if only_started: print('started ', end='')
+	elif only_planned: print('planned ', end='')
 	print(f'{_f}series with unseen episodes', end='')
-	if match:
-		print(', matching "%s"' % match.pattern, end='')
+	if match: print(', matching "%s"' % match.pattern, end='')
 	print(f'.{_0}')
 
 	# TODO: optionally sort series by "earliest" episode in summary mode
@@ -224,11 +221,11 @@ def cmd_unseen(series_config:dict, args:list[str], opts:dict[str, Any], width:in
 	num_shown = 0
 	total_episodes = 0
 	total_duration = 0
-	indent = 14
 
 	for index, series_id, series, unseen in series_unseen:
 
 		any_episodes_seen = bool(get_meta(series, 'seen', {}))
+
 		if only_started and not any_episodes_seen:
 			continue
 		if only_planned and any_episodes_seen:
@@ -251,7 +248,7 @@ def cmd_unseen(series_config:dict, args:list[str], opts:dict[str, Any], width:in
 			tail = f' {_f}%3d unseen{_0fg}' % len(unseen)
 
 		if all_unseen:
-			eps_printed = print_unseen_episodes(series, width=width, pre_print=print_series)
+			eps_printed = print_unseen_episodes(series, width=width, pre_print=print_series, also_future=also_future)
 			if eps_printed > 0:
 				num_shown += 1
 
@@ -259,8 +256,8 @@ def cmd_unseen(series_config:dict, args:list[str], opts:dict[str, Any], width:in
 
 		else:
 			# print first episode
-			if not is_released(unseen[0]):
-				break
+			if not (also_future or is_released(unseen[0])):
+				continue
 
 			print_series()
 			print_seen_status(series, next=True, summary=False, last=False, width=width)
@@ -293,10 +290,6 @@ setattr(cmd_unseen, 'help', _unseen_help)
 def cmd_list(series_config:dict, args:list[str], opts:dict[str, Any], width:int) -> str|None:
 	refresh_all(series_config)
 
-	series_list = get_series(series_config)
-	if not series_list:
-		return no_series(series_config)
-
 	# TODO: someone should explain what these numbers are... b/c I don't know
 	max_width = width - 5 - 3 - len('1968')*2 - 1 - 2 - 3 - len('episodes')
 	#max_width = max(map(lambda item: len(item[-1]['title']) if not get_meta(item[-1], 'archived') else 0, series_list))
@@ -309,18 +302,18 @@ def cmd_list(series_config:dict, args:list[str], opts:dict[str, Any], width:int)
 	only_planned = 'list:planned' in opts
 	all_unseen = 'list:all_episodes' in  opts
 
+	series_list = get_series(series_config)
+	if not series_list:
+		return no_series(series_config)
+
 	find_id, match = find_id_or_match(args)
 
 	print(f'{_f}Listing ', end='')
-	if only_started:
-		print('started ', end='')
-	elif only_planned:
-		print('planned ', end='')
-	elif only_archived:
-		print('archived ', end='')
+	if only_started: print('started ', end='')
+	elif only_planned: print('planned ', end='')
+	elif only_archived: print('archived ', end='')
 	print('series', end='')
-	if match:
-		print(', matching "%s"' % match.pattern, end='')
+	if match: print(', matching "%s"' % match.pattern, end='')
 	print(f'.{_0}')
 
 	num_shown = 0
@@ -386,7 +379,7 @@ def _list_help() -> None:
 setattr(cmd_list, 'help', _list_help)
 
 
-def print_unseen_episodes(series:dict, width:bool, pre_print:Callable|None=None) -> int:
+def print_unseen_episodes(series:dict, width:bool, pre_print:Callable|None=None, also_future=False) -> int:
 	num_shown = 0
 
 	_, unseen = seen_unseen_episodes(series)
@@ -400,7 +393,7 @@ def print_unseen_episodes(series:dict, width:bool, pre_print:Callable|None=None)
 	ep_width = width - indent - margin
 	for idx, ep in enumerate(unseen):
 
-		if not is_released(ep):
+		if not (also_future or is_released(ep)):
 			break
 
 		if pre_print:
@@ -868,10 +861,11 @@ def find_list_index(series_config, series_id):
 
 
 def is_released(target, fallback=True):
-	release_date = target.get('release_date')
+	release_date = target.get('date')
 	if release_date is None:
 		return fallback
 
+	# already released or will be today
 	return date.fromisoformat(release_date) <= today_date
 
 
