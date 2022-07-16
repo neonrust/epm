@@ -654,7 +654,7 @@ def cmd_mark(series_config:dict, args:list[str], opts:dict[str, Any], width:int,
 		max_width = width #max(len(ep['title']) for ep in episodes)
 
 		for ep in episodes:
-			print(format_episode_title(series['title'], ep, width=max_width))
+			print('  %s' % format_episode_title(series['title'], ep, width=max_width - 2))
 
 		save_series_config(series_config)
 
