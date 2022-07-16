@@ -393,9 +393,6 @@ def print_unseen_episodes(series:dict, width:bool, pre_print:Callable|None=None,
 	ep_width = width - indent - margin
 	for idx, ep in enumerate(unseen):
 
-		if not (also_future or is_released(ep)):
-			break
-
 		if pre_print:
 			pre_print()
 			pre_print = None  # only once
@@ -412,6 +409,9 @@ def print_unseen_episodes(series:dict, width:bool, pre_print:Callable|None=None,
 		print(f'\x1b[{indent + margin}C{s}')
 
 		num_shown += 1
+
+		if not (also_future or is_released(ep)):
+			break
 
 	return num_shown
 
