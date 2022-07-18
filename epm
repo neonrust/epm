@@ -95,13 +95,16 @@ def parse_args(args:list) -> tuple[str, list, dict]:
 	return command, command_args, options
 
 
-def resolve_cmd(name):
+def resolve_cmd(name) -> str|None:
 	matching = []
 
 	for cmd in known_commands:
+		primary = cmd[0]  # use the first alias as unique key
 		for alias in cmd:
-			if name == alias or alias.startswith(name.lower()):
-				matching.append(cmd[0]) # use the first alias as unique key
+			if name == alias:
+				return primary  # direct match (case sensitive), just return
+			if alias.startswith(name.lower()):
+				matching.append(primary)
 				break  # next command
 
 	if len(matching) == 1:
