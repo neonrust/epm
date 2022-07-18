@@ -8,6 +8,7 @@ from datetime import datetime, date, timedelta
 import re
 import os
 import builtins
+from collections.abc import Iterable
 from typing import Callable, Any
 
 # TODO: API version 4 ?
@@ -166,7 +167,7 @@ def details(title_id, type='series'):
 	if not _api_key:
 		raise NoAPIKey()
 
-	if title_id.__class__ is list:
+	if isinstance(title_id, Iterable) and not isinstance(title_id, str):
 		return _parallel_query(details, map(lambda I: ( (I,), {} ) , title_id))
 
 	if title_id.startswith('tt'):
@@ -325,7 +326,7 @@ def changes(series_id:str|list, after:datetime, ignore:tuple=None) -> list:
 	if _qurl is None:
 		return []
 
-	if series_id.__class__ is list:
+	if isinstance(series_id, Iterable) and not isinstance(series_id, str):
 		return _parallel_query(changes, map(lambda I: ( (I, after), {'ignore': ignore} ), series_id))
 
 	now = datetime.now().date().isoformat()
