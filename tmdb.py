@@ -1,5 +1,6 @@
 import sys
 import requests
+from requests import ReadTimeout, ConnectTimeout
 from urllib.parse import quote as url_escape
 from http import HTTPStatus
 import json
@@ -76,7 +77,10 @@ if _api_key:
 
 def _query(url) -> dict[str, Any]|None:
 	# print('\x1b[2mquery: %s\x1b[m' % url)
-	resp = requests.get(url)
+	try:
+		resp = requests.get(url, timeout=10)
+	except (ReadTimeout, ConnectTimeout) as to:
+		return None
 	if resp.status_code != HTTPStatus.OK:
 		return None
 	return resp.json()
