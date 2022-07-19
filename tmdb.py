@@ -238,13 +238,14 @@ def details(title_id, type='series'):
 		'year': lambda _: [int(data.get('date', [0]).split('-')[0])] if data.get('date') else None,
 		'id': lambda _: str(data['id']),
 		'country': lambda _: ', '.join(data.get('country')),
-		'genre': lambda _: ', '.join(map(lambda g: g.get('name'), data.get('genres')))
+		'genre': lambda _: ', '.join(map(lambda g: g.get('name'), data.get('genres'))),
+		'status': lambda _: _map_status(data.get('status')) if 'status' in data else None,
 	})
 	_del_keys(data, ['genres'])
 
 	# TODO: cast, crew?
 
-	if data.get('status') in ('Ended', 'Canceled') and data.get('end_date'):
+	if data.get('status') in ('ended', 'canceled') and data.get('end_date'):
 		data['year'] = data['year'] + [ int(data.get('end_date').split('-')[0]) ]
 	else:
 		del data['end_date']
@@ -353,6 +354,12 @@ def _job_persons(people, job):
 		for person in people
 		if person.get('job') == job
 	)
+
+def _map_status(st):
+	st = st.lower()
+	if st in ('ended', 'canceled'):
+		return st
+	return 'active'  # TODO: a better term?
 
 def _del_empty(data):
 	if type(data) is list:
