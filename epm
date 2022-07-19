@@ -27,73 +27,107 @@ VERSION_DATE = '2022-07-14'
 
 
 def main():
-	command, command_args, options = parse_args(sys.argv[1: ])
+	load_config()
+	#print(orjson.dumps(app_config, option=orjson.OPT_INDENT_2 | orjson.OPT_SORT_KEYS).decode('utf-8'))
 
-	handler = cmd_handlers[command]
+	api_key = config_get('lookup/api-key')
+	if api_key:
+		tmdb.set_api_key(api_key)
 
-	series_config = load_series_config()
+	ctx = context(sys.argv[1: ])
 
-	err = handler(series_config, command_args, options, width=term_width())
+	err = ctx.invoke(width=term_width())
 	if err is not None:
-		print(f'{_c}[{_0}{_b}{PRG} {command}{_c}]{_0} {err}')
+		print(f'{warning_prefix(ctx.command)} {err}')
 		sys.exit(1)
 
 
-def parse_args(args:list) -> tuple[str, list, dict]:
-	command = None
-	command_args = []
-	options = {
-			'max-age': default_max_refresh_age,
-	}
+class context:
+	def __init__(self, args:list[str]):
+		self.command:str|None = None
+		self.options:dict = {
+			'max-age': config_get('max-age'),
+		}
+		self.arguments:list = []
+		self.db = load_series_db()
+		self._parse_args(args)
 
-	while args:
-		arg = args.pop(0)
+		if self.command is not None:
+			self.handler:Callable = cmd_handlers[self.command]
 
-		# print('check arg: "%s"' % arg)
 
-		if arg.startswith('-'):
-			if not command:
-				if arg in '--help':
-					print_usage()
+	def invoke(self, width:int) -> str|None:
+		return self.handler(self, width=width)
 
-				command = default_command
-				# print('  -> cmd: %s (default)' % command)
 
-			# print('  opt:', arg, '(cmd: %s)' % command)
-			eat_option(command, arg, args, options)  # will exit if not correct
-			continue
+	def _set_command(self, name:str) -> None:
+		self.command = name
 
-		if not command and not arg.startswith('.'):
-			# print('  try cmd: "%s"' % arg)
-			command = resolve_cmd(arg)
-			if command:
-				# print('  -> cmd: %s [%s]' % (command, ' '.join(command_args)))
+		# insert configured default arguments and options
+		args = config_get('commands/%s/default_arguments' % self.command, [])
+		if args and isinstance(args, list):
+			self.arguments = args
+
+		opts = config_get('commands/%s/default_options' % self.command, [])
+		while isinstance(opts, list) and opts:
+			eat_option(self.command, opts.pop(0), opts, self.options)
+
+
+	def _add_argument(self, argument:str) -> None:
+		self.arguments.append(argument)
+
+
+	def _parse_args(self, args:list) -> None:
+
+		default_command = str(config_get('commands/default', 'unseen'))
+
+		while args:
+			arg = args.pop(0)
+
+			# print('check arg: "%s"' % arg)
+
+			if arg.startswith('-'):
+				if not self.command:
+					if arg in '--help':
+						print_usage()
+
+					self._set_command(default_command)
+					# print('  -> cmd: %s (default)' % self.command)
+
+				# print('  opt:', arg, '(cmd: %s)' % self.command)
+				eat_option(self.command, arg, args, self.options)  # will exit if not correct
 				continue
 
-		if not command:
-			if arg.startswith('.'):
-				arg = arg[1: ]
+			if not self.command and not arg.startswith('.'):
+				# print('  try cmd: "%s"' % arg)
+				cmd = resolve_cmd(arg)
+				if cmd:
+					self._set_command(cmd)
+					# print('  -> cmd: %s [%s]' % (self.command, ' '.join(self.arguments)))
+					continue
 
-			command = default_command
-			# print('  -> cmd: %s (default)' % command)
+			if not self.command:
+				if arg.startswith('.'):
+					arg = arg[1: ]
 
-		if command:
-			# print('  cmd arg:', arg)
-			command_args.append(arg)
+				self._set_command(default_command)
+				# print('  -> cmd: %s (default)' % self.command)
 
-		else:
-			raise RuntimeError('Bug: unhandled argument: "%s"' % arg)
+			if self.command:
+				# print('  cmd arg:', arg)
+				self._add_argument(arg)
 
-	if not command:
-		command = default_command
+			else:
+				raise RuntimeError('Bug: unhandled argument: "%s"' % arg)
 
-	if command == 'help':
-		print_usage()
+		if not self.command:
+			self._set_command(default_command)
 
-	return command, command_args, options
+		if self.command == 'help':
+			print_usage()
 
 
-def resolve_cmd(name) -> str|None:
+def resolve_cmd(name:str) -> str|None:
 	matching = []
 
 	for cmd in known_commands:
@@ -103,7 +137,7 @@ def resolve_cmd(name) -> str|None:
 				return primary  # direct match (case sensitive), just return
 			if alias.startswith(name.lower()):
 				matching.append(primary)
-				break  # next command
+				# don't break, there might be an exact match for an alias
 
 	if len(matching) == 1:
 		return matching[0]
@@ -123,12 +157,15 @@ def eat_option(command:str|None, option:str, args:list[str], options:dict) -> No
 		else:
 			print_usage()
 
+	default_command = str(config_get('commands/default', 'unseen'))
+
 	command = command or default_command
 	opt_def = option_def(command, option)
-	key:str = opt_def['key']
 
 	if not opt_def:
 		bad_opt(command, option)
+
+	key:str = opt_def['key']
 
 	option_arg:str|None = None
 
@@ -167,27 +204,31 @@ def eat_option(command:str|None, option:str, args:list[str], options:dict) -> No
 				bad_opt_arg(command, option, arg_str, arg_type)
 
 
-def cmd_unseen(series_config:dict, args:list[str], opts:dict[str, Any], width:int) -> str|None:
-	refresh_all(series_config)
+###############################################################################
+###############################################################################
 
-	series_list = get_series(series_config)
+
+def cmd_unseen(ctx:context, width:int) -> str | None:
+	refresh_all(ctx)
+
+	series_list = get_series(ctx.db)
 	if not series_list:
-		return no_series(series_config)
+		return no_series(ctx.db)
 
 	#                     idx   year2+pad         dash pad eps                  margin
 	max_width:int = width - 5 - 3 - len('1968')*2 - 1 - 2 - 3 - len('episodes')
 
 	# TODO: print header/columns
 
-	also_future = 'unseen:future' in opts
-	only_started = 'unseen:started' in opts
-	only_planned = 'unseen:planned' in opts
-	all_unseen = 'unseen:all_episodes' in  opts
+	also_future = 'unseen:future' in ctx.options
+	only_started = 'unseen:started' in ctx.options
+	only_planned = 'unseen:planned' in ctx.options
+	all_unseen = 'unseen:all_episodes' in ctx.options
 
 	if only_started and only_planned:
 		return 'Can\'t specify "started" and "planned" at the same time (try "list" command)'
 
-	find_id, match = find_id_or_match(args)
+	find_id, match = find_id_or_match(ctx.arguments)
 
 	series_unseen = []
 	for index, series_id, series in series_list:
@@ -249,11 +290,12 @@ def cmd_unseen(series_config:dict, args:list[str], opts:dict[str, Any], width:in
 			tail = f' {_f}%3d unseen{_0fg}' % len(unseen)
 
 		if all_unseen:
-			eps_printed = print_unseen_episodes(series, width=width, pre_print=print_series, also_future=also_future)
-			if eps_printed > 0:
+			printed_keys = print_unseen_episodes(series, width=width, pre_print=print_series, also_future=also_future)
+			if printed_keys:
 				num_shown += 1
 
-			total_episodes += eps_printed
+			total_episodes += len(printed_keys)
+			total_duration += sum(ep.get('runtime') or 0 for ep in episodes_by_key(series, printed_keys))
 
 		else:
 			# print first episode
@@ -272,9 +314,11 @@ def cmd_unseen(series_config:dict, args:list[str], opts:dict[str, Any], width:in
 
 	# this is wildly incorrect!
 	#print(f'{_b}\x1b[48;2;20;50;20m%d series{_0}' % num_shown)
-	print(f'{_b}\x1b[48;2;20;50;20m{_K}\rSeries: {num_shown} ', end='')
+	print(f'{_b}\x1b[48;2;20;50;20m{_K}\rSeries: {num_shown}', end='')
 	if all_unseen:
-		print(f'{_fi} Episodes: \x1b[1m{total_episodes}{_0fg}', end='')
+		print(f' {_fi} Episodes: \x1b[1m{total_episodes}{_0fg}', end='')
+		if total_duration:
+			print(f'  {_f}{fmt_duration(total_duration*60)}{_0fg}', end='')
 	print()
 
 	return None
@@ -288,8 +332,8 @@ def _unseen_help() -> None:
 setattr(cmd_unseen, 'help', _unseen_help)
 
 
-def cmd_list(series_config:dict, args:list[str], opts:dict[str, Any], width:int) -> str|None:
-	refresh_all(series_config)
+def cmd_list(ctx:context, width:int) -> str | None:
+	refresh_all(ctx)
 
 	# TODO: someone should explain what these numbers are... b/c I don't know
 	max_width = width - 5 - 3 - len('1968')*2 - 1 - 2 - 3 - len('episodes')
@@ -297,17 +341,17 @@ def cmd_list(series_config:dict, args:list[str], opts:dict[str, Any], width:int)
 
 	# TODO: print header/columns
 
-	list_all = 'list:all' in opts
-	only_archived = 'list:archived' in opts
-	only_started = 'list:started' in opts
-	only_planned = 'list:planned' in opts
-	all_unseen = 'list:all_episodes' in  opts
+	list_all = 'list:all' in ctx.options
+	only_archived = 'list:archived' in ctx.options
+	only_started = 'list:started' in ctx.options
+	only_planned = 'list:planned' in ctx.options
+	all_unseen = 'list:all_episodes' in ctx.options
 
-	series_list = get_series(series_config)
+	series_list = get_series(ctx.db)
 	if not series_list:
-		return no_series(series_config)
+		return no_series(ctx.db)
 
-	find_id, match = find_id_or_match(args)
+	find_id, match = find_id_or_match(ctx.arguments)
 
 	print(f'{_f}Listing ', end='')
 	if only_started: print('started ', end='')
@@ -352,7 +396,11 @@ def cmd_list(series_config:dict, args:list[str], opts:dict[str, Any], width:int)
 		print_series_title(index, series, imdb_id=series.get('imdb_id'), title_width=max_width, gray=archived and not only_archived)
 
 		if archived and not only_archived:
-			print(f'{_f}       Archived{_0fg}')
+			print(f'{_f}       Archived', end='')
+			seen, unseen = seen_unseen_episodes(series)
+			if seen and unseen:
+				print(' / Abandoned', end='')
+			print(f'{_0fg}')
 
 		# don't print "next" if we're printing all unseen episodes anyway
 		print_seen_status(series, gray=archived and not only_archived, next=not all_unseen, width=width)
@@ -380,97 +428,66 @@ def _list_help() -> None:
 setattr(cmd_list, 'help', _list_help)
 
 
-def print_unseen_episodes(series:dict, width:bool, pre_print:Callable|None=None, also_future=False) -> int:
-	num_shown = 0
-
-	_, unseen = seen_unseen_episodes(series)
-
-	indent = 6  # nice and also space to print the season "grouping labels"
-	current_season = 0
-	margin = 1
-
-	# TODO: find longest title and supply it to the formatter (e.g. align runtime, etc)
-	#   currently runtime,etc is "float: right" ;)
-	ep_width = width - indent - margin
-	for idx, ep in enumerate(unseen):
-
-		if pre_print:
-			pre_print()
-			pre_print = None  # only once
-
-		# remaining = len(unseen) - idx - 1  # what's this for?
-		s = format_episode_title(None, ep, width=ep_width, today=True)
-
-		season = ep['season']
-		if season != current_season:
-			print(f'{_c}%{indent}s{_0fg}\r' % (f's%d' % season), end='')
-			current_season = season
-
-		# use cursor move instead of writing spaces, so we don't overwrite the season label
-		print(f'\x1b[{indent + margin}C{s}')
-
-		num_shown += 1
-
-		if not (also_future or is_released(ep)):
-			break
-
-	return num_shown
-
-
 year_ptn = re.compile(r'^(\d{4})|\((\d{4})\)$')  # 1968 or (1968)
 
-def cmd_add(series_config:dict, args:list[str], opts:dict[str, Any], width=None) -> str|None:
-	if not args:
+def cmd_add(ctx:context, width:int, add:bool=True) -> str | None:
+	if not ctx.arguments:
 		return 'required argument missing: <title> / <Series ID>'
 
-	args = list(a for a in ' '.join(args).split())
+	args = list(a for a in ' '.join(ctx.arguments).split())
 	year = None
 	if len(args) >= 2:
+		# does the last word look like a year?
 		m = year_ptn.match(args[-1])
 		if m:
-			args.pop()
-			year = int(m.group(1) or m.group(2))
+			y = int(m.group(1) or m.group(2))
+			if y in range(1800, 2100):  # very rough valid range
+				year = y
+				args.pop()
 
 	search = ' '.join(args)
 
 	print(f'{_f}- Searching "%s"' % search, end='')
 	if year:
 		print(' (%d)' % year, end='')
-	print(f' ...{_0}')
+	print(f' ...{_0}', end='', flush=True)
 
 	hits = tmdb.search(search, year=year)
 	print(f'\r{_K}', end='')
 	if not hits:
 		return 'Nothing found. Try generalizing your search.'
 
-	if len(hits) > 1:
+	if not add or len(hits) > 1:
 		# exclude ones we already have in our config
-		already = list(filter(lambda H: H['id'] in series_config, hits))
+		already = list(filter(lambda H: H['id'] in ctx.db, hits))
 		if already:
 			print(f'{_f}Already added: %d{_0}' % len(already))
 			for hit in already:
-				if has_meta(series_config[hit['id']], 'archived'):
+				if has_meta(ctx.db[hit['id']], 'archived'):
 					arch_tail = f'  \x1b[33m(archived){_0}'
 				else:
 					arch_tail = None
 
-				imdb_id = series_config[hit['id']].get('imdb_id')
-				print_series_title(None, series_config[hit['id']], imdb_id=imdb_id, gray=True, tail=arch_tail)
+				imdb_id = ctx.db[hit['id']].get('imdb_id')
+				print_series_title(None, ctx.db[hit['id']], imdb_id=imdb_id, gray=True, tail=arch_tail)
 
 		max_width = width - 5 - 3 - len('1968')*2 - 1 - 2 - 3 - len('episodes')
 		#max_width = max(len(series['title']) for series in hits)
 
-		hits = list(filter(lambda H: H['id'] not in series_config, hits))
+		hits = list(filter(lambda H: H['id'] not in ctx.db, hits))
 		print(f'{_g}Found {_0}{_b}%d{_0} {_g}series:{_0}' % len(hits))
 
 		print(f'{_f}Enriching search hits...{_0}', end='', flush=True)
-		hit_details = tmdb.details([ hit['id'] for hit in hits ])
+		hit_details = tmdb.details(hit['id'] for hit in hits)
 		print(f'\r{_K}', end='')
 
 		for idx, hit in enumerate(hits):
 			hit.update(hit_details[idx])
 			imdb_id = hit.get('imdb_id')
 			print_series_title(idx + 1, hit, imdb_id=imdb_id, title_width=max_width)
+
+		if not add:
+			return None
 
 		last_num = len(hits)
 		while True:
@@ -505,20 +522,20 @@ def cmd_add(series_config:dict, args:list[str], opts:dict[str, Any], width=None)
 
 	hit.pop('id', None)
 
-	series_config[series_id] = hit
+	ctx.db[series_id] = hit
 
 
-	refresh_series(series_id, series_config)
+	refresh_series(series_id, ctx.db)
 
 	# TODO: offer to mark seasons as seen?
 
-	save_series_config(series_config)
+	save_series_db(ctx.db)
 
 	print(f'{_b}Series added:{_0}  {_f}(series renumbered){_0}')
 
 	# need to loop to figure out its list index
-	imdb_id = series_config[series_id].get('imdb_id')
-	index = find_list_index(series_config, series_id)
+	imdb_id = ctx.db[series_id].get('imdb_id')
+	index = find_list_index(ctx.db, series_id)
 	print_series_title(index, hit, imdb_id=imdb_id)
 
 	return None
@@ -531,24 +548,53 @@ def _add_help() -> None:
 setattr(cmd_add, 'help', _add_help)
 
 
-def cmd_delete(series_config:dict, args:list[str], opts:dict[str, Any], width:int) -> str|None:
-	if not args:
+def cmd_search(ctx:context, width:int) -> str | None:
+	return cmd_add(ctx, width, add=False)
+
+def _search_help() -> None:
+	print(f'{_b}Search for a series.{_0}')
+	print_cmd_usage('search', '<title search> [<year>]')
+
+setattr(cmd_search, 'help', _search_help)
+
+def cmd_delete(ctx:context, width:int) -> str | None:
+	if not ctx.arguments:
 		return 'Required argument missing: # / <IMDb ID>'
 
-	index, series_id, series, err = find_series(series_config, args.pop(0))
+	index, series_id, series, err = find_series(ctx.db, ctx.arguments.pop(0))
 	if err is not None or series is None:
 		return err
-
-	del series_config[series_id]
 
 	print(f'{_b}Deleting series:{_0}')
 	print_series_title(None, series, imdb_id=series.get('imdb_id'))
 
-	answer = input(f'\x1b[41;37;1mAre you sure? (can not be undone){_0} [yes/No] ')
-	if answer.lower() not in ('y', 'yes'):
-		return 'Delete cancelled'
+	# TODO: also print seen episodes
+	#   suggest archiving/abandon (if seen > 0)
+	seen, unseen = seen_unseen_episodes(series)
 
-	save_series_config(series_config)
+	choices = ['Yes']
+	if seen and unseen:
+		print('You have seen %d episodes.' % len(seen))
+		choices.append('abandon')
+		question = 'Delete permanently or mark abandoned?'
+		full_answer_a = 'abandon'
+	else:
+		choices.append('archive')
+		question = 'Delete permanently or archive?'
+		full_answer_a = 'archive'
+
+	answer = input(f'\x1b[41;37;1m{question}{_0} [no/{"/".join(choices)}] ').lower()
+	if answer not in ('y', 'yes', 'a', full_answer_a):
+		return 'Cancelled'
+
+	if answer in ('a', full_answer_a):
+		return cmd_archive(ctx, width, force=True)  # also checks for abandon
+
+
+	# delete it
+
+	del ctx.db[series_id]
+	save_series_db(ctx.db)
 
 	print(f'{_b}Series deleted:{_b} {_f}(series renumbered){_0}')
 	print_series_title(index, series, imdb_id=series.get('imdb_id'))
@@ -563,15 +609,15 @@ def _delete_help() -> None:
 setattr(cmd_delete, 'help', _delete_help)
 
 
-def cmd_mark(series_config:dict, args:list[str], opts:dict[str, Any], width:int, marking:bool=True) -> str|None:
-	refresh_all(series_config)
+def cmd_mark(ctx:context, width:int, marking:bool=True) -> str | None:
+	refresh_all(ctx)
 
-	if not args:
+	if not ctx.arguments:
 		return 'Required argument missing: # / <IMDb ID>'
 
-	find_id = args.pop(0)
+	find_id = ctx.arguments.pop(0)
 
-	index, series_id, series, err = find_series(series_config, find_id)
+	index, series_id, series, err = find_series(ctx.db, find_id)
 	if err is not None or series is None:
 		return err
 
@@ -590,6 +636,7 @@ def cmd_mark(series_config:dict, args:list[str], opts:dict[str, Any], width:int,
 	#   "descriptor" ranges:         s1-3e1-4   (season 1-3, episode 1-4)
 	#   "descriptor" spaced ranges:  s1-3 e1-4  (season 1-3, episode 1-4)
 
+	args = [*ctx.arguments]
 	if args:
 		arg = args.pop(0)
 
@@ -643,6 +690,7 @@ def cmd_mark(series_config:dict, args:list[str], opts:dict[str, Any], width:int,
 			elif not marking and key in seen:
 				del seen[key]
 				episodes.append(ep)
+				episodes_runtime += ep.get('runtime') or 0
 
 	if episodes:
 		if marking:
@@ -657,7 +705,7 @@ def cmd_mark(series_config:dict, args:list[str], opts:dict[str, Any], width:int,
 		for ep in episodes:
 			print('  %s' % format_episode_title(series['title'], ep, width=max_width - 2))
 
-		save_series_config(series_config)
+		save_series_db(ctx.db)
 
 	else:
 		print(f'{_c}No episodes %smarked{_0}' % '' if marking else 'un')
@@ -695,19 +743,18 @@ def _unmark_help() -> None:
 setattr(cmd_unmark, 'help', _unmark_help)
 
 
-def cmd_archive(series_config:dict, args:list[str], opts:dict[str, Any], width:int, archiving:bool=True) -> str|None:
-	if not args:
+def cmd_archive(ctx:context, width:int, archiving:bool=True, force:bool=False) -> str | None:
+	if not ctx.arguments:
 		return 'Required argument missing: # / <IMDb ID>'
 
-	find_id = args.pop(0)
+	find_id = ctx.arguments.pop(0)
 
-	index, series_id, series, err = find_series(series_config, find_id)
+	index, series_id, series, err = find_series(ctx.db, find_id)
 	if err is not None or series is None:
 		return err
 
 	currently_archived = has_meta(series, 'archived')
 
-	# TODO: check if all episodes are seen or not?
 
 	if archiving == currently_archived:
 		# TODO: better presentation of title
@@ -716,16 +763,24 @@ def cmd_archive(series_config:dict, args:list[str], opts:dict[str, Any], width:i
 		else:
 			return 'Not archived: %s' % series['title']
 
+	seen, unseen = seen_unseen_episodes(series)
+
 	if archiving:
-		print(f'{_b}Series archived:{_0}')
+		print(f'{_b}Series archived', end='')
+		if seen and unseen:
+			print(' (abandoned)', end='')
+		print(f':{_0}')
 		set_meta(series, 'archived', True)
 	else:
-		print(f'{_b}Series restored:{_0}')
+		print(f'{_b}Series restored', end='')
+		if seen and unseen:
+			print(' (resumed)', end='')
+		print(f':{_0}')
 		del_meta(series, 'archived')
 
 	print_series_title(index, series, imdb_id=series.get('imdb_id'))
 
-	save_series_config(series_config)
+	save_series_db(ctx.db)
 
 	return None
 
@@ -749,8 +804,8 @@ def _restore_help() -> None:
 setattr(cmd_restore, 'help', _restore_help)
 
 
-def cmd_refresh(series_config:dict, args:list[str], opts:dict[str, Any], width:int) -> str|None:
-	refresh_all(series_config, args, opts)
+def cmd_refresh(ctx:context, width:int) -> str|None:
+	refresh_all(ctx)
 	return None
 
 def _refresh_help() -> None:
@@ -778,6 +833,7 @@ def del_meta(series:dict, key: str) -> None:
 # known commands with aliases (apart from resolving shortest-unique)
 known_commands = (
 	('add', 'a'),
+	('search', 's'),
 	('delete', ),
 	('list', 'ls'),
 	('unseen', 'u', 'us'),
@@ -789,9 +845,9 @@ known_commands = (
 	('help', ),
 )
 
-default_command = 'unseen'
 cmd_handlers = {
 		'add':     cmd_add,
+		'search':  cmd_search,
 		'delete':  cmd_delete,
 		'list':    cmd_list,
 		'unseen':  cmd_unseen,
@@ -802,7 +858,74 @@ cmd_handlers = {
 		'refresh': cmd_refresh,
 }
 
+PRG = os.path.basename(sys.argv[0])
+
 default_max_refresh_age = 2  # days
+
+default_configuration = {
+	'paths': {
+		'series-db': None,  # defaulted in load_config()
+	},
+	'commands': {
+		'default': 'unseen',
+	},
+	'max-age': 2,
+	'lookup': {
+		'api-key': None
+	}
+}
+
+
+def config_get(path:str, default_value:Any=None) -> str|int|float|dict|list|None:
+	# path: key/key/key
+	keys = path.split('/')
+
+	scope:dict|list|str|int|float|None = app_config
+	current:list[str] = []
+	for key in keys:
+		# print('cfg: %s + %s' % ('/'.join(current), key))
+		if not isinstance(scope, dict):
+			raise RuntimeError('Invalid path "%s"; not object at "%s", got %s (%s)' % (path, '/'.join(current), scope, type(scope).__name__))
+
+		scope = scope.get(key)
+		if scope is None:
+			scope = default_value
+			break
+
+		current.append(key)
+
+	if scope is None:
+		return default_value
+	return scope
+
+
+def config_set(path:str, value:Any) -> None:
+	keys = path.split('/')
+
+	ValueType = dict[str, Any]|list|str|int|float|None  # mypy doesn't support recursive type hints
+
+	scope:ValueType = app_config
+	if not isinstance(scope, dict): # to shut mypy up
+		return None
+
+	current:list[str] = []
+	while keys:
+		key = keys.pop(0)
+
+		if not keys:  # leaf key
+			scope[key] = value
+			break
+
+		new_scope = scope.get(key)
+		if new_scope is None:  # missing key object
+			scope[key] = {}
+
+		if not isinstance(new_scope, dict): # exists, but is not an object
+			raise RuntimeError('Invalid path "%s"; not object at "%s", got %s (%s)' % (path, '/'.join(current), scope, type(new_scope).__name__))
+
+		scope = new_scope
+		current.append(key)
+
 
 known_options = {
 	None: {
@@ -816,9 +939,11 @@ known_options = {
 	],
 	'unseen': [
 		{ 'option': ('-f', '--future'),   'key': 'unseen:future',       'help': 'Show also future/unreleased episodes.' },
+		#{ 'option': ('+f', '--not-future'), 'key': 'unseen:not_future', 'help': 'Don\'t show future/unreleased episodes.' },
 		{ 'option': ('-s', '--started'),  'key': 'unseen:started',      'help': 'Show only series with seen episodes.' },
 		{ 'option': ('-p', '--planned'),  'key': 'unseen:planned',      'help': 'Show only series without seen episodes.' },
 		{ 'option': ('-e', '--episodes'), 'key': 'unseen:all_episodes', 'help': 'Show all unseen episodes (not only first).' },
+		#{ 'option': ('+e', '--first-episode'), 'key': 'unseen:first_episodes', 'help': 'Show only first unseen episodes.' },
 	],
 	'refresh': [
 		{ 'option': ('-f', '--force'), 'key': 'refresh:force',  'help': 'Refresh whether needed or not.' },
@@ -827,7 +952,7 @@ known_options = {
 }
 
 
-def find_series(series_config:dict, find_id:str) -> tuple[int|None, str|None, dict|None, str|None]:
+def find_series(db:dict, find_id:str) -> tuple[int | None, str | None, dict | None, str | None]:
 	nothing_found = None, None, None, f'Series not found: {find_id}'
 
 	# if it starts with 'tt' (and rest numerical), search by IMDb ID
@@ -845,7 +970,7 @@ def find_series(series_config:dict, find_id:str) -> tuple[int|None, str|None, di
 		else:
 			return nothing_found
 
-	for index, series_id, series in get_series(series_config):
+	for index, series_id, series in get_series(db):
 		if find_index is not None and find_index == index:
 			return index, series_id, series, None
 		elif series.get('imdb_id') == find_id:
@@ -854,8 +979,8 @@ def find_series(series_config:dict, find_id:str) -> tuple[int|None, str|None, di
 	return nothing_found
 
 
-def find_list_index(series_config, series_id):
-	for index, sid, _ in get_series(series_config):
+def find_list_index(db, series_id):
+	for index, sid, _ in get_series(db):
 		if sid == series_id:
 			return index
 	return None
@@ -869,6 +994,41 @@ def is_released(target, fallback=True):
 	# already released or will be today
 	return date.fromisoformat(release_date) <= today_date
 
+
+def print_unseen_episodes(series:dict, width:int, pre_print:Callable|None=None, also_future=False) -> list[str]:
+
+	_, unseen = seen_unseen_episodes(series)
+
+	indent = 6  # nice and also space to print the season "grouping labels"
+	current_season = 0
+	margin = 1
+
+	ep_width = width - indent - margin
+
+	keys:list[str] = []
+
+	for ep in unseen:
+
+		if pre_print:
+			pre_print()
+			pre_print = None  # only once
+
+		s = format_episode_title(None, ep, width=ep_width, today=True)
+
+		season = ep['season']
+		if season != current_season:
+			print(f'{_c}%{indent}s{_0fg}\r' % (f's%d' % season), end='')
+			current_season = season
+
+		# use cursor move instead of writing spaces, so we don't overwrite the season label
+		print(f'\x1b[{indent + margin}C{s}')
+
+		keys.append(_ep_key(ep))
+
+		if not (also_future or is_released(ep)):
+			break
+
+	return keys
 
 
 def find_id_or_match(args):
@@ -889,8 +1049,20 @@ def find_id_or_match(args):
 		return None, match
 
 
-def no_series(series_config:dict) -> str:
-	num_archived = series_num_archived(series_config)
+def episodes_by_key(series:dict, keys:list) -> list:
+	keys_to_index:dict[str, int] = {}
+	episodes:list[dict] = series.get('episodes', [])
+	for idx, ep in enumerate(episodes):
+		keys_to_index[_ep_key(ep)] = idx
+
+	return [
+		episodes[keys_to_index[key]]
+		for key in keys
+	]
+
+
+def no_series(db:dict) -> str:
+	num_archived = series_num_archived(db)
 	suffix = f'Use: {_b}%s add <title search...> [<year>]{_0}' % PRG
 	if num_archived:
 		return 'No active series [but %d archived]. %s' % (num_archived, suffix)
@@ -898,7 +1070,7 @@ def no_series(series_config:dict) -> str:
 		return 'No series added. %s' % suffix
 
 
-def refresh_series(series_id:str, series_config:dict, progress:bool=False) -> int:
+def refresh_series(series_id:str, db:dict, progress:bool=False) -> int:
 	#if progress:
 	#	print(f'{_f}(%d / %d) Refreshing %s...{_0}' % (progress[0], progress[1], series_id), end='', flush=True)
 	if progress is False:
@@ -911,32 +1083,32 @@ def refresh_series(series_id:str, series_config:dict, progress:bool=False) -> in
 	for ep in episodes:
 		transform_episode_info(ep)
 
-	#updated = len(episodes) > len(series_config[series_id].get('episodes', []))
+	#updated = len(episodes) > len(db[series_id].get('episodes', []))
 
-	meta_data = series_config[series_id].get(meta_key, {})
+	meta_data = db[series_id].get(meta_key, {})
 
-	series_config[series_id] = details
-	series_config[series_id][meta_key] = meta_data
-	set_meta(series_config[series_id], updated_key, now())
-	series_config[series_id]['episodes'] = episodes
+	db[series_id] = details
+	db[series_id][meta_key] = meta_data
+	set_meta(db[series_id], updated_key, now())
+	db[series_id]['episodes'] = episodes
 
 	return len(episodes)
 
 
-def refresh_all(series_config:dict, args:list=None, opts:dict=None) -> str|None:
+def refresh_all(ctx:context) -> str | None:
 
 	t0 = time.time()
 
-	opts = opts or {}
+	opts = ctx.options
 	max_age = opts.get('max-age', default_max_refresh_age)
 	if max_age <= 0:
 		max_age = default_max_refresh_age
 	max_age_s = max_age*3600*24
 	forced = bool(opts.get('refresh:force'))
 
-	find_id, match = find_id_or_match(args)
+	find_id, match = find_id_or_match(ctx.arguments)
 
-	series_list = get_series(series_config, archived=False)
+	series_list = get_series(ctx.db, archived=False)
 
 	to_refresh = []
 
@@ -975,12 +1147,14 @@ def refresh_all(series_config:dict, args:list=None, opts:dict=None) -> str|None:
 			if not changes:
 				to_refresh.remove(series_id)
 				# remember last update check
-				set_meta(series_config[series_id], updated_key, now())
+				set_meta(ctx.db[series_id], updated_key, now())
 				touched = True
+			else:
+				print(series_id, 'changes:', changes)
 
 	if not to_refresh:
 		if touched:
-			save_series_config(series_config)
+			save_series_db(ctx.db)
 
 		print(f'\r{_K}', end='', flush=True)
 		return 'No updates'
@@ -992,7 +1166,7 @@ def refresh_all(series_config:dict, args:list=None, opts:dict=None) -> str|None:
 
 	with concurrent.futures.ThreadPoolExecutor(max_workers=16, thread_name_prefix='%s-request' % PRG) as executor:
 		promises = [
-			executor.submit(refresh_series, series_id, series_config, progress=None)
+			executor.submit(refresh_series, series_id, ctx.db, progress=None)
 			for series_id in to_refresh
 		]
 		concurrent.futures.wait(promises)
@@ -1010,7 +1184,7 @@ def refresh_all(series_config:dict, args:list=None, opts:dict=None) -> str|None:
 
 	if updated:
 		print(f'{_f}Refreshed %d episodes across %d series [%.1fs].{_0}' % (downloaded, updated, time.time() - t0))
-		save_series_config(series_config)
+		save_series_db(ctx.db)
 
 	return None
 
@@ -1124,6 +1298,10 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=Fals
 				future = False
 	else:
 		today = False
+
+	# TODO: if 'ep_date' is "recent past" (configurable),
+	#   show like "2 weeks ago"
+	#   do note that this is longer/wider (use "wks"/"mons" ?)
 
 	# print('date:', ep['date'])
 	# print('future:', future)
@@ -1259,7 +1437,7 @@ def print_seen_status(series:dict, gray: bool=False, summary=True, next=True, la
 		s += f'\x1b[38;5;256m{ind}Summary: '
 
 		if seen:
-			seen_duration = sum((ep.get('runtime') or 0) for ep in seen)
+			seen_duration = sum((ep.get('runtime') or 0) for ep in seen)*60
 			s += f'Seen: {len(seen)} {_f}{fmt_duration(seen_duration)}{_0fg}'
 			if all_seen:
 				s += f'  {_g}ALL{_0fg}'
@@ -1268,7 +1446,7 @@ def print_seen_status(series:dict, gray: bool=False, summary=True, next=True, la
 			s += f' {_o}-{_0fg} '
 
 		if unseen:
-			unseen_duration = sum((ep.get('runtime') or 0) for ep in unseen)
+			unseen_duration = sum((ep.get('runtime') or 0) for ep in unseen)*60
 			s += f'Unseen: {len(unseen)} {_f}{fmt_duration(unseen_duration)}{_0fg}'
 
 		if seen or unseen:
@@ -1299,19 +1477,19 @@ def print_seen_status(series:dict, gray: bool=False, summary=True, next=True, la
 			print(f'{header}{s}')
 
 
-def series_num_archived(series_config:dict) -> int:
-	return sum(1 if has_meta(series, 'archived') else 0 for series in series_config.values())
+def series_num_archived(db:dict) -> int:
+	return sum(1 if has_meta(series, 'archived') else 0 for series in db.values())
 
 
-def get_series(series_config:dict, archived:bool|None=None) -> list[tuple[int, str, dict]]:
-	series_ids = sorted(series_config, key=lambda series_id: (series_config[series_id]['title'].casefold(), series_config[series_id].get('year', '')))
+def get_series(db:dict, archived: bool | None=None) -> list[tuple[int, str, dict]]:
+	series_ids = sorted(db, key=lambda series_id: (db[series_id]['title'].casefold(), db[series_id].get('year', '')))
 
 	all_series:list[tuple[int, str, dict]] = []
 	index = 0
 
 	for series_id in series_ids:
 		index += 1
-		series = series_config[series_id]
+		series = db[series_id]
 
 		if archived is not None and archived == has_meta(series, 'archived'):
 			continue
@@ -1413,12 +1591,13 @@ def arg_placeholder(arg_type):
 
 
 def print_usage(exit_code:int=0) -> None:
+	default_command = config_get('commands/default')
+
 	print(f'{_b}%s{_0} / {_b}Ep{_0}isode {_b}M{_0}anager / (c)2022 André Jonsson' % PRG)
 	print('Version %s (%s) ' % (VERSION, VERSION_DATE))
-	print(f'{_b}Usage:{_0} %s [{_b}command{_0}] [{_o}<args>{_0}]' % PRG)
+	print(f'{_b}Usage:{_0} %s [<{_b}command{_0}>] [{_o}<args ...>{_0}]' % PRG)
 	print()
 	print(f'Where {_b}<command>{_0} is:  {_f}(one-letter alias highlighted){_0}')
-	print(f'  (none)  -> {_b}%s{_0}' % default_command)
 	print(f'  {_b}a{_0}dd         Add series')
 	print(f'  delete      Delete series (completely remove from config)')
 	print(f'  {_b}u{_0}nseen      Show unseen episodes of series')
@@ -1429,15 +1608,16 @@ def print_usage(exit_code:int=0) -> None:
 	print(f'  {_b}R{_0}estore     Restore previously archived series')
 	print(f'  {_b}r{_0}efresh     Refresh episode data (forcibly)')
 	print(f'  {_b}h{_0}elp        Show this help information')
+	print(f'  (none)  ▶  {_b}%s{_0}' % default_command)
 	print()
-	print(f'See: %s {_b}<command> --help{_0} for {_b}<args>{_0} help.' % PRG)
+	print(f'See: %s {_b}<command> --help{_0} for command-specific help.' % PRG)
 	print()
 	print('Remarks:')
 	print(f'  # = Series listing number, e.g. as listed by the {_b}l{_0}ist command.')
 	print(f'  If an argument does not match a command, it will be used as argument to the default command.')
 	print(f'  Shortest unique prefix of a command is enough, e.g. "ar"  for "archive".')
 	if orjson is not None:
-		print(f'  Using {_b}orjson{_0} for faster load/save.')
+		print(f'  {_f}Using {_b}orjson{_0}{_f} for faster load/save.')
 	else:
 		print(f'  {_f}Install \'orjson\' for faster load/save{_0}')
 	sys.exit(exit_code)
@@ -1464,39 +1644,39 @@ def print_cmd_aliases(command:str) -> None:
 			return
 
 
+def warning_prefix(context_name=''):
+	if context_name:
+		return f'{_c}[{_0}{_b}{PRG} {context_name}{_c}]{_0}'
+	return f'{_c}[{_0}{_b}{PRG}{_c}]{_0}'
+
+
 def bad_cmd(cmd:str) -> None:
-	print(f'Unknown command: {_E}%s{_0}' % cmd, file=sys.stderr)
+	print(f'{warning_prefix()} Unknown command: {_E}%s{_0}' % cmd, file=sys.stderr)
 	sys.exit(1)
 
 def bad_opt(command:str, option:str) -> None:
-	if command:
-		print(f'{_c}[{_0}{_b}{PRG} {command}{_c}]{_0} Unknown option: {option}', file=sys.stderr)
-	else:
-		print(f'{_c}[{PRG}] Unknown option: {option}{_0}', file=sys.stderr)
+	print(f'{warning_prefix(command)} Unknown option: {option}', file=sys.stderr)
 	sys.exit(1)
 
 def bad_opt_arg(command:str, option, arg, arg_type) -> None:
-	if command:
-		print(f'{_c}[{_0}{_b}{PRG} {command}{_c}]{_0} ', end='', file=sys.stderr)
-	else:
-		print(f'{_c}[{_0}{_b}{PRG}{_c}]{_0} ', end='', file=sys.stderr)
+	print(warning_prefix(command), end='', file=sys.stderr)
 
 	expected = None
 	if arg_type is not None:
 		expected = arg_type.__name__
 
 	if expected is None:
-		print(f'Unexpected argument for {option}: {_b}{arg}{_0}', file=sys.stderr)
+		print(f' Unexpected argument for {option}: {_b}{arg}{_0}', file=sys.stderr)
 	elif arg is None:
-		print(f'Required argument missing for {option}', file=sys.stderr)
+		print(f' Required argument missing for {option}', file=sys.stderr)
 	else:
-		print(f'Bad option argument for {option}: {_b}{arg}{_0}  (%s expected)' % expected, file=sys.stderr)
+		print(f' Bad option argument for {option}: {_b}{arg}{_0}  (%s expected)' % expected, file=sys.stderr)
 
 	sys.exit(1)
 
 
-def ambiguous_cmd(name:str, matching:str) -> None:
-	print(f'Ambiguous command: {_E}%s{_0}  matches: %s' % (name, f'{_o},{_0} '.join(sorted(matching))), file=sys.stderr)
+def ambiguous_cmd(name:str, matching:list[str]) -> None:
+	print(f'{warning_prefix()} Ambiguous command: {_E}%s{_0}  matches: %s' % (name, f'{_o},{_0} '.join(sorted(matching))), file=sys.stderr)
 	sys.exit(1)
 
 
@@ -1508,14 +1688,72 @@ def now_datetime() -> datetime:
 	return datetime.now()
 
 
-def load_series_config() -> dict:
-	config = {}
-	if os.path.exists(series_config_file) and os.path.getsize(series_config_file) > 1:
+app_config = {}
+
+def read_json(filepath) -> dict:
+	if os.path.exists(filepath) and os.path.getsize(filepath) > 1:
 		if orjson is not None:
-			with open(series_config_file, 'rb') as fp:
+			with open(filepath, 'rb') as fp:
+				return orjson.loads(fp.read())
+		else:
+			with open(filepath, 'r') as fp:
+				return json.load(fp)
+
+	return {}
+
+
+def write_json(filepath, data) -> Exception|None:
+	tmp_name = mkstemp(dir=os.path.dirname(filepath))[1]
+	try:
+		if orjson is not None:
+			with open(tmp_name, 'wb') as fpo:
+				fpo.write(orjson.dumps(data, option=orjson.OPT_INDENT_2 | orjson.OPT_SORT_KEYS))
+		else:
+			with open(tmp_name, 'w') as fps:
+				json.dump(data, fps, indent=2, sort_keys=True)
+
+		os.rename(tmp_name, filepath)
+
+	except Exception as e:
+		os.remove(tmp_name)
+		return e
+
+	return None
+
+
+def load_config() -> bool:
+	global app_config
+	app_config = read_json(app_config_file)
+
+	config = {**default_configuration}
+	config.update(app_config)
+	app_config = config
+
+	db_file = config_get('paths/series-db')
+	if not db_file or not isinstance(db_file, str):
+		config_set('paths/series-db', os.path.expandvars(f'$HOME/.config/{PRG}/series'))
+
+	return len(app_config) > 0
+
+
+def save_config():
+	err = write_json(app_config_file)
+	if err is not None:
+		print(f'{_E}ERROR{_0} Failed saving configuration: %s' % str(err))
+
+
+
+def load_series_db() -> dict:
+	config = {}
+
+	db_file = str(config_get('paths/series-db'))
+
+	if os.path.exists(db_file) and os.path.getsize(db_file) > 1:
+		if orjson is not None:
+			with open(db_file, 'rb') as fp:
 				config = orjson.loads(fp.read())
 		else:
-			with open(series_config_file, 'r') as fp:
+			with open(db_file, 'r') as fp:
 				config = json.load(fp)
 
 	# migrate meta data to the current structure
@@ -1531,13 +1769,14 @@ def load_series_config() -> dict:
 
 	if meta_migrated > 0:
 		print(f'{_f}Migrated meta-data for %d series{_0}' % meta_migrated)
-		save_series_config(config)
+		save_series_db(config)
 
 	return config
 
 
 compressor:str|None = 'zstd'
 compression_extension = '.zst'
+compression_level = 14
 
 import shutil
 if isinstance(compressor, str) and not shutil.which(compressor):
@@ -1555,7 +1794,7 @@ if compressor:
 		tmp_name = mkstemp( dir=os.path.dirname(filename))[1]
 		os.rename(filename, tmp_name)
 		try:
-			exit_code = Popen([compressor, '-18', '-q', '-f', tmp_name, '--rm', '-o', destination]).wait()
+			exit_code = Popen([compressor, '-%d' % compression_level, '-q', '-f', tmp_name, '--rm', '-o', destination]).wait()
 			if exit_code != 0:
 				os.rename(tmp_name, destination)
 
@@ -1571,15 +1810,18 @@ else:
 		os.rename(filename, destination)
 		return True
 
-def save_series_config(config:dict) -> None:
-	if not os.path.exists(series_config_file):
-		os.makedirs(os.path.dirname(series_config_file), exist_ok=True)
+def save_series_db(config:dict) -> None:
+
+	db_file = str(config_get('paths/series-db'))
+
+	if not os.path.exists(db_file):
+		os.makedirs(os.path.dirname(db_file), exist_ok=True)
 
 	def backup_name(idx) -> str:
-		return '%s.%d%s' % (series_config_file, idx, compression_extension)
+		return '%s.%d%s' % (db_file, idx, compression_extension)
 
 	# write to a temp file and then rename it afterwards
-	tmp_name = mkstemp(dir=os.path.dirname(series_config_file))[1]
+	tmp_name = mkstemp(dir=os.path.dirname(db_file))[1]
 	try:
 		if orjson is not None:
 			with open(tmp_name, 'wb') as fpo:
@@ -1594,9 +1836,11 @@ def save_series_config(config:dict) -> None:
 				os.rename(backup_name(idx), backup_name(idx + 1))
 
 		# current file becomes first backup (<name>.1)
-		mk_backup(series_config_file, backup_name(1))
+		# TODO: spawn background process to compress to make it appear faster?
+		#   might run into (more) race-conditions of course
+		mk_backup(db_file, backup_name(1))
 
-		os.rename(tmp_name, series_config_file)
+		os.rename(tmp_name, db_file)
 
 	except Exception as e:
 		print(f'{_E}ERROR{_0} Failed saving series database: %s' % str(e))
@@ -1631,9 +1875,7 @@ meta_key = 'epm:meta'
 legacy_meta_keys = ('added', updated_key, 'seen', 'archived')
 ignore_changes = ('images', 'production_companies', 'season_regular', 'crew')
 
-PRG = os.path.basename(sys.argv[0])
-
-series_config_file = os.path.expandvars(f'$HOME/.config/{PRG}/series')
+app_config_file = os.path.expandvars(f'$HOME/.config/{PRG}/config')
 num_config_backups = 10
 
 import tmdb
