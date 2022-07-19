@@ -42,7 +42,7 @@ def __get_executor():
 	return __executor
 
 
-def _update_query_func():
+def _update_url_func():
 	def mk_url(endpoint:str, query:dict|None=None) -> str:
 		if _base_url is None:
 			raise RuntimeError('_base_url is None, which should never happen!')
@@ -70,7 +70,7 @@ def set_api_key(key):
 	if _api_key:
 		global _base_url
 		_base_url = _base_url_tmpl % _api_key
-		_update_query_func()
+		_update_url_func()
 
 if _api_key:
 	set_api_key(_api_key)
@@ -424,8 +424,8 @@ def _parallel_query(func, arg_list):
 	concurrent.futures.wait(promises)
 
 	return [
-		promise.result()
-		for promise in promises
+		p.result()
+		for p in promises
 	]
 
 
