@@ -399,7 +399,8 @@ def cmd_list(ctx:context, width:int) -> str | None:
 		if archived and not only_archived:
 			print(f'{_f}       Archived', end='')
 			seen, unseen = seen_unseen_episodes(series)
-			if seen and unseen:
+			partly_seen = seen and unseen
+			if partly_seen:
 				print(' / Abandoned', end='')
 			print(f'{_0fg}')
 
@@ -573,16 +574,16 @@ def cmd_delete(ctx:context, width:int) -> str | None:
 	print(f'{_b}Deleting series:{_0}')
 	print_series_title(None, series, imdb_id=series.get('imdb_id'))
 
-	# TODO: also print seen episodes
-	#   suggest archiving/abandon (if seen > 0)
 	seen, unseen = seen_unseen_episodes(series)
+	partly_seen = seen and unseen
 
 	choices = ['Yes']
-	if seen and unseen:
-		print('You have seen %d episodes.' % len(seen))
+	if partly_seen:
+		print('You have seen %d episodes of %d.' % (len(seen), len(series.get('episodes'))))
 		choices.append('abandon')
 		question = 'Delete permanently or mark abandoned?'
 		full_answer_a = 'abandon'
+
 	else:
 		choices.append('archive')
 		question = 'Delete permanently or archive?'
@@ -593,7 +594,7 @@ def cmd_delete(ctx:context, width:int) -> str | None:
 		return 'Cancelled'
 
 	if answer in ('a', full_answer_a):
-		return cmd_archive(ctx, width, force=True)  # also checks for abandon
+		return cmd_archive(ctx, width)  # also checks for abandon
 
 
 	# delete it
@@ -698,23 +699,39 @@ def cmd_mark(ctx:context, width:int, marking:bool=True) -> str | None:
 				episodes.append(ep)
 				episodes_runtime += ep.get('runtime') or 0
 
-	if episodes:
-		if marking:
-			print('Marked ', end='')
-		else:
-			print('Unmarked ', end='')
+	if not episodes:
+		print(f'{_c}No episodes %smarked{_0}' % ('' if marking else 'un'))
+		return None
 
-		print(f'{_c}{len(episodes)}{_0}', end='')
-		print(f' episode{plural(episodes)} as seen:  {_0}{_f}{fmt_duration(episodes_runtime)}{_0}')
-		max_width = width #max(len(ep['title']) for ep in episodes)
-
-		for ep in episodes:
-			print('  %s' % format_episode_title(series['title'], ep, width=max_width - 2))
-
-		save_series_db(ctx.db)
-
+	if marking:
+		print('Marked ', end='')
 	else:
-		print(f'{_c}No episodes %smarked{_0}' % '' if marking else 'un')
+		print('Unmarked ', end='')
+
+	print(f'{_c}{len(episodes)}{_0}', end='')
+	print(f' episode{plural(episodes)} as seen:  {_0}{_f}{fmt_duration(episodes_runtime)}{_0}')
+	max_width = width #max(len(ep['title']) for ep in episodes)
+
+	for ep in episodes:
+		print('  %s' % format_episode_title(series['title'], ep, width=max_width - 2))
+
+	is_archived = has_meta(series, 'archived')
+
+	if marking and series.get('status') in ('ended', 'canceled') and not is_archived:
+		seen, unseen = seen_unseen_episodes(series)
+		if not unseen:
+			print()
+			print(f'{_c}Last episode marked of ended/canceled series.{_0}')
+			ctx.arguments = [ find_id ]
+			return cmd_archive(ctx, width)
+
+	elif not marking and is_archived:
+		print()
+		print(f'{_c}Unmarked episode of archived series.{_0}')
+		ctx.arguments = [ find_id ]
+		return cmd_archive(ctx, width, archiving=False)
+
+	save_series_db(ctx.db)
 
 	return None
 
@@ -751,7 +768,7 @@ setattr(cmd_unmark, 'help', _unmark_help)
 setattr(_unmark_help, 'summary', 'Unmark a series/season/episode - reverse of mark command.')
 
 
-def cmd_archive(ctx:context, width:int, archiving:bool=True, force:bool=False) -> str | None:
+def cmd_archive(ctx:context, width:int, archiving:bool=True) -> str | None:
 	if not ctx.arguments:
 		return 'Required argument missing: # / <IMDb ID>'
 
@@ -772,16 +789,18 @@ def cmd_archive(ctx:context, width:int, archiving:bool=True, force:bool=False) -
 			return 'Not archived: %s' % series['title']
 
 	seen, unseen = seen_unseen_episodes(series)
+	partly_seen = seen and unseen
 
 	if archiving:
 		print(f'{_b}Series archived', end='')
-		if seen and unseen:
+		if partly_seen:
 			print(' (abandoned)', end='')
 		print(f':{_0}')
 		set_meta(series, 'archived', True)
+
 	else:
 		print(f'{_b}Series restored', end='')
-		if seen and unseen:
+		if partly_seen:
 			print(' (resumed)', end='')
 		print(f':{_0}')
 		del_meta(series, 'archived')
@@ -1138,7 +1157,6 @@ def refresh_all(ctx:context) -> str | None:
 				continue
 
 		last_refresh = get_meta(series, updated_key)
-		#print('%s last refresh: %s' % (series_id, last_refresh))
 		if forced or (not last_refresh or age(last_refresh) > max_age_s):
 			to_refresh.append(series_id)
 			if not earliest_refresh or last_refresh < earliest_refresh:
@@ -1502,7 +1520,7 @@ def get_series(db:dict, archived: bool | None=None) -> list[tuple[int, str, dict
 		index += 1
 		series = db[series_id]
 
-		if archived is not None and archived == has_meta(series, 'archived'):
+		if archived is not None and has_meta(series, 'archived') != archived:
 			continue
 
 		all_series.append( (index, series_id, series) )
