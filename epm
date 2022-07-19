@@ -22,8 +22,8 @@ except ImportError:
 	orjson = None
 
 
-VERSION = '0.6'
-VERSION_DATE = '2022-07-14'
+VERSION = '0.7'
+VERSION_DATE = '2022-07-19'
 
 
 def main():
