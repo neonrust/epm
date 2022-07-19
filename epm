@@ -1622,21 +1622,17 @@ def arg_placeholder(arg_type):
 def print_cmd_help_table():
 
 	def hilite_alias(cmd, aliases) -> str:
-		result = ''
-		found = False
-		for ch in cmd:
-			if not found:
-				matched = filter(lambda a: a.lower() == ch.lower(), aliases)
-				try:
-					result += f'{_c}{next(matched)}{_0}'
-					found = True
-					continue
-				except StopIteration:
-					pass
-			result += ch
+		highlighted = ''
+		for idx, ch in enumerate(cmd):
+			matched = filter(lambda a: a.lower() == ch.lower(), aliases)
+			try:
+				highlighted += f'{_c}{next(matched)}{_0}' + cmd[idx + 1:]
+				break
+			except StopIteration:
+				pass
+			highlighted += ch
 
-		return result
-
+		return highlighted
 
 	for cmd in known_commands:
 		cmd, aliases = cmd[0], cmd[1:]
