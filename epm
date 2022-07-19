@@ -11,8 +11,6 @@ from tempfile import mkstemp
 from typing import Callable, Any
 from types import ModuleType as Module
 
-import tmdb
-
 import sys
 # use orjson if available
 orjson:Module|None = None
@@ -1638,6 +1636,7 @@ PRG = os.path.basename(sys.argv[0])
 series_config_file = os.path.expandvars(f'$HOME/.config/{PRG}/series')
 num_config_backups = 10
 
+import tmdb
 
 if __name__ == '__main__':
 	try:
