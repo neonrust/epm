@@ -729,7 +729,7 @@ def cmd_mark(ctx:context, width:int, marking:bool=True) -> str | None:
 		print()
 		print(f'{_c}Unmarked episode of archived series.{_0}')
 		ctx.arguments = [ find_id ]
-		return cmd_archive(ctx, width, archiving=False)
+		return cmd_restore(ctx, width)
 
 	save_series_db(ctx.db)
 
