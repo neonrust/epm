@@ -1,30 +1,45 @@
 # epm
 
-Command-line TV episode calendar/manager/scheduler/tracker (EPisode Manager)
+Commandline-based episode calendar/manager/scheduler/tracker (EPisode Manager)
+
+Inspired by [Episode Calendar](https://episodecalendar.com).
 
 Requires python 3.9, because type hints are used (the lower-case variants).
 
 ## Dependencies
 
-- requests [https://pypi.org/project/requests]
+- [requests](https://pypi.org/project/requests)
+- [orjson (optional)](https://pypi.org/project/orjson)
+- `zstd` command-line tool.
+- [API key for The Movie Database](https://www.themoviedb.org)
 
-It also uses themoviedb.org for information lookup. An API key is required.
+![TMDb](https://www.themoviedb.org/assets/2/v4/logos/v2/blue_short-8e7b30f73a4020692ccca9c88bafe5dcb6f8a62a4c6bc55cd9ba82bb2cd95f6c.svg)
 
-## Configuration
 
-All cache and configuration is stored in:
+## File locations
 
-    ~/.config/epm/series
+All series and their states is stored in:
+
+    ~/.config/epm/
 	
+Mainly the file `series` but also numbered backups of it.
+If this is important to you, it's recommended to backup this directory.
+
 ## TMDb API key
 
 Key is read from the environment:
 
     TMDB_API_KEY
 
+(it will soon also be configurable)
+
 ## Examples
 
-Add a series you'd like to monitor.
+Note, the exact appearance of these output examples might change. 
+They're continuously being tweaked and improved.
+
+
+Add a series you'd like to monitor:
 
     > epm add twin peaks 
     Found 10 series:
@@ -55,39 +70,43 @@ Mark episodes that has been watched:
 
     > epm mark 1 s1
     Marked 8 episodes as seen:  7h
-       [edit]list of episodes cut out[/edit]
+       <list of episodes cut out>
+
 	> epm mark 1 s2e1-20
     Marked 20 episodes as seen:  16h 17min
-       [edit]list of episodes cut out[/edit]
+       <list of episodes cut out>
 
 Then, show current status, using no arguments (or the `unseen` command):
 
     > epm
-       #1 Twin Peaks             1990-1991   1 episode
-        Next: s2e21 Episode #2.21              
+       #1 Twin Peaks                                                                      1990-1991   1 unseen
+           Next:   s2e22 Episode #2.22                                                        46min 1991-06-10
+
 ## Usage
 
-    epm / Episode Manager / (c)2021 André Jonsson
-    Version 0.5 (2022-07-02) 
-    Usage: epm [<options>] [mode] [<args>]]
+    epm / Episode Manager / (c)2022 André Jonsson
+    Version 0.7 (2022-07-19)
+    Usage: epm [<command>] [<args ...>]
     
-    Where <mode> is:
-       add       Add series
-       delete    Delete series (completely remove from config)
-       unseen    Show unseen episodes of series
-       list      List series
-       mark      Mark episode as seen
-       unMark    Remove mark, as added by m
-       Archive   Archive series (still in config, but not normally shown)
-       Restore   Restore previously archived series
-       refresh   Refresh episode data (forcibly)
-       help     Show this help information
+    Where <command> is:  (one-letter alias highlighted)
+    search      Search for a series.
+    add         Search for a series and (optionally) add it.
+    delete      Complete remove a series - permanently!
+    list        List series
+    unseen      Show unseen episodes of series
+    mark        Mark a series, season or specific episode as seen.
+    unMark      Unmark a series/season/episode - reverse of mark command.
+    Archive     Archving series - hides from normal list command.
+    Restore     Restore series - reverse of archive command.
+    refresh     Refresh episode data of all non-archived series.
+    (none)  ▶  unseen
     
-    Also try: <mode> --help
+    See: epm <command> --help for command-specific help.
     
     Remarks:
-      # = Series number, as listed by e.g. the lisr or unmark modes.
-      If an argument does not match a command, it will be used as an argument to the unseen command.
-      Only "shortest unique" part of the commands is required, e.g. ".ar"  for "archive".
+    # = Series listing number, e.g. as listed by the list command.
+    If an argument does not match a command, it will be used as argument to the default command.
+    Shortest unique prefix of a command is enough, e.g. "ar"  for "archive".
+    Using orjson for faster load/save.
    
 
