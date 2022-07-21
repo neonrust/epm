@@ -1775,6 +1775,13 @@ def load_config() -> bool:
 		# TODO: $XDG_CONFIG_HOME
 		config_set('paths/series-db', pexpand(f'$HOME/.config/{PRG}/series'))
 
+	paths = app_config.get('paths', {})
+	if not isinstance(paths, dict):
+		raise RuntimeError(f'{warning_prefix()} Config key "paths" is not an object')
+
+	for key in paths.keys():
+		paths[key] = pexpand(paths[key])
+
 	return len(app_config) > 0
 
 
