@@ -50,7 +50,6 @@ class context:
 			'max-age': config_get('max-age'),
 		}
 		self.arguments:list = []
-		self.db = load_series_db()
 		self._parse_args(args)
 
 		if self.command is not None:
@@ -58,6 +57,7 @@ class context:
 
 
 	def invoke(self, width:int) -> str|None:
+		self.db = load_series_db()
 		return self.handler(self, width=width)
 
 
