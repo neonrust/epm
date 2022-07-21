@@ -709,7 +709,7 @@ def cmd_mark(ctx:context, width:int, marking:bool=True) -> str | None:
 	max_width = width #max(len(ep['title']) for ep in episodes)
 
 	for ep in episodes:
-		print('  %s' % format_episode_title(series['title'], ep, width=max_width - 2))
+		print('  %s' % format_episode_title(series['title'], ep, include_season=True, width=max_width - 2))
 
 	is_archived = has_meta(series, 'archived')
 
