@@ -212,9 +212,8 @@ def eat_option(command:str|None, option:str, args:list[str], options:dict) -> No
 def cmd_unseen(ctx:context, width:int) -> str | None:
 	refresh_all(ctx)
 
-
-	#                     idx   year2+pad         dash pad eps                  margin
-	max_width:int = width - 5 - 3 - len('1968')*2 - 1 - 2 - 3 - len('episodes')
+	#                     idx         year2+pad       dash pad unseen
+	max_width:int = width - 5 - 3 - len('1968')*2 - 1 - 2 - 3 - len('unseen')
 
 	# TODO: print header/columns
 
@@ -331,7 +330,7 @@ def cmd_list(ctx:context, width:int) -> str | None:
 	refresh_all(ctx)
 
 	# TODO: someone should explain what these numbers are... b/c I don't know
-	max_width = width - 5 - 3 - len('1968')*2 - 1 - 2 - 3 - len('episodes')
+	max_width = width - 5 - 3 - len('1968')*2 - 1 - 2 - 3 - len('unseen')
 	#max_width = max(map(lambda item: len(item[-1]['title']) if not get_meta(item[-1], 'archived') else 0, series_list))
 
 	# TODO: print header/columns
@@ -633,12 +632,12 @@ def cmd_mark(ctx:context, width:int, marking:bool=True) -> str | None:
 	# supported syntaxes:
 	#   nothing:                                (all seasons, all episodes)
 	#   single numbers:              1 2        (season 1, episode 2)
-	#   ranges:                      1-2 1-5    (season 1-2, episode 1-5)
+	#   ranges:                      1-2 1-5    (seasons 1-2, episodes 1-5)
 	#   season descriptor:           s1         (season 1, all episodes)
 	#   "descriptor":                s1e2       (season 1, episode 2)
 	#   "descriptor" spaces:         s1 e2      (season 1, episode 2)
-	#   "descriptor" ranges:         s1-3e1-4   (season 1-3, episode 1-4)
-	#   "descriptor" spaced ranges:  s1-3 e1-4  (season 1-3, episode 1-4)
+	#   "descriptor" ranges:         s1-3e1-4   (seasons 1-3, episodes 1-4)
+	#   "descriptor" spaced ranges:  s1-3 e1-4  (seasons 1-3, episodes 1-4)
 
 	args = [*ctx.arguments]
 	if args:
