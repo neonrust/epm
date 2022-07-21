@@ -212,9 +212,6 @@ def eat_option(command:str|None, option:str, args:list[str], options:dict) -> No
 def cmd_unseen(ctx:context, width:int) -> str | None:
 	refresh_all(ctx)
 
-	#                     idx         year2+pad       dash pad unseen
-	max_width:int = width - 5 - 3 - len('1968')*2 - 1 - 2 - 3 - len('unseen')
-
 	# TODO: print header/columns
 
 	also_future = 'unseen:future' in ctx.options
@@ -236,8 +233,6 @@ def cmd_unseen(ctx:context, width:int) -> str | None:
 		_, unseen = seen_unseen_episodes(series)
 		if unseen:
 			series_unseen.append((index, series_id, series, unseen))
-			if max_width is None:
-				max_width = max(max_width or 0, len(series['title']))
 
 	if not series_unseen:
 		if match:
@@ -270,18 +265,18 @@ def cmd_unseen(ctx:context, width:int) -> str | None:
 		# alternate styling odd/even rows
 		hilite = (num_shown % 2) == 0
 
+		tail = None
+		if not all_unseen:
+			tail = f' %3d unseen' % len(unseen)
+
 		series_printed = False
 		def print_series():
 			if hilite:
 				print('\x1b[48;5;234m', end='')
 
-			print_series_title(index, series, title_width=max_width, tail=tail)
+			print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width, tail=tail, tail_style=_f)
 			nonlocal series_printed
 			series_printed = True
-
-		tail = None
-		if not all_unseen:
-			tail = f' {_f}%3d unseen{_0fg}' % len(unseen)
 
 		if all_unseen:
 			printed_keys = print_unseen_episodes(series, width=width, pre_print=print_series, also_future=also_future)
@@ -328,10 +323,6 @@ setattr(_unseen_help, 'summary', 'Show unseen episodes of series')
 
 def cmd_list(ctx:context, width:int) -> str | None:
 	refresh_all(ctx)
-
-	# TODO: someone should explain what these numbers are... b/c I don't know
-	max_width = width - 5 - 3 - len('1968')*2 - 1 - 2 - 3 - len('unseen')
-	#max_width = max(map(lambda item: len(item[-1]['title']) if not get_meta(item[-1], 'archived') else 0, series_list))
 
 	# TODO: print header/columns
 
@@ -394,7 +385,7 @@ def cmd_list(ctx:context, width:int) -> str | None:
 		if hilite:
 			print('\x1b[48;5;234m', end='')
 
-		print_series_title(index, series, imdb_id=series.get('imdb_id'), title_width=max_width, gray=is_archived and not only_archived)
+		print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width, gray=is_archived and not only_archived)
 
 		if is_archived and not only_archived:
 			print(f'{_f}       Archived', end='')
@@ -473,9 +464,6 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str | None:
 				imdb_id = ctx.db[hit['id']].get('imdb_id')
 				print_series_title(None, ctx.db[hit['id']], imdb_id=imdb_id, gray=True, tail=arch_tail)
 
-		max_width = width - 5 - 3 - len('1968')*2 - 1 - 2 - 3 - len('episodes')
-		#max_width = max(len(series['title']) for series in hits)
-
 		hits = list(filter(lambda H: H['id'] not in ctx.db, hits))
 		print(f'{_g}Found {_0}{_b}%d{_0} {_g}series:{_0}' % len(hits))
 
@@ -486,7 +474,7 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str | None:
 		for idx, hit in enumerate(hits):
 			hit.update(hit_details[idx])
 			imdb_id = hit.get('imdb_id')
-			print_series_title(idx + 1, hit, imdb_id=imdb_id, title_width=max_width)
+			print_series_title(idx + 1, hit, imdb_id=imdb_id, width=width)
 
 		if not add:
 			return None
@@ -538,7 +526,7 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str | None:
 	# need to loop to figure out its list index
 	imdb_id = ctx.db[series_id].get('imdb_id')
 	index = find_list_index(ctx.db, series_id)
-	print_series_title(index, hit, imdb_id=imdb_id)
+	print_series_title(index, hit, imdb_id=imdb_id, width=width)
 
 	return None
 
@@ -569,14 +557,14 @@ def cmd_delete(ctx:context, width:int) -> str | None:
 		return err
 
 	print(f'{_b}Deleting series:{_0}')
-	print_series_title(None, series, imdb_id=series.get('imdb_id'))
+	print_series_title(None, series, imdb_id=series.get('imdb_id'), width=width)
 
 	seen, unseen = seen_unseen_episodes(series)
 	partly_seen = seen and unseen
 
 	choices = ['Yes']
 	if partly_seen:
-		print('You have seen %d episodes of %d.' % (len(seen), len(series.get('episodes'))))
+		print('You have seen %d episodes of %d.' % (len(seen), len(seen) + len(unseen)))
 		choices.append('abandon')
 		question = 'Delete permanently or mark abandoned?'
 		full_answer_a = 'abandon'
@@ -600,7 +588,7 @@ def cmd_delete(ctx:context, width:int) -> str | None:
 	save_series_db(ctx.db)
 
 	print(f'{_b}Series deleted:{_b} {_f}(series renumbered){_0}')
-	print_series_title(index, series, imdb_id=series.get('imdb_id'))
+	print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width)
 
 	return None
 
@@ -706,10 +694,9 @@ def cmd_mark(ctx:context, width:int, marking:bool=True) -> str | None:
 
 	print(f'{_c}{len(episodes)}{_0}', end='')
 	print(f' episode{plural(episodes)} as seen:  {_0}{_f}{fmt_duration(episodes_runtime)}{_0}')
-	max_width = width #max(len(ep['title']) for ep in episodes)
 
 	for ep in episodes:
-		print('  %s' % format_episode_title(series['title'], ep, include_season=True, width=max_width - 2))
+		print('  %s' % format_episode_title(series['title'], ep, include_season=True, width=width - 2))
 
 	is_archived = has_meta(series, 'archived')
 
@@ -799,7 +786,7 @@ def cmd_archive(ctx:context, width:int, archiving:bool=True) -> str | None:
 		print(f':{_0}')
 		del_meta(series, 'archived')
 
-	print_series_title(index, series, imdb_id=series.get('imdb_id'))
+	print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width)
 
 	save_series_db(ctx.db)
 
@@ -1212,48 +1199,75 @@ def transform_episode_info(episode:dict):
 		if field not in useful_episode_fields:
 			episode.pop(field, 0)
 
-def print_series_title(num:int|None, info:dict, title_width:int=0, imdb_id:str=None, gray:bool=False, tail:str|None=None, archived:bool=True):
+def print_series_title(num:int|None, series:dict, width:int=0, imdb_id:str=None, gray:bool=False, tail: str|None=None, tail_style:str|None=None) -> None:
 
-	# this function should never tough the BG color
+	# this function should never touch the BG color
 
-	infop = {**info}
+	org_width = width
 
 	# pad title string if width is specified
-	if title_width > 0:
-		infop['title'] = f'%-{title_width}s' % infop['title']
+	#if width > 0:
+	#	infop['title'] = f'%-{width}s' % infop['title']
 
-	if imdb_id is not None:
-		infop['imdb_id'] = imdb_id
+	# if 'year' in infop:
+	# 	year = infop['year']
+	# 	if len(year) == 2:
+	# 		infop['year'] = '-'.join(str(y) for y in year)
+	# 	else:
+	# 		infop['year'] = '%d-' % year[0]
+	# else:
+	# 	infop['year'] = '  ? '
 
-	if 'year' in infop:
-		year = infop['year']
-		if len(year) == 2:
-			infop['year'] = '-'.join(str(y) for y in year)
-		else:
-			infop['year'] = '%d-' % year[0]
-	else:
-		infop['year'] = '  ? '
-
+	left = ''  # parts relative to left edge (num, title, years)
+	right = ''  # parts relative to right edge (IMDbID, tail)
 	if num is not None:
-		infop['_num'] = '%5s' % f'{num}'
+		num_w = 5
+		width -= num_w
 
-		s = f'\x1b[3;38;2;200;160;100m%(_num)s{_0fg} \x1b[38;5;253m%(title)s{_0fg}  \x1b[38;5;245m%(year)-9s{_0fg}' % infop
+		left = f'\x1b[3;38;2;200;160;100m{num:>{num_w}}{_0fg}'
 
-	elif has_meta(infop, 'added'):
-		infop['added'] = get_meta(infop, 'added').split()[0]
-		s = f' {_g}%(added)s{_0fg}  \x1b[38;5;253m%(title)s{_0fg}  \x1b[38;5;245m%(year)-9s{_0fg}' % infop
+	if 'year' in series:
+		year_a = str(series['year'][0])
+		year_b = series['year'][1] if len(series['year']) > 1 else ''
+		years = '  (%s-%s)' % (year_a, year_b)
+		width -= len(years)
+		years = f'\x1b[38;5;245m{years:<11}{_0fg}'
+	else:
+		years = ''
+
+	#added = get_meta(infop, 'added').split()[0]  # add date
+	#s = f' {_g}%(added)s{_0fg}  \x1b[38;5;253m%(title)s{_0fg}  \x1b[38;5;245m%(year)-9s{_0fg}' % infop
+
+	r_offset = 0
 
 	if imdb_id:
-		s += f'  {_f}%s{_0fg}' % imdb_id
+		id_w = 11
+		right += f'  {_f}{imdb_id:<{id_w}}{_0fg}'
+		width -= 2 + id_w
+		r_offset += 2 + id_w
 
 	if tail:
-		s += tail
+		tail_style = tail_style or ''
+		right += f'{tail_style}{tail}{_0fg}'
+		width -= len(tail)
+		r_offset += len(tail)
+
+	title = series['title']
+	if len(title) > width:
+		# elipt title if too wide
+		width -= 1
+		title = title[:width] + '…'
+
+	left += f' \x1b[38;5;253m{title}{_0fg}{years}'
 
 	if gray:
 		# remove all escape sequences and print in faint-ish gray
-		print(f'{_0fg}\x1b[38;5;246m%s' % strip_ansi(s), end='')
-	else:
-		print(s, end='')
+		left = f'{_0fg}\x1b[38;5;246m%s' % strip_ansi(left)
+		right = f'{_0fg}\x1b[38;5;246m%s' % strip_ansi(right)
+
+	print(left, end='')
+	# first move guaranteed to the right edge, then 'r_offset' left
+	print(f'\x1b[{org_width}C\x1b[{r_offset}D{right}', end='')
 
 	print(_K)
 
