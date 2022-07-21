@@ -7,6 +7,7 @@ import time
 from datetime import datetime, date, timedelta
 import concurrent.futures
 from tempfile import mkstemp
+from os.path import basename, dirname, expandvars, expanduser, exists as pexists, getsize as psize
 
 from typing import Callable, Any
 from types import ModuleType as Module
@@ -878,7 +879,7 @@ cmd_handlers = {
 		'refresh': cmd_refresh,
 }
 
-PRG = os.path.basename(sys.argv[0])
+PRG = basename(sys.argv[0])
 
 default_max_refresh_age = 2  # days
 
@@ -1727,7 +1728,7 @@ def now_datetime() -> datetime:
 app_config = {}
 
 def read_json(filepath) -> dict:
-	if os.path.exists(filepath) and os.path.getsize(filepath) > 1:
+	if pexists(filepath) and psize(filepath) > 1:
 		if orjson is not None:
 			with open(filepath, 'rb') as fp:
 				return orjson.loads(fp.read())
@@ -1739,7 +1740,7 @@ def read_json(filepath) -> dict:
 
 
 def write_json(filepath, data) -> Exception|None:
-	tmp_name = mkstemp(dir=os.path.dirname(filepath))[1]
+	tmp_name = mkstemp(dir=dirname(filepath))[1]
 	try:
 		if orjson is not None:
 			with open(tmp_name, 'wb') as fpo:
@@ -1767,7 +1768,8 @@ def load_config() -> bool:
 
 	db_file = config_get('paths/series-db')
 	if not db_file or not isinstance(db_file, str):
-		config_set('paths/series-db', os.path.expandvars(f'$HOME/.config/{PRG}/series'))
+		# TODO: $XDG_CONFIG_HOME
+		config_set('paths/series-db', pexpand(f'$HOME/.config/{PRG}/series'))
 
 	return len(app_config) > 0
 
@@ -1784,7 +1786,7 @@ def load_series_db() -> dict:
 
 	db_file = str(config_get('paths/series-db'))
 
-	if os.path.exists(db_file) and os.path.getsize(db_file) > 1:
+	if pexists(db_file) and psize(db_file) > 1:
 		if orjson is not None:
 			with open(db_file, 'rb') as fp:
 				config = orjson.loads(fp.read())
@@ -1827,7 +1829,7 @@ if compressor:
 		if not isinstance(compressor, str): # redundant, basically to shut mypy up
 			return False
 
-		tmp_name = mkstemp( dir=os.path.dirname(filename))[1]
+		tmp_name = mkstemp( dir=dirname(filename))[1]
 		os.rename(filename, tmp_name)
 		try:
 			exit_code = Popen([compressor, '-%d' % compression_level, '-q', '-f', tmp_name, '--rm', '-o', destination]).wait()
@@ -1850,14 +1852,14 @@ def save_series_db(config:dict) -> None:
 
 	db_file = str(config_get('paths/series-db'))
 
-	if not os.path.exists(db_file):
-		os.makedirs(os.path.dirname(db_file), exist_ok=True)
+	if not pexists(db_file):
+		os.makedirs(dirname(db_file), exist_ok=True)
 
 	def backup_name(idx) -> str:
 		return '%s.%d%s' % (db_file, idx, compression_extension)
 
 	# write to a temp file and then rename it afterwards
-	tmp_name = mkstemp(dir=os.path.dirname(db_file))[1]
+	tmp_name = mkstemp(dir=dirname(db_file))[1]
 	try:
 		if orjson is not None:
 			with open(tmp_name, 'wb') as fpo:
@@ -1868,7 +1870,7 @@ def save_series_db(config:dict) -> None:
 
 		# rotate backups
 		for idx in range(num_config_backups - 1, 0, -1):
-			if os.path.exists(backup_name(idx)):
+			if pexists(backup_name(idx)):
 				os.rename(backup_name(idx), backup_name(idx + 1))
 
 		# current file becomes first backup (<name>.1)
@@ -1889,6 +1891,9 @@ def plural(n:int|list|tuple|dict) -> str:
 	else:
 		N = n
 	return '' if N == 1 else 's'
+
+def pexpand(p):
+	return expanduser(expandvars(p))
 
 
 _0 = '\x1b[m'      # normal (reset all)
@@ -1911,7 +1916,8 @@ meta_key = 'epm:meta'
 legacy_meta_keys = ('added', updated_key, 'seen', 'archived')
 ignore_changes = ('images', 'production_companies', 'season_regular', 'crew')
 
-app_config_file = os.path.expandvars(f'$HOME/.config/{PRG}/config')
+# TODO: $XDG_CONFIG_HOME
+app_config_file = pexpand(f'$HOME/.config/{PRG}/config')
 num_config_backups = 10
 
 import tmdb
