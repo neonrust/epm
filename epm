@@ -212,9 +212,6 @@ def eat_option(command:str|None, option:str, args:list[str], options:dict) -> No
 def cmd_unseen(ctx:context, width:int) -> str | None:
 	refresh_all(ctx)
 
-	series_list = get_series(ctx.db)
-	if not series_list:
-		return no_series(ctx.db)
 
 	#                     idx   year2+pad         dash pad eps                  margin
 	max_width:int = width - 5 - 3 - len('1968')*2 - 1 - 2 - 3 - len('episodes')
@@ -359,6 +356,8 @@ def cmd_list(ctx:context, width:int) -> str | None:
 	if only_started: print('started ', end='')
 	elif only_planned: print('planned ', end='')
 	elif only_archived: print('archived ', end='')
+	elif only_abandoned: print('abandoned ', end='')
+	else: print('non-archived ', end='')
 	print('series', end='')
 	if match: print(', matching "%s"' % match.pattern, end='')
 	print(f'.{_0}')
@@ -367,24 +366,25 @@ def cmd_list(ctx:context, width:int) -> str | None:
 	num_archived = 0
 
 	for index, series_id, series in series_list:
-		archived = get_meta(series, 'archived')
+		is_archived = get_meta(series, 'archived')
 
-		if find_id is not None:
-			if index != find_id:
-				continue
-		else:
-			if archived:
-				num_archived += 1
-			if archived and not (list_all or only_archived):
-				continue
-			if not archived and only_archived:
-				continue
-			has_episodes_seen = len(get_meta(series, 'seen', {})) > 0
-			if only_started and not has_episodes_seen:
-				continue
-			if only_planned and has_episodes_seen:
-				continue
-			if match and not match(series):
+		if is_archived:
+			num_archived += 1
+		if is_archived and not (list_all or only_archived or only_abandoned):
+			continue
+		if not is_archived and only_archived:
+			continue
+		has_episodes_seen = len(get_meta(series, 'seen', {})) > 0
+		if only_started and not has_episodes_seen:
+			continue
+		if only_planned and has_episodes_seen:
+			continue
+		if only_abandoned and not is_archived:
+			continue
+
+		if only_abandoned:
+			_, unseen = seen_unseen_episodes(series)
+			if len(unseen) == 0:
 				continue
 
 		# alternate styling odd/even rows
@@ -395,9 +395,9 @@ def cmd_list(ctx:context, width:int) -> str | None:
 		if hilite:
 			print('\x1b[48;5;234m', end='')
 
-		print_series_title(index, series, imdb_id=series.get('imdb_id'), title_width=max_width, gray=archived and not only_archived)
+		print_series_title(index, series, imdb_id=series.get('imdb_id'), title_width=max_width, gray=is_archived and not only_archived)
 
-		if archived and not only_archived:
+		if is_archived and not only_archived:
 			print(f'{_f}       Archived', end='')
 			seen, unseen = seen_unseen_episodes(series)
 			partly_seen = seen and unseen
@@ -406,7 +406,7 @@ def cmd_list(ctx:context, width:int) -> str | None:
 			print(f'{_0fg}')
 
 		# don't print "next" if we're printing all unseen episodes anyway
-		print_seen_status(series, gray=archived and not only_archived, next=not all_unseen, width=width)
+		print_seen_status(series, gray=is_archived and not only_archived, next=not all_unseen, width=width)
 
 		if all_unseen:
 			print_unseen_episodes(series, width=width)
@@ -958,6 +958,7 @@ known_options = {
 		{ 'option': ('-s', '--started'),  'key': 'list:started',      'help': 'Show only series with seen episodes.' },
 		{ 'option': ('-p', '--planned'),  'key': 'list:planned',      'help': 'Show only series without seen episodes.' },
 		{ 'option': ('-e', '--episodes'), 'key': 'list:all_episodes', 'help': 'Show all unseen episodes (not only first).' },
+		{ 'option': ('--abandoned',),     'key': 'list:abandoned',    'help': 'Show only abandoned series' },
 	],
 	'unseen': [
 		{ 'option': ('-f', '--future'),   'key': 'unseen:future',       'help': 'Show also future/unreleased episodes.' },
