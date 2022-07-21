@@ -229,17 +229,14 @@ def cmd_unseen(ctx:context, width:int) -> str | None:
 	if only_started and only_planned:
 		return 'Can\'t specify "started" and "planned" at the same time (try "list" command)'
 
-	find_id, match = find_id_or_match(ctx.arguments)
+	find_idx, match = find_idx_or_match(ctx.arguments)
+	series_list = get_series(ctx.db, archived=False, index=find_idx, match=match)
+
+	if not series_list:
+		return no_series(ctx.db)
 
 	series_unseen = []
 	for index, series_id, series in series_list:
-		if find_id is not None:
-			if find_id != index:
-				continue
-		else:
-			if match and not match(series):
-				continue
-
 		_, unseen = seen_unseen_episodes(series)
 		if unseen:
 			series_unseen.append((index, series_id, series, unseen))
@@ -346,13 +343,17 @@ def cmd_list(ctx:context, width:int) -> str | None:
 	only_archived = 'list:archived' in ctx.options
 	only_started = 'list:started' in ctx.options
 	only_planned = 'list:planned' in ctx.options
+	only_abandoned = 'list:abandoned' in ctx.options
 	all_unseen = 'list:all_episodes' in ctx.options
 
-	series_list = get_series(ctx.db)
+	if [only_started, only_planned, only_abandoned].count(True) > 1:
+		return 'Specify only one of "started", "planned" and "abandoned"'
+
+	find_idx, match = find_idx_or_match(ctx.arguments)
+	series_list = get_series(ctx.db, index=find_idx, match=match)
+
 	if not series_list:
 		return no_series(ctx.db)
-
-	find_id, match = find_id_or_match(ctx.arguments)
 
 	print(f'{_f}Listing ', end='')
 	if only_started: print('started ', end='')
@@ -1052,7 +1053,7 @@ def print_unseen_episodes(series:dict, width:int, pre_print:Callable|None=None, 
 	return keys
 
 
-def find_id_or_match(args):
+def find_idx_or_match(args):
 
 	# TODO: return a function: (list_index, series) -> bool
 
@@ -1127,9 +1128,8 @@ def refresh_all(ctx:context) -> str | None:
 	max_age_s = max_age*3600*24
 	forced = bool(opts.get('refresh:force'))
 
-	find_id, match = find_id_or_match(ctx.arguments)
-
-	series_list = get_series(ctx.db, archived=False)
+	find_idx, match = find_idx_or_match(ctx.arguments)
+	series_list = get_series(ctx.db, archived=False, index=find_idx, match=match)
 
 	to_refresh = []
 
@@ -1140,18 +1140,14 @@ def refresh_all(ctx:context) -> str | None:
 	earliest_refresh = '2022-07-01'  # can never be earlier than this
 
 	for index, series_id, series in series_list:
-		if find_id is not None:
-			if find_id != index:
-				continue
-		else:
-			if match and not match(series):
-				continue
-
 		last_refresh = get_meta(series, updated_key)
+
 		if forced or (not last_refresh or age(last_refresh) > max_age_s):
 			to_refresh.append(series_id)
+
 			if not earliest_refresh or last_refresh < earliest_refresh:
 				earliest_refresh = last_refresh
+
 
 	if not to_refresh:
 		if match:
@@ -1501,15 +1497,23 @@ def series_num_archived(db:dict) -> int:
 	return sum(1 if has_meta(series, 'archived') else 0 for series in db.values())
 
 
-def get_series(db:dict, archived: bool | None=None) -> list[tuple[int, str, dict]]:
+def get_series(db:dict, archived:bool|None=None, index=None, match=None) -> list[tuple[int, str, dict]]:
 	series_ids = sorted(db, key=lambda series_id: (db[series_id]['title'].casefold(), db[series_id].get('year', '')))
 
 	all_series:list[tuple[int, str, dict]] = []
+
+	find_index = index
 	index = 0
 
 	for series_id in series_ids:
 		index += 1
 		series = db[series_id]
+
+		if find_index is not None:
+			if find_index != index:
+				continue
+		elif match and not match(series):
+			continue
 
 		if archived is not None and has_meta(series, 'archived') != archived:
 			continue
