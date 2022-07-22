@@ -466,7 +466,7 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str | None:
 					arch_tail = None
 
 				imdb_id = ctx.db[hit['id']].get('imdb_id')
-				print_series_title(None, ctx.db[hit['id']], imdb_id=imdb_id, gray=True, tail=arch_tail)
+				print_series_title(None, ctx.db[hit['id']], imdb_id=imdb_id, gray=True, tail=arch_tail, width=width)
 
 		hits = list(filter(lambda H: H['id'] not in ctx.db, hits))
 		print(f'{_g}Found {_0}{_b}%d{_0} {_g}series:{_0}' % len(hits))
