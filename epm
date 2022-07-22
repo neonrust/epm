@@ -892,11 +892,14 @@ default_configuration = {
 	'max-age': 2,
 	'lookup': {
 		'api-key': None
-	}
+	},
+	'debug': 0,
 }
 
 
-def config_get(path:str, default_value:Any=None) -> str|int|float|dict|list|None:
+ConfigValue = str|int|float|dict|list
+
+def config_get(path:str, default_value:ConfigValue|None=None, convert=None) -> ConfigValue|None:
 	# path: key/key/key
 	keys = path.split('/')
 
@@ -909,14 +912,20 @@ def config_get(path:str, default_value:Any=None) -> str|int|float|dict|list|None
 
 		scope = scope.get(key)
 		if scope is None:
-			scope = default_value
 			break
 
 		current.append(key)
 
 	if scope is None:
-		return default_value
+		scope = default_value
+
+	if convert is not None:
+		scope = convert(scope)
+
 	return scope
+
+def config_int(path:str, default_value:int=None) -> int|None:
+	return int(config_get(path, default_value or 0))
 
 
 def config_set(path:str, value:Any) -> None:
@@ -1824,21 +1833,27 @@ def save_config():
 
 
 def load_series_db() -> dict:
-	config = {}
 
 	db_file = str(config_get('paths/series-db'))
 
+	t0 = time.time()
+
+	db = {}
 	if pexists(db_file) and psize(db_file) > 1:
 		if orjson is not None:
 			with open(db_file, 'rb') as fp:
-				config = orjson.loads(fp.read())
+				db = orjson.loads(fp.read())
 		else:
 			with open(db_file, 'r') as fp:
-				config = json.load(fp)
+				db = json.load(fp)
+
+	t1 = time.time()
+	if config_int('debug') > 0:
+		print(f'{_f}[load: %.1fms]{_0fg}' % ((t1 - t0)*1000))
 
 	# migrate meta data to the current structure
 	meta_migrated = 0
-	for series_id, series in config.items():
+	for series_id, series in db.items():
 		if meta_key not in series:
 			series[meta_key] = {
 				key: series.pop(key)
@@ -1849,9 +1864,9 @@ def load_series_db() -> dict:
 
 	if meta_migrated > 0:
 		print(f'{_f}Migrated meta-data for %d series{_0}' % meta_migrated)
-		save_series_db(config)
+		save_series_db(db)
 
-	return config
+	return db
 
 
 compressor:str|None = 'zstd'
