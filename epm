@@ -282,7 +282,8 @@ def cmd_unseen(ctx:context, width:int) -> str | None:
 			series_printed = True
 
 		if all_unseen:
-			printed_keys = print_unseen_episodes(series, width=width, pre_print=print_series, also_future=also_future)
+			_, unseen = seen_unseen_episodes(series)
+			printed_keys = print_episodes(series, unseen, width=width, pre_print=print_series, also_future=also_future)
 			if printed_keys:
 				num_shown += 1
 
@@ -376,8 +377,8 @@ def cmd_list(ctx:context, width:int) -> str | None:
 		if only_abandoned and not is_archived:
 			continue
 
+		seen, unseen = seen_unseen_episodes(series)
 		if only_abandoned:
-			_, unseen = seen_unseen_episodes(series)
 			if len(unseen) == 0:
 				continue
 
@@ -402,8 +403,11 @@ def cmd_list(ctx:context, width:int) -> str | None:
 		# don't print "next" if we're printing all unseen episodes anyway
 		print_seen_status(series, gray=is_archived and not only_archived, next=not all_unseen, width=width)
 
+		if seen_episodes:
+			print_episodes(series, seen, width=width)
+
 		if all_unseen:
-			print_unseen_episodes(series, width=width)
+			print_episodes(series, unseen, width=width)
 
 		if hilite:
 			print(_0, end='')
@@ -944,26 +948,28 @@ def config_set(path:str, value:Any) -> None:
 
 
 known_options = {
-	None: {
-	},
+	None: [
+		{ 'option': ('--debug',),         'key': 'debug',             'help': 'Enable debug mode' },
+	],
 	'list': [
 		{ 'option': ('-a', '--all'),      'key': 'list:all',          'help': 'Show also archived series' },
 		{ 'option': ('-A', '--archived'), 'key': 'list:archived',     'help': 'Show only archived series' },
-		{ 'option': ('-s', '--started'),  'key': 'list:started',      'help': 'Show only series with seen episodes.' },
-		{ 'option': ('-p', '--planned'),  'key': 'list:planned',      'help': 'Show only series without seen episodes.' },
-		{ 'option': ('-e', '--episodes'), 'key': 'list:all_episodes', 'help': 'Show all unseen episodes (not only first).' },
+		{ 'option': ('-s', '--started'),  'key': 'list:started',      'help': 'Show only series with seen episodes' },
+		{ 'option': ('-p', '--planned'),  'key': 'list:planned',      'help': 'Show only series without seen episodes' },
+		{ 'option': ('-e', '--episodes'), 'key': 'list:all_episodes', 'help': 'Show all unseen episodes (not only first)' },
+		{ 'option': ('-S', '--seen'),     'key': 'list:seen_episodes', 'help': 'Show seen episodes' },
 		{ 'option': ('--abandoned',),     'key': 'list:abandoned',    'help': 'Show only abandoned series' },
 	],
 	'unseen': [
-		{ 'option': ('-f', '--future'),   'key': 'unseen:future',       'help': 'Show also future/unreleased episodes.' },
-		#{ 'option': ('+f', '--not-future'), 'key': 'unseen:not_future', 'help': 'Don\'t show future/unreleased episodes.' },
-		{ 'option': ('-s', '--started'),  'key': 'unseen:started',      'help': 'Show only series with seen episodes.' },
-		{ 'option': ('-p', '--planned'),  'key': 'unseen:planned',      'help': 'Show only series without seen episodes.' },
-		{ 'option': ('-e', '--episodes'), 'key': 'unseen:all_episodes', 'help': 'Show all unseen episodes (not only first).' },
-		#{ 'option': ('+e', '--first-episode'), 'key': 'unseen:first_episodes', 'help': 'Show only first unseen episodes.' },
+		{ 'option': ('-f', '--future'),   'key': 'unseen:future',       'help': 'Show also future/unreleased episodes' },
+		#{ 'option': ('+f', '--not-future'), 'key': 'unseen:not_future', 'help': 'Don\'t show future/unreleased episodes' },
+		{ 'option': ('-s', '--started'),  'key': 'unseen:started',      'help': 'Show only series with seen episodes' },
+		{ 'option': ('-p', '--planned'),  'key': 'unseen:planned',      'help': 'Show only series without seen episodes' },
+		{ 'option': ('-e', '--episodes'), 'key': 'unseen:all_episodes', 'help': 'Show all unseen episodes (not only first)' },
+		#{ 'option': ('+e', '--first-episode'), 'key': 'unseen:first_episodes', 'help': 'Show only first unseen episodes' },
 	],
 	'refresh': [
-		{ 'option': ('-f', '--force'), 'key': 'refresh:force',  'help': 'Refresh whether needed or not.' },
+		{ 'option': ('-f', '--force'), 'key': 'refresh:force',  'help': 'Refresh whether needed or not' },
 		{ 'option': ('--max-age',),    'key': 'max-age',  'arg': int, 'help': 'Refresh older than N days (default: %s)' % default_max_refresh_age },
 	],
 }
@@ -1012,9 +1018,10 @@ def is_released(target, fallback=True):
 	return date.fromisoformat(release_date) <= today_date
 
 
-def print_unseen_episodes(series:dict, width:int, pre_print:Callable|None=None, also_future=False) -> list[str]:
+def print_episodes(series:dict, episodes:list[dict], width:int, pre_print:Callable|None=None, also_future=False) -> list[str]:
 
-	_, unseen = seen_unseen_episodes(series)
+	seen, unseen = seen_unseen_episodes(series)
+	seen_keys = {_ep_key(ep) for ep in seen}
 
 	indent = 6  # nice and also space to print the season "grouping labels"
 	current_season = 0
@@ -1024,13 +1031,15 @@ def print_unseen_episodes(series:dict, width:int, pre_print:Callable|None=None, 
 
 	keys:list[str] = []
 
-	for ep in unseen:
+	for ep in episodes:
 
 		if pre_print:
 			pre_print()
 			pre_print = None  # only once
 
-		s = format_episode_title(None, ep, width=ep_width, today=True)
+		has_seen = _ep_key(ep) in seen_keys
+
+		s = format_episode_title(None, ep, width=ep_width, today=True, seen=has_seen)
 
 		season = ep['season']
 		if season != current_season:
@@ -1281,7 +1290,7 @@ def print_series_title(num:int|None, series:dict, width:int=0, imdb_id:str=None,
 
 
 
-def format_episode_title(prefix:str|None, episode:dict, include_season:bool=False, width:int=0, gray:bool=False, today:bool=False) -> str:
+def format_episode_title(prefix:str|None, episode:dict, include_season:bool=False, width:int=0, gray:bool=False, seen:bool|None=None, today:bool=False) -> str:
 
 	# this function should never touch the BG color
 
@@ -1408,8 +1417,8 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=Fals
 
 	s += f'{season_ep:}{" "*episode_title_margin}{_o}{ep["title"]:{width}}{_f}{runtime_str}{_0fg}{ep_time}'
 
-	if gray:
-		s = strip_ansi(s)
+	if gray or seen:
+		s = f'{_0fg}\x1b[38;5;246m%s{_0fg}' % strip_ansi(s)
 
 	return s
 
