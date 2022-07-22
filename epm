@@ -45,11 +45,14 @@ def main():
 
 class context:
 	def __init__(self, args:list[str]):
+		self.global_options = {
+			'verbose': config_int('verbose', 0),
+		}
 		self.command:str|None = None
-		self.options:dict = {
+		self.command_options:dict = {
 			'max-age': config_get('max-age'),
 		}
-		self.arguments:list = []
+		self.command_arguments:list = []
 		self._parse_args(args)
 
 		if self.command is not None:
@@ -67,15 +70,15 @@ class context:
 		# insert configured default arguments and options
 		args = config_get('commands/%s/default_arguments' % self.command, [])
 		if args and isinstance(args, list):
-			self.arguments = args
+			self.command_arguments = args
 
 		opts = config_get('commands/%s/default_options' % self.command, [])
 		while isinstance(opts, list) and opts:
-			eat_option(self.command, opts.pop(0), opts, self.options)
+			eat_option(self.command, opts.pop(0), opts, self.command_options)
 
 
 	def _add_argument(self, argument:str) -> None:
-		self.arguments.append(argument)
+		self.command_arguments.append(argument)
 
 
 	def _parse_args(self, args:list) -> None:
@@ -96,7 +99,7 @@ class context:
 					# print('  -> cmd: %s (default)' % self.command)
 
 				# print('  opt:', arg, '(cmd: %s)' % self.command)
-				eat_option(self.command, arg, args, self.options)  # will exit if not correct
+				eat_option(self.command, arg, args, self.command_options)  # will exit if not correct
 				continue
 
 			if not self.command and not arg.startswith('.'):
@@ -214,15 +217,15 @@ def cmd_unseen(ctx:context, width:int) -> str | None:
 
 	# TODO: print header/columns
 
-	also_future = 'unseen:future' in ctx.options
-	only_started = 'unseen:started' in ctx.options
-	only_planned = 'unseen:planned' in ctx.options
-	all_unseen = 'unseen:all_episodes' in ctx.options
+	also_future = 'unseen:future' in ctx.command_options
+	only_started = 'unseen:started' in ctx.command_options
+	only_planned = 'unseen:planned' in ctx.command_options
+	all_unseen = 'unseen:all_episodes' in ctx.command_options
 
 	if only_started and only_planned:
 		return 'Can\'t specify "started" and "planned" at the same time (try "list" command)'
 
-	find_idx, match = find_idx_or_match(ctx.arguments)
+	find_idx, match = find_idx_or_match(ctx.command_arguments)
 	series_list = get_series(ctx.db, archived=False, index=find_idx, match=match)
 
 	if not series_list:
@@ -326,17 +329,18 @@ def cmd_list(ctx:context, width:int) -> str | None:
 
 	# TODO: print header/columns
 
-	list_all = 'list:all' in ctx.options
-	only_archived = 'list:archived' in ctx.options
-	only_started = 'list:started' in ctx.options
-	only_planned = 'list:planned' in ctx.options
-	only_abandoned = 'list:abandoned' in ctx.options
-	all_unseen = 'list:all_episodes' in ctx.options
+	list_all = 'list:all' in ctx.command_options
+	only_archived = 'list:archived' in ctx.command_options
+	only_started = 'list:started' in ctx.command_options
+	only_planned = 'list:planned' in ctx.command_options
+	only_abandoned = 'list:abandoned' in ctx.command_options
+	all_unseen = 'list:all_episodes' in ctx.command_options
+	seen_episodes = 'list:seen_episodes' in ctx.command_options
 
 	if [only_started, only_planned, only_abandoned].count(True) > 1:
 		return 'Specify only one of "started", "planned" and "abandoned"'
 
-	find_idx, match = find_idx_or_match(ctx.arguments)
+	find_idx, match = find_idx_or_match(ctx.command_arguments)
 	series_list = get_series(ctx.db, index=find_idx, match=match)
 
 	if not series_list:
@@ -424,10 +428,10 @@ setattr(_list_help, 'summary', 'List series')
 year_ptn = re.compile(r'^(\d{4})|\((\d{4})\)$')  # 1968 or (1968)
 
 def cmd_add(ctx:context, width:int, add:bool=True) -> str | None:
-	if not ctx.arguments:
+	if not ctx.command_arguments:
 		return 'required argument missing: <title> / <Series ID>'
 
-	args = list(a for a in ' '.join(ctx.arguments).split())
+	args = list(a for a in ' '.join(ctx.command_arguments).split())
 	year = None
 	if len(args) >= 2:
 		# does the last word look like a year?
@@ -549,10 +553,10 @@ setattr(_search_help, 'summary', 'Search for a series.')
 
 
 def cmd_delete(ctx:context, width:int) -> str | None:
-	if not ctx.arguments:
+	if not ctx.command_arguments:
 		return 'Required argument missing: # / <IMDb ID>'
 
-	index, series_id, series, err = find_series(ctx.db, ctx.arguments.pop(0))
+	index, series_id, series, err = find_series(ctx.db, ctx.command_arguments.pop(0))
 	if err is not None or series is None:
 		return err
 
@@ -603,10 +607,10 @@ setattr(_delete_help, 'summary', 'Complete remove a series - permanently!')
 def cmd_mark(ctx:context, width:int, marking:bool=True) -> str | None:
 	refresh_all(ctx)
 
-	if not ctx.arguments:
+	if not ctx.command_arguments:
 		return 'Required argument missing: # / <IMDb ID>'
 
-	find_id = ctx.arguments.pop(0)
+	find_id = ctx.command_arguments.pop(0)
 
 	index, series_id, series, err = find_series(ctx.db, find_id)
 	if err is not None or series is None:
@@ -627,7 +631,7 @@ def cmd_mark(ctx:context, width:int, marking:bool=True) -> str | None:
 	#   "descriptor" ranges:         s1-3e1-4   (seasons 1-3, episodes 1-4)
 	#   "descriptor" spaced ranges:  s1-3 e1-4  (seasons 1-3, episodes 1-4)
 
-	args = [*ctx.arguments]
+	args = [*ctx.command_arguments]
 	if args:
 		arg = args.pop(0)
 
@@ -705,13 +709,13 @@ def cmd_mark(ctx:context, width:int, marking:bool=True) -> str | None:
 		if not unseen:
 			print()
 			print(f'{_c}Last episode marked of ended/canceled series.{_0}')
-			ctx.arguments = [ find_id ]
+			ctx.command_arguments = [find_id]
 			return cmd_archive(ctx, width)
 
 	elif not marking and is_archived:
 		print()
 		print(f'{_c}Unmarked episode of archived series.{_0}')
-		ctx.arguments = [ find_id ]
+		ctx.command_arguments = [find_id]
 		return cmd_restore(ctx, width)
 
 	save_series_db(ctx.db)
@@ -750,10 +754,10 @@ setattr(_unmark_help, 'summary', 'Unmark a series/season/episode - reverse of ma
 
 
 def cmd_archive(ctx:context, width:int, archiving:bool=True) -> str | None:
-	if not ctx.arguments:
+	if not ctx.command_arguments:
 		return 'Required argument missing: # / <IMDb ID>'
 
-	find_id = ctx.arguments.pop(0)
+	find_id = ctx.command_arguments.pop(0)
 
 	index, series_id, series, err = find_series(ctx.db, find_id)
 	if err is not None or series is None:
@@ -1108,14 +1112,14 @@ def refresh_all(ctx:context) -> str | None:
 
 	t0 = time.time()
 
-	opts = ctx.options
+	opts = ctx.command_options
 	max_age = opts.get('max-age', default_max_refresh_age)
 	if max_age <= 0:
 		max_age = default_max_refresh_age
 	max_age_s = max_age*3600*24
 	forced = bool(opts.get('refresh:force'))
 
-	find_idx, match = find_idx_or_match(ctx.arguments)
+	find_idx, match = find_idx_or_match(ctx.command_arguments)
 	series_list = get_series(ctx.db, archived=False, index=find_idx, match=match)
 
 	to_refresh = []
