@@ -1490,7 +1490,7 @@ def print_seen_status(series:dict, gray: bool=False, summary=True, next=True, la
 	s = ''
 
 	if summary and (seen or unseen):
-		s += f'\x1b[38;5;256m{ind}Summary: '
+		s += f'\x1b[38;5;256m{ind}'
 
 		if seen:
 			seen_duration = sum((ep.get('runtime') or 0) for ep in seen)*60
