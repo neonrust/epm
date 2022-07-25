@@ -2109,7 +2109,15 @@ today_date = date.today()
 updated_key = 'updated'
 meta_key = 'epm:meta'
 legacy_meta_keys = ('added', updated_key, 'seen', 'archived')
-ignore_changes = ('images', 'production_companies', 'season_regular', 'crew')
+ignore_changes = (
+	'images',
+	'videos',
+	'production_companies',
+	'season_regular',
+	'crew',
+	'homepage',
+	'user_review_count',
+)
 
 # TODO: $XDG_CONFIG_HOME
 app_config_file = pexpand(f'$HOME/.config/{PRG}/config')
