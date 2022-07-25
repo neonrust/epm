@@ -264,33 +264,30 @@ def episodes(series_id, with_details=False):
 	ep_runtime = ser_details.get('episode_run_time')
 
 	def fetch_season(season):
-		data = _query(_qurl('tv/%s/season/%d' % (series_id, season)))
-		if data is None:
-			return []
+		data = _query(_qurl('tv/%s/season/%d' % (series_id, season))) or {}
+		data = data.get('episodes', [])
 
-		episodes = data.get('episodes', [])
-
-		_rename_keys(episodes, {
+		_rename_keys(data, {
 			'name': 'title',
 			'first_air_date': 'date',
 			'original_name': 'original_title',
 			'original_language': 'language',
 			'origin_country': 'country',
 		})
-		_del_keys(episodes, ['production_code', 'vote_average', 'vote_count'])
-		_rename_keys(episodes, {
+		_del_keys(data, ['production_code', 'vote_average', 'vote_count'])
+		_rename_keys(data, {
 			'air_date': 'date',
 			'season_number': 'season',
 			'episode_number': 'episode',
 		})
-		_set_values(episodes, {
+		_set_values(data, {
 			'director': lambda ep: _job_persons(ep.get('crew', []), 'Director'),
 			'writer': lambda ep: _job_persons(ep.get('crew', []), 'Writer'),
-			'cast': lambda ep: ', '.join(map(lambda p: p.get('name'), ep.get('guest_stars', [])))
+			'cast': lambda ep: ', '.join(map(lambda p: p.get('name') or '', ep.get('guest_stars', [])))
 		})
-		_del_keys(episodes, ['id', 'still_path', 'crew', 'guest_stars'])
+		_del_keys(data, ['id', 'still_path', 'crew', 'guest_stars'])
 
-		return episodes
+		return data
 
 	# then fetch all the seasons, in parallel
 	with __get_executor() as executor:
