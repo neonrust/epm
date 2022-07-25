@@ -86,7 +86,7 @@ def _query(url) -> dict[str, Any]|None:
 
 __recent_searches:dict = {}
 
-def search(search, type='series', year=None):
+def search(search:str, type:str='series', year:int|None=None, page:int=1):
 
 	# /search/tv
 
@@ -108,6 +108,9 @@ def search(search, type='series', year=None):
 	if year is not None:
 		query['first_air_date_year'] = year
 
+	if page >= 1:
+		query['page'] = page
+
 	url = _qurl(path, query)
 
 	if url in __recent_searches:
@@ -116,6 +119,8 @@ def search(search, type='series', year=None):
 	data = _query(url)
 	if not data:
 		return []
+
+	total_results = data.get('total_results', 0)
 
 	hits = data.get('results', [])
 
@@ -146,7 +151,7 @@ def search(search, type='series', year=None):
 
 	__recent_searches[url] = hits
 
-	return hits
+	return hits, total_results
 
 
 
