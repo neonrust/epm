@@ -147,7 +147,7 @@ __imdb_id_to_tmdb:dict = {}
 
 def _get_tmdb_id(imdb_id):
 	data = _query(_qurl('find/%s' % imdb_id, {'external_source':'imdb_id'}))
-	if data is None or not data.get('tv_results'):
+	if (data or {}).get('tv_results'):
 		raise RuntimeError('Unknown IMDb ID: %s' % imdb_id)
 
 	series = data.get('tv_results', [])
@@ -159,20 +159,22 @@ def _get_tmdb_id(imdb_id):
 
 
 __details:dict = {}
+_missing = object()
 
-def details(title_id, type='series'):
+def details(title_id:str|list[str], type='series'):
 
 	if not _api_key:
 		raise NoAPIKey()
 
 	if isinstance(title_id, Iterable) and not isinstance(title_id, str):
-		return _parallel_query(details, map(lambda I: ( (I,), {} ) , title_id))
+		wrapped_args = map(lambda I: ( (I,), {} ) , title_id)
+		return _parallel_query(details, wrapped_args)
 
 	if title_id.startswith('tt'):
 		title_id = _get_tmdb_id(title_id)
 
-	data = __details.get(title_id)
-	if data is not None:
+	data = __details.get(title_id, _missing)
+	if data is not _missing:
 		return data
 
 	detail_path = 'tv/%s' % title_id
@@ -251,7 +253,7 @@ def details(title_id, type='series'):
 	return data
 
 
-def episodes(series_id, with_details=False):
+def episodes(series_id:str|list[str], with_details=False, progress:Callable|None=None):
 
 	if not _api_key:
 		raise NoAPIKey()
@@ -259,9 +261,12 @@ def episodes(series_id, with_details=False):
 	if _qurl is None:
 		return []
 
+	if isinstance(series_id, Iterable) and not isinstance(series_id, str):
+		wrapped_args = map(lambda sid: ( (sid,), {'with_details': with_details} ), series_id)
+		return _parallel_query(episodes, wrapped_args, progress_callback=progress)
+
 	if series_id.startswith('tt'):
 		series_id = _get_tmdb_id(series_id)
-
 
 	# unfortunately we must synchronously get the details first
 	ser_details = details(series_id, type='series')
@@ -320,13 +325,14 @@ def episodes(series_id, with_details=False):
 	return all_episodes
 
 
-def changes(series_id:str|list, after:datetime, ignore:tuple=None) -> list:
+def changes(series_id:str|list[str], after:datetime, ignore:tuple=None, progress:Callable|None=None) -> list:
 
 	if _qurl is None:
 		return []
 
 	if isinstance(series_id, Iterable) and not isinstance(series_id, str):
-		return _parallel_query(changes, map(lambda I: ( (I, after), {'ignore': ignore} ), series_id))
+		wrapped_args = map(lambda sid: ( (sid, after), {'ignore': ignore} ), series_id)
+		return _parallel_query(changes, wrapped_args, progress_callback=progress)
 
 	now = datetime.now().date().isoformat()
 	after_str = after.date().isoformat()
