@@ -142,7 +142,7 @@ def resolve_cmd(name:str) -> str|None:
 	matching = []
 
 	for primary in known_commands:
-		aliases = [primary] + list(known_commands[primary].get('alias', []))
+		aliases = [primary] + list(known_commands[primary]['alias'])
 		for alias in aliases:
 			if name == alias:
 				return primary  # direct match (case sensitive), just return
@@ -337,21 +337,20 @@ def _unseen_help() -> None:
 	print(f'    {_o}[<pattern>]         {_0} Show only matching')
 
 setattr(cmd_unseen, 'help', _unseen_help)
-setattr(_unseen_help, 'summary', 'Show unseen episodes of series')
 
 
-def cmd_list(ctx:context, width:int) -> str | None:
+def cmd_show(ctx:context, width:int) -> str | None:
 	refresh_series(ctx.db, width)
 
 	# TODO: print header/columns
 
-	list_all = 'list:all' in ctx.command_options
-	only_archived = 'list:archived' in ctx.command_options
-	only_started = 'list:started' in ctx.command_options
-	only_planned = 'list:planned' in ctx.command_options
-	only_abandoned = 'list:abandoned' in ctx.command_options
-	all_unseen = 'list:all_episodes' in ctx.command_options
-	seen_episodes = 'list:seen_episodes' in ctx.command_options
+	list_all = 'show:all' in ctx.command_options
+	only_archived = 'show:archived' in ctx.command_options
+	only_started = 'show:started' in ctx.command_options
+	only_planned = 'show:planned' in ctx.command_options
+	only_abandoned = 'show:abandoned' in ctx.command_options
+	all_unseen = 'show:all_episodes' in ctx.command_options
+	seen_episodes = 'show:seen_episodes' in ctx.command_options
 
 	if [only_started, only_planned, only_abandoned].count(True) > 1:
 		return 'Specify only one of "started", "planned" and "abandoned"'
@@ -440,8 +439,7 @@ def _list_help() -> None:
 	print_cmd_usage('list', '<options> [<title search>...]')
 	print(f'    {_o}[<title search>]     {_0} Show only matching series')
 
-setattr(cmd_list, 'help', _list_help)
-setattr(_list_help, 'summary', 'List series')
+setattr(cmd_show, 'help', _list_help)
 
 
 year_ptn = re.compile(r'^(\d{4})|\((\d{4})\)$')  # 1968 or (1968)
@@ -558,7 +556,6 @@ def _add_help() -> None:
 	print_cmd_usage('add', '<title search> [<year>]')
 
 setattr(cmd_add, 'help', _add_help)
-setattr(_add_help, 'summary', 'Search for a series and (optionally) add it.')
 
 
 def cmd_search(ctx:context, width:int) -> str | None:
@@ -568,7 +565,6 @@ def _search_help() -> None:
 	print_cmd_usage('search', '<title search> [<year>]')
 
 setattr(cmd_search, 'help', _search_help)
-setattr(_search_help, 'summary', 'Search for a series.')
 
 
 def cmd_delete(ctx:context, width:int) -> str | None:
@@ -620,8 +616,6 @@ def _delete_help() -> None:
 	print(f'    {_o}# / <IMDb ID>{_0}')
 
 setattr(cmd_delete, 'help', _delete_help)
-setattr(_delete_help, 'summary', 'Complete remove a series - permanently!')
-
 
 def cmd_mark(ctx:context, width:int, marking:bool=True) -> str | None:
 	refresh_series(ctx.db, width)
@@ -756,7 +750,6 @@ def _mark_help() -> None:
 	print('  > %s unmark 42 s1e1-5' % PRG)
 
 setattr(cmd_mark, 'help', _mark_help)
-setattr(_mark_help, 'summary', 'Mark a series, season or specific episode as seen.')
 
 
 def cmd_unmark(*args, **kwargs):
@@ -773,7 +766,6 @@ def _unmark_help() -> None:
 	print('  > %s unmark 42 s1e1-5' % PRG)
 
 setattr(cmd_unmark, 'help', _unmark_help)
-setattr(_unmark_help, 'summary', 'Unmark a series/season/episode - reverse of mark command.')
 
 
 def cmd_archive(ctx:context, width:int, archiving:bool=True) -> str | None:
@@ -824,7 +816,6 @@ def _archive_help() -> None:
 	print(f'    {_o}# / <IMDb ID>{_0}')
 
 setattr(cmd_archive, 'help', _archive_help)
-setattr(_archive_help, 'summary', 'Archving series - hides from normal list command.')
 
 
 def cmd_restore(*args, **kwargs) -> str|None:
@@ -836,7 +827,6 @@ def _restore_help() -> None:
 	print(f'    {_o}# / <IMDb ID>{_0}')
 
 setattr(cmd_restore, 'help', _restore_help)
-setattr(_restore_help, 'summary', 'Restore series - reverse of archive command.')
 
 
 def cmd_refresh(ctx:context, width:int) -> str|None:
@@ -876,7 +866,6 @@ def _refresh_help() -> None:
 	print(f'    {_o}[<pattern>]         {_0} Only matching series')
 
 setattr(cmd_refresh, 'help', _refresh_help)
-setattr(_refresh_help, 'summary', 'Refresh episode data of all non-archived series.')
 
 
 def cmd_config(ctx:context, width:int) -> str|None:
@@ -886,7 +875,6 @@ def _config_help() -> None:
 	print_cmd_usage('config', '<args>')
 
 setattr(cmd_config, 'help', _config_help)
-setattr(_config_help, 'summary', 'Configure')
 
 
 def cmd_help(*args, **kw):
@@ -896,7 +884,6 @@ def _help_help() -> None:
 	print_cmd_usage('help')
 
 setattr(cmd_help, 'help', _help_help)
-setattr(_help_help, 'summary', 'Shows this help page')
 
 
 def get_meta(series:dict, key: str, def_value=None) -> Any:
@@ -913,18 +900,18 @@ def del_meta(series:dict, key: str) -> None:
 
 # known commands with aliases
 known_commands = {
-	'search':  { 'alias': ('s', ),     'handler': cmd_search },
- 	'add':     { 'alias': ('a', ),     'handler': cmd_add },
- 	'delete':  {                       'handler': cmd_delete },
- 	'list':    { 'alias': ('ls', ),    'handler': cmd_list },
-	'unseen':  { 'alias': ('u', 'us'), 'handler': cmd_unseen },
-	'mark':    { 'alias': ('m', ),     'handler': cmd_mark },
-	'unmark':  { 'alias': ('M', 'um'), 'handler': cmd_unmark },
-	'archive': { 'alias': ('A', ),     'handler': cmd_archive },
-	'restore': { 'alias': ('R', ),     'handler': cmd_restore },
-	'refresh': { 'alias': ('r', ),     'handler': cmd_refresh },
-	'config':  {                       'handler': cmd_config },
-	'help':    {                       'handler': cmd_help },
+	'search':  { 'alias': ('s', ),      'handler': cmd_search,  'help': 'Search for a series.' },
+ 	'add':     { 'alias': ('a', ),      'handler': cmd_add,     'help': 'Search for a series and (optionally) add it.' },
+ 	'delete':  { 'alias': (),           'handler': cmd_delete,  'help': 'Completely remove a series - permanently!' },
+ 	'show':    { 'alias': ('list', 'ls'), 'handler': cmd_show,  'help': 'Show/list series'},
+	'unseen':  { 'alias': ('u', 'us'),  'handler': cmd_unseen,  'help': 'Show unseen episodes of series' },
+	'mark':    { 'alias': ('m', ),      'handler': cmd_mark,    'help': 'Mark a series, season or specific episode as seen.' },
+	'unmark':  { 'alias': ('M', 'um'),  'handler': cmd_unmark,  'help': 'Unmark a series/season/episode - reverse of mark command.' },
+	'archive': { 'alias': ('A', ),      'handler': cmd_archive, 'help': 'Archving series - hides from normal list command.' },
+	'restore': { 'alias': ('R', ),      'handler': cmd_restore, 'help': 'Restore series - reverse of archive command.' },
+	'refresh': { 'alias': ('r', ),      'handler': cmd_refresh, 'help': 'Refresh episode data of all non-archived series.' },
+	'config':  { 'alias': (),           'handler': cmd_config,  'help': 'Configure.' },
+	'help':    { 'alias': (),           'handler': cmd_help,    'help': 'Shows this help page.' },
 }
 
 PRG = basename(sys.argv[0])
@@ -1015,14 +1002,14 @@ known_options = {
 	None: [
 		{ 'option': ('--debug',),         'key': 'debug',             'help': 'Enable debug mode', 'func': _set_debug },
 	],
-	'list': [
-		{ 'option': ('-a', '--all'),      'key': 'list:all',          'help': 'Show also archived series' },
-		{ 'option': ('-A', '--archived'), 'key': 'list:archived',     'help': 'Show only archived series' },
-		{ 'option': ('-s', '--started'),  'key': 'list:started',      'help': 'Show only series with seen episodes' },
-		{ 'option': ('-p', '--planned'),  'key': 'list:planned',      'help': 'Show only series without seen episodes' },
-		{ 'option': ('-e', '--episodes'), 'key': 'list:all_episodes', 'help': 'Show all unseen episodes (not only first)' },
-		{ 'option': ('-S', '--seen'),     'key': 'list:seen_episodes', 'help': 'Show seen episodes' },
-		{ 'option': ('--abandoned',),     'key': 'list:abandoned',    'help': 'Show only abandoned series' },
+	'show': [
+		{ 'option': ('-a', '--all'),      'key': 'show:all',          'help': 'Show also archived series' },
+		{ 'option': ('-A', '--archived'), 'key': 'show:archived',     'help': 'Show only archived series' },
+		{ 'option': ('-s', '--started'),  'key': 'show:started',      'help': 'Show only series with seen episodes' },
+		{ 'option': ('-p', '--planned'),  'key': 'show:planned',      'help': 'Show only series without seen episodes' },
+		{ 'option': ('-e', '--episodes'), 'key': 'show:all_episodes', 'help': 'Show all unseen episodes (not only first)' },
+		{ 'option': ('-S', '--seen'),     'key': 'show:seen_episodes', 'help': 'Show seen episodes' },
+		{ 'option': ('--abandoned',),     'key': 'show:abandoned',    'help': 'Show only abandoned series' },
 	],
 	'unseen': [
 		{ 'option': ('-f', '--future'),   'key': 'unseen:future',       'help': 'Show also future/unreleased episodes' },
@@ -1755,7 +1742,9 @@ def option_def(command:str, option:str):
 	return None
 
 def print_cmd_usage(command:str, syntax:str) -> None:
-	print(_b + getattr(getattr(known_commands[command], 'help'), 'summary') + _0)
+	summary = known_commands[command].get('help')
+	if summary:
+		print(_b + summary + _0)
 	print(f'Usage: %s {_c}%s{_0} %s' % (PRG, command, syntax))
 
 def options_help(command:str):
@@ -1819,8 +1808,8 @@ def print_cmd_help_table():
 		return highlighted
 
 	for cmd, cmd_info in known_commands.items():
-		aliases = cmd_info.get('alias', [])
-		summary = getattr(getattr(cmd_info['handler'], 'help'), 'summary')
+		aliases = cmd_info['alias']
+		summary = cmd_info['help']
 		pad = ' '*(12 - len(cmd))
 		cmd = hilite_alias(cmd, aliases)
 		print(f'  {cmd}{pad}{summary}')
