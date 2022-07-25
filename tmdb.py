@@ -25,7 +25,7 @@ class NoAPIKey(RuntimeError):
 
 __parallel_requests = 16
 
-def set_parallel(num):
+def set_parallel(num) -> None:
 	global __parallel_requests
 	__parallel_requests = max(1, int(num or 1))
 
@@ -33,7 +33,7 @@ def __get_executor(n=__parallel_requests):
 	return futures.ThreadPoolExecutor(max_workers=n, thread_name_prefix='tmdb-request')
 
 
-def _update_url_func():
+def _update_url_func() -> None:
 	def mk_url(endpoint:str, query:dict|None=None) -> str:
 		if _base_url is None:
 			raise RuntimeError('_base_url is None, which should never happen!')
@@ -54,7 +54,7 @@ def _update_url_func():
 
 _qurl:Callable[[str, dict], str]|None = None
 
-def set_api_key(key):
+def set_api_key(key) -> None:
 	global _api_key
 	_api_key = key
 
