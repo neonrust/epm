@@ -187,37 +187,53 @@ def eat_option(command:str|None, option:str, args:list[str], options:dict, unkno
 
 	arg_type = opt_def.get('arg')
 
-	# check if it's a long option combined with an argument, i.e. --option=argument
-	m = long_option_arg_ptn.search(option)
-	if m:
-		option = m.group('option')
-		option_arg = m.groupdict().get('arg', None)
-		if not option_arg and arg_type is not None and args:
-			option_arg = args.pop(0)
-
-	if arg_type is None:
+	if not arg_type:
 		if option_arg:
 			bad_opt_arg(command, option, option_arg, None)
 
 		set_func(True)
 
 	else:
+		# check if it's a long option combined with an argument, i.e. --option=argument
+		m = long_option_arg_ptn.search(option)
+		if m:
+			option = m.group('option')
+			option_arg = m.groupdict().get('arg', None)
+			if not option_arg and args:
+				option_arg = args.pop(0)
+
+		elif args:
+			option_arg = args.pop(0)
+
 		if option_arg is None:
 			bad_opt_arg(command, option, None, arg_type)
 
-		arg_str = str(option_arg)
+		arg_str = str(option_arg)  # for mypy
+
+		validator = opt_def.get('validator', lambda _: True)
 
 		if arg_type is int:
 			try:
-				set_func(int(arg_str))
+				v = int(arg_str)
+				if not validator(v):
+					bad_opt_arg(command, option, arg_str, arg_type, validator.__doc__)
+				set_func(v)
 			except ValueError:
 				bad_opt_arg(command, option, arg_str, arg_type)
 
 		elif arg_type is datetime:
 			try:
-				set_func(datetime.fromisoformat(arg_str))
+				v = datetime.fromisoformat(arg_str)
+				if not validator(v):
+					bad_opt_arg(command, option, arg_str, arg_type, validator.__doc__)
+				set_func(v)
 			except ValueError:
 				bad_opt_arg(command, option, arg_str, arg_type)
+
+		elif not validator(arg_str):
+			bad_opt_arg(command, option, arg_str, arg_type, validator.__doc__)
+
+
 
 	return True
 
@@ -448,6 +464,8 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str | None:
 	if not ctx.command_arguments:
 		return 'required argument missing: <title> / <Series ID>'
 
+	max_hits = int(ctx.command_options.get('search:max-hits') or 0) or config_int('lookup/max-hits')
+
 	args = list(a for a in ' '.join(ctx.command_arguments).split())
 	year = None
 	if len(args) >= 2:
@@ -466,7 +484,20 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str | None:
 		print(' (%d)' % year, end='')
 	print(f' ...{_0}', end='', flush=True)
 
-	hits = tmdb.search(search, year=year)
+	hits = []
+	page = 1
+
+	while len(hits) < max_hits:
+		page_hits, total = tmdb.search(search, year=year, page=page)
+		hits.extend(page_hits)
+		if not page_hits or total == len(hits):
+			break
+
+		page += 1
+
+	if len(hits) > max_hits:
+		hits = hits[: max_hits]
+
 	print(f'\r{_K}', end='')
 	if not hits:
 		return 'Nothing found. Try generalizing your search.'
@@ -917,6 +948,7 @@ known_commands = {
 PRG = basename(sys.argv[0])
 
 default_max_refresh_age = 2  # days
+default_max_hits = 10
 
 default_configuration = {
 	'paths': {
@@ -925,9 +957,10 @@ default_configuration = {
 	'commands': {
 		'default': 'unseen',
 	},
-	'max-age': 2,
+	'max-age': default_max_refresh_age,
 	'lookup': {
-		'api-key': None
+		'api-key': None,
+		'max-hits': default_max_hits,
 	},
 	'debug': 0,
 }
@@ -998,6 +1031,23 @@ def config_set(path:str, value:Any) -> None:
 def _set_debug(value):
 	config_set('debug', bool(value))
 
+def _valid_int(a:int, b:int) -> Callable[[int], bool]:
+	assert(a <= b)
+	def verify(v:int):
+		return v >= a and v <= b
+	verify.__doc__ = 'between %d and %d' % (a, b)
+	return verify
+
+# TODO: merge with 'known_commands' ?  (at least for the command-specific options)
+
+__opt_max_hits = {
+	'option': ( '-n',),
+	'key': 'search:max-hits',
+	'arg': int,
+	'validator': _valid_int(1, 40),
+	'help': 'Limit number of hits [1-40] (default: %d)' % default_max_hits,
+}
+
 known_options = {
 	None: [
 		{ 'option': ('--debug',),         'key': 'debug',             'help': 'Enable debug mode', 'func': _set_debug },
@@ -1020,9 +1070,15 @@ known_options = {
 		#{ 'option': ('+e', '--first-episode'), 'key': 'unseen:first_episodes', 'help': 'Show only first unseen episodes' },
 	],
 	'refresh': [
-		{ 'option': ('-f', '--force'), 'key': 'refresh:force',  'help': 'Refresh whether needed or not' },
+		{ 'option': ('-f', '--force'), 'key': 'refresh:force',        'help': 'Refresh whether needed or not' },
 		{ 'option': ('--max-age',),    'key': 'max-age',  'arg': int, 'help': 'Refresh older than N days (default: %s)' % default_max_refresh_age },
 	],
+	'add': [
+		__opt_max_hits,
+	],
+	'search': [
+		__opt_max_hits,
+	]
 }
 
 
@@ -1876,7 +1932,7 @@ def bad_opt(command:str, option:str) -> None:
 	print(f'{warning_prefix(command)} Unknown option: {option}', file=sys.stderr)
 	sys.exit(1)
 
-def bad_opt_arg(command:str, option, arg, arg_type) -> None:
+def bad_opt_arg(command:str, option, arg, arg_type:Callable, explain:str|None=None) -> None:
 	print(warning_prefix(command), end='', file=sys.stderr)
 
 	expected = None
@@ -1884,11 +1940,15 @@ def bad_opt_arg(command:str, option, arg, arg_type) -> None:
 		expected = arg_type.__name__
 
 	if expected is None:
-		print(f' Unexpected argument for {option}: {_b}{arg}{_0}', file=sys.stderr)
+		print(f' Unexpected argument for {option}: {_b}{arg}{_0}', file=sys.stderr, end='')
 	elif arg is None:
-		print(f' Required argument missing for {option}', file=sys.stderr)
+		print(f' Required argument missing for {option}', file=sys.stderr, end='')
 	else:
-		print(f' Bad option argument for {option}: {_b}{arg}{_0}  (%s expected)' % expected, file=sys.stderr)
+		print(f' Bad option argument for {option}: {_b}{arg}{_0}  %s expected' % expected, file=sys.stderr, end='')
+
+	if explain:
+		print(',', explain, end='', file=sys.stderr)
+	print(file=sys.stderr)
 
 	sys.exit(1)
 
