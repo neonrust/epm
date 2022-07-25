@@ -4,9 +4,9 @@ from requests import ReadTimeout, ConnectTimeout
 from urllib.parse import quote as url_escape
 from http import HTTPStatus
 import json
-import concurrent.futures
-from datetime import datetime, date, timedelta
-import re
+import concurrent.futures as futures
+from datetime import datetime, timedelta
+import time
 import os
 import builtins
 from collections.abc import Iterable
@@ -24,22 +24,13 @@ class NoAPIKey(RuntimeError):
 
 
 __parallel_requests = 16
-__executor = None
 
 def set_parallel(num):
-	if __executor is not None:
-		raise RuntimeError('Executor already initialized')
-
 	global __parallel_requests
 	__parallel_requests = max(1, int(num or 1))
 
-def __get_executor():
-	global __executor
-
-	if __executor is None:
-		__executor = concurrent.futures.ThreadPoolExecutor(max_workers=__parallel_requests, thread_name_prefix='tmdb-request')
-
-	return __executor
+def __get_executor(n=__parallel_requests):
+	return futures.ThreadPoolExecutor(max_workers=n, thread_name_prefix='tmdb-request')
 
 
 def _update_url_func():
@@ -185,18 +176,20 @@ def details(title_id, type='series'):
 	if type == 'film':
 		detail_path = 'movie/%s' % title_id
 
-	executor = __get_executor()
-	detail_promise = executor.submit(_query, _qurl(detail_path))
-	ext_promise = executor.submit(_query, _qurl('tv/%s/external_ids' % title_id))
+	with __get_executor() as executor:
+		promises = [
+			executor.submit(_query, _qurl(detail_path)),
+			executor.submit(_query, _qurl('tv/%s/external_ids' % title_id)),
+		]
 
-	concurrent.futures.wait([ detail_promise, ext_promise ])
-
-	data = detail_promise.result()
+	# details
+	data = promises[0].result()
 	if not data:
 		#print('[tmdb] no details for %s' % title_id, file=sys.stderr)
 		return None
 
-	ext_id = ext_promise.result() or {}
+	# external IDs
+	ext_id = promises[1].result() or {}
 
 	imdb_id = ext_id.get('imdb_id') or None
 	if imdb_id:
@@ -300,15 +293,13 @@ def episodes(series_id, with_details=False):
 		return episodes
 
 	# then fetch all the seasons, in parallel
-	executor = __get_executor()
-	promises = [
-		executor.submit(fetch_season, season)
-		for season in range(1, num_seasons + 1)
-	]
+	with __get_executor() as executor:
+		promises = [
+			executor.submit(fetch_season, season)
+			for season in range(1, num_seasons + 1)
+		]
 
-	concurrent.futures.wait(promises)
-
-	episodes = [
+	all_episodes = [
 		episode
 		for promise in promises
 		for episode in promise.result()
@@ -316,14 +307,14 @@ def episodes(series_id, with_details=False):
 
 	# if the series contains runtime info, populate each episode (unless already present)
 	if ep_runtime:
-		for ep in episodes:
+		for ep in all_episodes:
 			if not ep.get('runtime'):
 				ep['runtime'] = ep_runtime
 
 	if with_details:
-		return ser_details, episodes
+		return ser_details, all_episodes
 
-	return episodes
+	return all_episodes
 
 
 def changes(series_id:str|list, after:datetime, ignore:tuple=None) -> list:
@@ -422,13 +413,23 @@ def _set_values(data, new_values):
 			except Exception as e:
 				print('_set_values:', key, str(e), file=sys.stderr)
 
-def _parallel_query(func, arg_list):
-	executor = __get_executor()
-	promises = [
-		executor.submit(func, *args, **kw)
-		for args, kw in arg_list
-	]
-	concurrent.futures.wait(promises)
+
+def _parallel_query(func:Callable, arg_list:list, progress_callback:Callable|None=None):
+	def func_wrap(idx, *args, **kw):
+		t0 = time.time()
+
+		res = func(*args, **kw)
+
+		duration = time.time() - t0
+		if progress_callback:
+			progress_callback(idx, duration, args)
+		return res
+
+	with __get_executor() as executor:
+		promises = [
+			executor.submit(func_wrap, idx, *args, **kw)
+			for idx, (args, kw) in enumerate(arg_list)
+		]
 
 	return [
 		p.result()
