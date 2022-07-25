@@ -1677,7 +1677,7 @@ def series_num_archived(db:dict) -> int:
 def get_series(db:dict, archived:bool|None=None, index=None, match=None) -> list[tuple[int, str, dict]]:
 	series_ids = sorted(db, key=lambda series_id: (db[series_id]['title'].casefold(), db[series_id].get('year', '')))
 
-	all_series:list[tuple[int, str, dict]] = []
+	series_list:list[tuple[int, str, dict]] = []
 
 	find_index = index
 	index = 0
@@ -1695,9 +1695,9 @@ def get_series(db:dict, archived:bool|None=None, index=None, match=None) -> list
 		if archived is not None and has_meta(series, 'archived') != archived:
 			continue
 
-		all_series.append( (index, series_id, series) )
+		series_list.append( (index, series_id) )
 
-	return all_series
+	return series_list
 
 
 def seen_unseen_episodes(series:dict, before=None) -> tuple[list,list]:
@@ -1985,7 +1985,7 @@ def load_series_db() -> dict:
 				db = json.load(fp)
 
 	t1 = time.time()
-	if config_int('debug') > 0:
+	if config_bool('debug'):
 		print(f'{_f}[load: %.1fms]{_0fg}' % ((t1 - t0)*1000))
 
 	# migrate meta data to the current structure
@@ -2043,7 +2043,6 @@ else:
 		return True
 
 def save_series_db(config:dict) -> None:
-
 	db_file = str(config_get('paths/series-db'))
 
 	if not pexists(db_file):
