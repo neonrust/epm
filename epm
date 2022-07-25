@@ -5,7 +5,6 @@ import os.path
 import re
 import time
 from datetime import datetime, date, timedelta
-import concurrent.futures
 from tempfile import mkstemp
 from os.path import basename, dirname, expandvars, expanduser, exists as pexists, getsize as psize
 
@@ -47,7 +46,7 @@ def main():
 class context:
 	def __init__(self, args:list[str]):
 		self.global_options = {
-			'debug': config_int('debug', 0),
+			'debug': config_bool('debug', 0),
 		}
 		self.command:str|None = None
 		self.command_options:dict = {
@@ -228,7 +227,7 @@ def eat_option(command:str|None, option:str, args:list[str], options:dict, unkno
 
 
 def cmd_unseen(ctx:context, width:int) -> str | None:
-	refresh_all(ctx)
+	refresh_series(ctx.db, width)
 
 	# TODO: print header/columns
 
@@ -247,7 +246,8 @@ def cmd_unseen(ctx:context, width:int) -> str | None:
 		return no_series(ctx.db)
 
 	series_unseen = []
-	for index, series_id, series in series_list:
+	for index, series_id in series_list:
+		series = ctx.db[series_id]
 		_, unseen = seen_unseen_episodes(series)
 		if unseen:
 			series_unseen.append((index, series_id, series, unseen))
@@ -341,7 +341,7 @@ setattr(_unseen_help, 'summary', 'Show unseen episodes of series')
 
 
 def cmd_list(ctx:context, width:int) -> str | None:
-	refresh_all(ctx)
+	refresh_series(ctx.db, width)
 
 	# TODO: print header/columns
 
@@ -375,7 +375,8 @@ def cmd_list(ctx:context, width:int) -> str | None:
 	num_shown = 0
 	num_archived = 0
 
-	for index, series_id, series in series_list:
+	for index, series_id in series_list:
+		series = ctx.db[series_id]
 		is_archived = get_meta(series, 'archived')
 
 		if is_archived:
@@ -538,7 +539,7 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str | None:
 	ctx.db[series_id] = hit
 
 
-	refresh_series(series_id, ctx.db)
+	refresh_series(ctx.db, [series_id])
 
 	# TODO: offer to mark seasons as seen?
 
@@ -624,7 +625,7 @@ setattr(_delete_help, 'summary', 'Complete remove a series - permanently!')
 
 
 def cmd_mark(ctx:context, width:int, marking:bool=True) -> str | None:
-	refresh_all(ctx)
+	refresh_series(ctx.db, width)
 
 	if not ctx.command_arguments:
 		return 'Required argument missing: # / <IMDb ID>'
@@ -731,7 +732,7 @@ def cmd_mark(ctx:context, width:int, marking:bool=True) -> str | None:
 		seen, unseen = seen_unseen_episodes(series)
 		if not unseen:
 			print()
-			print(f'{_c}Last episode marked of ended/canceled series.{_0}')
+			print(f'{_c}Last episode marked of %s series.{_0}' % series['status'])
 			ctx.command_arguments = [find_id]
 			return cmd_archive(ctx, width)
 
@@ -840,8 +841,35 @@ setattr(_restore_help, 'summary', 'Restore series - reverse of archive command.'
 
 
 def cmd_refresh(ctx:context, width:int) -> str|None:
-	refresh_all(ctx)
+
+	max_age = ctx.command_options.get('max-age', default_max_refresh_age)
+	if max_age <= 0:
+		max_age = config_int('max-age')
+
+	forced = bool(ctx.command_options.get('refresh:force'))
+
+	find_idx, match = find_idx_or_match(ctx.command_arguments)
+	series_list = get_series(ctx.db, archived=False, index=find_idx, match=match)
+
+	subset = [series_id for index, series_id in series_list]
+
+	if not subset:
+		return 'Nothing matched: %s' % (match.pattern if match else find_idx)
+
+	t0 = time.time()
+
+	num_series, num_episodes = refresh_series(ctx.db, width, subset=subset, max_age=max_age if not forced else -1)
+	if not num_episodes:
+		return 'Nothing to update (max age: %d days)' % (max_age/(3600*24))
+
+	if num_series > 0:  # can be 1 even if num_episodes is zero
+		if num_episodes > 0:
+			print(f'{_f}Refreshed %d episodes across %d series [%.1fs].{_0}' % (num_episodes, num_series, time.time() - t0))
+
+		save_series_db(ctx.db)
+
 	return None
+
 
 def _refresh_help() -> None:
 	print_cmd_usage('refresh', '# / <IMDb ID> {_o}|{_n} <pattern>')
@@ -939,8 +967,11 @@ def config_get(path:str, default_value:ConfigValue|None=None, convert=None) -> C
 
 	return scope
 
-def config_int(path:str, default_value:int=None) -> int|None:
+def config_int(path:str, default_value:int=0) -> int|None:
 	return int(config_get(path, default_value or 0))
+
+def config_bool(path:str, default_value:int=False) -> bool|None:
+	return bool(config_get(path, default_value or False))
 
 
 def config_set(path:str, value:Any) -> None:
@@ -971,9 +1002,12 @@ def config_set(path:str, value:Any) -> None:
 		current.append(key)
 
 
+def _set_debug(value):
+	config_set('debug', bool(value))
+
 known_options = {
 	None: [
-		{ 'option': ('--debug',),         'key': 'debug',             'help': 'Enable debug mode' },
+		{ 'option': ('--debug',),         'key': 'debug',             'help': 'Enable debug mode', 'func': _set_debug },
 	],
 	'list': [
 		{ 'option': ('-a', '--all'),      'key': 'list:all',          'help': 'Show also archived series' },
@@ -1017,7 +1051,8 @@ def find_series(db:dict, find_id:str) -> tuple[int | None, str | None, dict | No
 		else:
 			return nothing_found
 
-	for index, series_id, series in get_series(db):
+	for index, series_id in get_series(db):
+		series = db[series_id]
 		if find_index is not None and find_index == index:
 			return index, series_id, series, None
 		elif series.get('imdb_id') == find_id:
@@ -1027,7 +1062,7 @@ def find_series(db:dict, find_id:str) -> tuple[int | None, str | None, dict | No
 
 
 def find_list_index(db, series_id):
-	for index, sid, _ in get_series(db):
+	for index, sid in get_series(db):
 		if sid == series_id:
 			return index
 	return None
@@ -1120,143 +1155,113 @@ def no_series(db:dict) -> str:
 		return 'No series added. %s' % suffix
 
 
-def refresh_series(series_id:str, db:dict, progress:bool=False) -> int:
-	#if progress:
-	#	print(f'{_f}(%d / %d) Refreshing %s...{_0}' % (progress[0], progress[1], series_id), end='', flush=True)
-	if progress is False:
-		print(f'{_f}Refreshing %s...{_0}' % series_id, end='', flush=True)
+def refresh_series(db:dict, width:int, subset:list|None=None, max_age:int|None=None) -> tuple[int, int]:
 
-	details, episodes = tmdb.episodes(series_id, with_details=True)
-	if progress is not None:
-		print(f'\r{_K}', end='', flush=True)
+	subset = subset or list(db.keys())
+	max_age = (max_age or config_int('max-age'))*3600*24
 
-	for ep in episodes:
-		transform_episode_info(ep)
+	forced = max_age < 0
 
-	#updated = len(episodes) > len(db[series_id].get('episodes', []))
+	# print('max_age:', max_age, forced)
 
-	meta_data = db[series_id].get(meta_key, {})
-
-	db[series_id] = details
-	db[series_id][meta_key] = meta_data
-	set_meta(db[series_id], updated_key, now())
-	db[series_id]['episodes'] = episodes
-
-	return len(episodes)
-
-
-def refresh_all(ctx:context) -> str | None:
-
-	t0 = time.time()
-
-	opts = ctx.command_options
-	max_age = opts.get('max-age', default_max_refresh_age)
-	if max_age <= 0:
-		max_age = default_max_refresh_age
-	max_age_s = max_age*3600*24
-	forced = bool(opts.get('refresh:force'))
-
-	find_idx, match = find_idx_or_match(ctx.command_arguments)
-	series_list = get_series(ctx.db, archived=False, index=find_idx, match=match)
-
-	to_refresh = []
+	to_refresh = {}
 
 	now_dt = now_datetime()
 	def age(dt):
 		return (now_dt - datetime.fromisoformat(dt)).total_seconds()
 
-	earliest_refresh = '2022-07-01'  # can never be earlier than this
+	earliest_refresh = None  # can never be earlier than this
 
-	for index, series_id, series in series_list:
+	for series_id in subset:
+		series = db[series_id]
 		last_refresh = get_meta(series, updated_key)
 
-		if forced or (not last_refresh or age(last_refresh) > max_age_s):
-			to_refresh.append(series_id)
+		if forced or (not last_refresh or age(last_refresh) > max_age):
+			to_refresh[series_id] = last_refresh
 
 			if not earliest_refresh or last_refresh < earliest_refresh:
 				earliest_refresh = last_refresh
 
-
 	if not to_refresh:
-		if match:
-			return 'Nothing matched: %s' % match.pattern
+		return 0, 0
 
-		return 'Nothing to update (max age: %d days)' % max_age
+	# print('to_refresh after date:', len(to_refresh))
+	# print(json.dumps({k: (v, age(v)) for k, v in to_refresh.items()}, indent=2))
 
-	touched = False
+	touched = 0
 	if not forced:
 		print(f'\r{_f}Checking for updates (%d series)...{_0}{_K}' % len(to_refresh), end='', flush=True)
-		changes = tmdb.changes(to_refresh, datetime.fromisoformat(earliest_refresh), ignore=ignore_changes)
-		for series_id, changes in zip(list(to_refresh), changes):
+
+		prog_bar = new_progress(len(to_refresh), width=width - 2)
+		def show_progress(*_):
+			print(f'\r{_K}%s{_EOL}' % prog_bar(completed, text='Checking updates...'), end='', flush=True)
+
+		to_refresh_keys = list(to_refresh.keys())
+		changes = tmdb.changes(to_refresh_keys, datetime.fromisoformat(earliest_refresh), ignore=ignore_changes, progress=show_progress)
+
+		print(f'\r{_K}', end='', flush=True)
+
+		for series_id, changes in zip(to_refresh_keys, changes):
 			if not changes:
-				to_refresh.remove(series_id)
+				# to_refresh.remove(series_id)
+				del to_refresh[series_id]
 				# remember last update check
-				set_meta(ctx.db[series_id], updated_key, now())
-				touched = True
-			else:
-				print(series_id, 'changes:', changes)
+				set_meta(db[series_id], updated_key, now())
+				touched += 1
+
+	# print('to_refresh after check:', len(to_refresh))
+	# print(json.dumps({k: (v, age(v)) for k, v in to_refresh.items()}, indent=2))
 
 	if not to_refresh:
 		if touched:
-			save_series_db(ctx.db)
+			return touched, 0  # only series affected, no episodes
+		return 0, 0
 
-		print(f'\r{_K}', end='', flush=True)
-		return 'No updates'
-
-	print(f'\r{_K}', end='')
-	if forced:
-		print(f'\x1b[33m(forced){_0} ', end='')
 	print(f'{_f}Refreshing %d series...{_0}' % len(to_refresh), end='', flush=True)
 
-	with concurrent.futures.ThreadPoolExecutor(max_workers=16, thread_name_prefix='%s-request' % PRG) as executor:
-		promises = [
-			executor.submit(refresh_series, series_id, ctx.db, progress=None)
-			for series_id in to_refresh
-		]
-		concurrent.futures.wait(promises)
+	prog_bar = new_progress(len(to_refresh), width=width - 2)
+	def show_progress(*_):
+		print(f'\r{_K}%s{_EOL}' % prog_bar(completed, text='Refreshing...'), end='', flush=True)
+
+	to_refresh_keys = list(to_refresh.keys())
+	result = tmdb.episodes(to_refresh_keys, with_details=True, progress=show_progress)
+	# 'result' is a list of (details, episodes)-tuples
 
 	print(f'\r{_K}', end='', flush=True)
 
-	updated = 0
-	downloaded = 0
+	num_episodes = 0
 
-	for promise in promises:
-		count = promise.result()
-		if count:
-			updated += 1
-			downloaded += count
+	now_time = now()
 
-	if updated:
-		print(f'{_f}Refreshed %d episodes across %d series [%.1fs].{_0}' % (downloaded, updated, time.time() - t0))
-		save_series_db(ctx.db)
+	for series_id, (details, episodes) in zip(list(to_refresh.keys()), result):
+		for ep in episodes:
+			for field in list(ep.keys()):
+				if field not in useful_episode_fields:
+					episode.pop(field, 0)
 
-	return None
+		series = details
+		series['episodes'] = episodes
+		series[meta_key] = db[series_id].get(meta_key, {})
+
+		set_meta(series, updated_key, now_time)
+
+		db[series_id] = series
+
+		num_episodes += len(episodes)
+
+		#print(series_id, 'updated:', get_meta(db[series_id], updated_key))
+
+	if to_refresh:
+		save_series_db(db)
+
+	return len(to_refresh), num_episodes
 
 
 useful_episode_fields = [ 'season', 'episode', 'title', 'date', 'overview', 'runtime' ]
 
-def transform_episode_info(episode:dict):
-	for field in list(episode.keys()):
-		if field not in useful_episode_fields:
-			episode.pop(field, 0)
-
 def print_series_title(num:int|None, series:dict, width:int=0, imdb_id:str=None, gray:bool=False, tail: str|None=None, tail_style:str|None=None) -> None:
 
 	# this function should never touch the BG color
-
-
-	# pad title string if width is specified
-	#if width > 0:
-	#	infop['title'] = f'%-{width}s' % infop['title']
-
-	# if 'year' in infop:
-	# 	year = infop['year']
-	# 	if len(year) == 2:
-	# 		infop['year'] = '-'.join(str(y) for y in year)
-	# 	else:
-	# 		infop['year'] = '%d-' % year[0]
-	# else:
-	# 	infop['year'] = '  ? '
 
 	left = ''  # parts relative to left edge (num, title, years)
 	right = ''  # parts relative to right edge (IMDbID, tail)
@@ -1674,8 +1679,8 @@ def series_num_archived(db:dict) -> int:
 	return sum(1 if has_meta(series, 'archived') else 0 for series in db.values())
 
 
-def get_series(db:dict, archived:bool|None=None, index=None, match=None) -> list[tuple[int, str, dict]]:
-	series_ids = sorted(db, key=lambda series_id: (db[series_id]['title'].casefold(), db[series_id].get('year', '')))
+def get_series(db:dict, archived:bool|None=None, index=None, match=None) -> list[tuple[int, str]]:
+	series_ids = sorted(db, key=lambda sid: (db[sid]['title'].casefold(), db[sid].get('year', '')))
 
 	series_list:list[tuple[int, str, dict]] = []
 
