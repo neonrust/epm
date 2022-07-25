@@ -56,7 +56,7 @@ class context:
 		self._parse_args(args)
 
 		if self.command is not None:
-			self.handler:Callable = cmd_handlers[self.command]
+			self.handler:Callable = known_commands[self.command]['handler']
 
 
 	def invoke(self, width:int) -> str|None:
@@ -141,9 +141,9 @@ class context:
 def resolve_cmd(name:str) -> str|None:
 	matching = []
 
-	for cmd in known_commands:
-		primary = cmd[0]  # use the first alias as unique key
-		for alias in cmd:
+	for primary in known_commands:
+		aliases = [primary] + list(known_commands[primary].get('alias', []))
+		for alias in aliases:
 			if name == alias:
 				return primary  # direct match (case sensitive), just return
 			if alias.startswith(name.lower()):
@@ -879,6 +879,25 @@ setattr(cmd_refresh, 'help', _refresh_help)
 setattr(_refresh_help, 'summary', 'Refresh episode data of all non-archived series.')
 
 
+def cmd_config(ctx:context, width:int) -> str|None:
+	return 'Not implemented'
+
+def _config_help() -> None:
+	print_cmd_usage('config', '<args>')
+
+setattr(cmd_config, 'help', _config_help)
+setattr(_config_help, 'summary', 'Configure')
+
+
+def cmd_help(*args, **kw):
+	print_usage()
+
+def _help_help() -> None:
+	print_cmd_usage('help')
+
+setattr(cmd_help, 'help', _help_help)
+setattr(_help_help, 'summary', 'Shows this help page')
+
 
 def get_meta(series:dict, key: str, def_value=None) -> Any:
 	return series.get(meta_key, {}).get(key, def_value)
@@ -892,32 +911,20 @@ def set_meta(series:dict, key: str, value) -> None:
 def del_meta(series:dict, key: str) -> None:
 	series[meta_key].pop(key, None)
 
-# known commands with aliases (apart from resolving shortest-unique)
-known_commands = (
-	('search', 's'),
-	('add', 'a'),
-	('delete', ),
-	('list', 'ls'),
-	('unseen', 'u', 'us'),
-	('mark', 'm'),
-	('unmark', 'M', 'um'),
-	('archive', 'A'),
-	('restore', 'R'),
-	('refresh', 'r'),
-	('help', ),
-)
-
-cmd_handlers = {
-		'add':     cmd_add,
-		'search':  cmd_search,
-		'delete':  cmd_delete,
-		'list':    cmd_list,
-		'unseen':  cmd_unseen,
-		'mark':    cmd_mark,
-		'unmark':  cmd_unmark,
-		'archive': cmd_archive,
-		'restore': cmd_restore,
-		'refresh': cmd_refresh,
+# known commands with aliases
+known_commands = {
+	'search':  { 'alias': ('s', ),     'handler': cmd_search },
+ 	'add':     { 'alias': ('a', ),     'handler': cmd_add },
+ 	'delete':  {                       'handler': cmd_delete },
+ 	'list':    { 'alias': ('ls', ),    'handler': cmd_list },
+	'unseen':  { 'alias': ('u', 'us'), 'handler': cmd_unseen },
+	'mark':    { 'alias': ('m', ),     'handler': cmd_mark },
+	'unmark':  { 'alias': ('M', 'um'), 'handler': cmd_unmark },
+	'archive': { 'alias': ('A', ),     'handler': cmd_archive },
+	'restore': { 'alias': ('R', ),     'handler': cmd_restore },
+	'refresh': { 'alias': ('r', ),     'handler': cmd_refresh },
+	'config':  {                       'handler': cmd_config },
+	'help':    {                       'handler': cmd_help },
 }
 
 PRG = basename(sys.argv[0])
@@ -1748,7 +1755,7 @@ def option_def(command:str, option:str):
 	return None
 
 def print_cmd_usage(command:str, syntax:str) -> None:
-	print(_b + getattr(getattr(cmd_handlers[command], 'help'), 'summary') + _0)
+	print(_b + getattr(getattr(known_commands[command], 'help'), 'summary') + _0)
 	print(f'Usage: %s {_c}%s{_0} %s' % (PRG, command, syntax))
 
 def options_help(command:str):
@@ -1811,11 +1818,9 @@ def print_cmd_help_table():
 
 		return highlighted
 
-	for cmd in known_commands:
-		cmd, aliases = cmd[0], cmd[1:]
-		if cmd not in cmd_handlers: # e.g. 'help'
-			continue
-		summary = getattr(getattr(cmd_handlers[cmd], 'help'), 'summary')
+	for cmd, cmd_info in known_commands.items():
+		aliases = cmd_info.get('alias', [])
+		summary = getattr(getattr(cmd_info['handler'], 'help'), 'summary')
 		pad = ' '*(12 - len(cmd))
 		cmd = hilite_alias(cmd, aliases)
 		print(f'  {cmd}{pad}{summary}')
@@ -1842,12 +1847,14 @@ def print_usage(exit_code:int=0) -> None:
 		print(f'  {_f}Using {_b}orjson{_0}{_f} for faster load/save.')
 	else:
 		print(f'  {_f}Install \'orjson\' for faster load/save{_0}')
+	if not tmdb.ok():
+		print(f'   {_c}Need to set TMDb API key{_0}')
 	sys.exit(exit_code)
 
 
 def print_cmd_help(command:str, exit_code:int=0) -> None:
 	try:
-		show_help = getattr(cmd_handlers[command], 'help')
+		show_help = getattr(known_commands[command]['handler'], 'help')
 	except KeyError:
 		print('%s: No help for command: %s' % (PRG, command))
 		sys.exit(1)
