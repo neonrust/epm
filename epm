@@ -30,7 +30,7 @@ VERSION_DATE = '2022-07-19'
 
 def main():
 	load_config()
-	#print(orjson.dumps(app_config, option=orjson.OPT_INDENT_2 | orjson.OPT_SORT_KEYS).decode('utf-8'))
+	# print(orjson.dumps(app_config, option=orjson.OPT_INDENT_2 | orjson.OPT_SORT_KEYS).decode('utf-8'))
 
 	api_key = config_get('lookup/api-key')
 	if api_key:
@@ -96,6 +96,12 @@ class context:
 					if arg in '--help':
 						print_usage()
 
+					# attempt to interpret as a global option
+					# print('  try global opt: "%s"' % arg)
+					if eat_option(None, arg, args, self.global_options, unknown_ok=True):
+						# print('  -> global opt:', arg)
+						continue
+
 					self._set_command(default_command)
 					# print('  -> cmd: %s (default)' % self.command)
 
@@ -108,7 +114,7 @@ class context:
 				cmd = resolve_cmd(arg)
 				if cmd:
 					self._set_command(cmd)
-					# print('  -> cmd: %s [%s]' % (self.command, ' '.join(self.arguments)))
+					# print('  -> cmd = %s' % self.command)
 					continue
 
 			if not self.command:
@@ -116,14 +122,15 @@ class context:
 					arg = arg[1: ]
 
 				self._set_command(default_command)
-				# print('  -> cmd: %s (default)' % self.command)
+				# print('  -> cmd = %s (default)' % self.command)
 
 			if self.command:
-				# print('  cmd arg:', arg)
 				self._add_argument(arg)
+				# print('  -> "%s" [%s]' % (self.command, ' '.join(self.command_arguments)))
 
 			else:
 				raise RuntimeError('Bug: unhandled argument: "%s"' % arg)
+
 
 		if not self.command:
 			self._set_command(default_command)
@@ -155,22 +162,27 @@ def resolve_cmd(name:str) -> str|None:
 
 long_option_arg_ptn = re.compile(r'^(?P<option>--[^= ]+)(?:=(?P<arg>.*))$')
 
-def eat_option(command:str|None, option:str, args:list[str], options:dict) -> None:
+def eat_option(command:str|None, option:str, args:list[str], options:dict, unknown_ok=False) -> bool:
 	if option in ('-h', '--help'):
 		if command:
 			print_cmd_help(command)
 		else:
 			print_usage()
 
-	default_command = str(config_get('commands/default', 'unseen'))
-
-	command = command or default_command
 	opt_def = option_def(command, option)
 
 	if not opt_def:
+		if unknown_ok:
+			return False
 		bad_opt(command, option)
 
 	key:str = opt_def['key']
+
+	set_func = opt_def.get('func')
+	if not set_func:
+		def _set_opt(v):
+			options[key] = v
+		set_func = _set_opt
 
 	option_arg:str|None = None
 
@@ -188,7 +200,7 @@ def eat_option(command:str|None, option:str, args:list[str], options:dict) -> No
 		if option_arg:
 			bad_opt_arg(command, option, option_arg, None)
 
-		options[key] = True
+		set_func(True)
 
 	else:
 		if option_arg is None:
@@ -198,15 +210,17 @@ def eat_option(command:str|None, option:str, args:list[str], options:dict) -> No
 
 		if arg_type is int:
 			try:
-				options[key] = int(arg_str)
+				set_func(int(arg_str))
 			except ValueError:
 				bad_opt_arg(command, option, arg_str, arg_type)
 
 		elif arg_type is datetime:
 			try:
-				options[key] = datetime.fromisoformat(arg_str)
+				set_func(datetime.fromisoformat(arg_str))
 			except ValueError:
 				bad_opt_arg(command, option, arg_str, arg_type)
+
+	return True
 
 
 ###############################################################################
