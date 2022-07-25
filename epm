@@ -290,7 +290,7 @@ def cmd_unseen(ctx:context, width:int) -> str | None:
 		series_printed = False
 		def print_series():
 			if hilite:
-				print('\x1b[48;5;234m', end='')
+				print(f'\x1b[48;5;234m{_K}', end='')
 
 			print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width, tail=tail, tail_style=_f)
 			nonlocal series_printed
@@ -318,7 +318,7 @@ def cmd_unseen(ctx:context, width:int) -> str | None:
 			total_duration += unseen[0].get('runtime') or 0
 
 		if hilite:
-			print(_0, end='')
+			print(f'{_0}{_K}', end='')
 
 	# this is wildly incorrect!
 	#print(f'{_b}\x1b[48;2;20;50;20m%d series{_0}' % num_shown)
@@ -398,13 +398,12 @@ def cmd_list(ctx:context, width:int) -> str | None:
 			if len(unseen) == 0:
 				continue
 
-		# alternate styling odd/even rows
-		hilite = (num_shown % 2) == 0
-
 		num_shown += 1
 
+		# alternate styling odd/even rows
+		hilite = (num_shown % 2) == 0
 		if hilite:
-			print('\x1b[48;5;234m', end='')
+			print(f'\x1b[48;5;235m{_K}\r', end='')
 
 		print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width, gray=is_archived and not only_archived)
 
@@ -426,7 +425,7 @@ def cmd_list(ctx:context, width:int) -> str | None:
 			print_episodes(series, unseen, width=width)
 
 		if hilite:
-			print(_0, end='')
+			print(f'{_0}{_K}', end='')
 
 	if num_shown == 0:
 		if match:
@@ -1311,7 +1310,7 @@ def print_series_title(num:int|None, series:dict, width:int=0, imdb_id:str=None,
 		right = f'{_0fg}\x1b[38;5;246m%s' % strip_ansi(right)
 
 	print(left, end='')
-	# first move guaranteed to the right edge, then 'r_offset' left
+	# first move to the right edge, then 'r_offset' left
 	print(f'{_EOL}\x1b[{r_offset}D{right}', end='')
 
 	print(_K)
@@ -1326,7 +1325,7 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=Fals
 
 	episode_title_margin = 1
 
-	ep = {**episode}
+	ep = episode
 
 	season = ep['season']
 	episode = ep['episode']
@@ -1340,11 +1339,11 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=Fals
 	# left-pad to fill the max width
 	left_pad = ' '*(s_ep_max_w - s_ep_w)
 	if include_season:
-		season_ep = f'\x1b[0;33ms{_b}{season}\x1b[0;33me{_b}{episode:02}'
+		season_ep = f'\x1b[33ms{_b}{season}{_0fg}\x1b[33me{_b}{episode:02}'
 	else:
-		season_ep = f'\x1b[0;33me{_b}{episode:02}'
+		season_ep = f'\x1b[33me{_b}{episode:02}'
 
-	season_ep = f'{left_pad}{_c}{season_ep}{_0fg}'
+	season_ep = f'{left_pad}{_0fg}{season_ep}{_0fg}'
 	width -= s_ep_max_w + episode_title_margin
 
 	# print('width S.E:', width, len(left_pad), s_ep_w, s_ep_max_w)
@@ -1439,7 +1438,7 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=Fals
 	if len(ep['title']) > width:
 		width -= 1
 		ep['title'] = ep['title'][:width] + '…'
-		# TODO: to fancy color fade to black at the end ;)
+		# TODO: to fancy fade to black at the end ;)
 
 	# print('width 5:', width)
 
