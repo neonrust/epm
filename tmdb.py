@@ -70,10 +70,14 @@ def _query(url) -> dict[str, Any]|None:
 	# print('\x1b[2mquery: %s\x1b[m' % url)
 	try:
 		resp = requests.get(url, timeout=10)
+		# print('\x1b[2mquery: DONE %s\x1b[m' % url)
 	except (ReadTimeout, ConnectTimeout) as to:
+		# print('\x1b[41;97;1mquery: TIMEOUT %s\x1b[m' % url)
 		return None
+
 	if resp.status_code != HTTPStatus.OK:
 		return None
+
 	return resp.json()
 
 
@@ -420,7 +424,7 @@ def _set_values(data, new_values):
 				else:
 					data.pop(key, None)
 			except Exception as e:
-				print('_set_values:', key, str(e), file=sys.stderr)
+				print('_set_values: "%s":' % key, str(e), file=sys.stderr)
 
 
 def _parallel_query(func:Callable, arg_list:list, progress_callback:Callable|None=None):
@@ -455,18 +459,39 @@ def _self_test(args):
 
 	op = next()
 
-	if op.startswith('s'):
+	if op == 's':
+		print('SEARCH', file=sys.stderr)
 		info = search(next(), year=int(next()))
 
-	elif op.startswith('e'):
+	elif op == 'e':
+		print('EPISODE', file=sys.stderr)
 		info = episodes(next())
 
-	elif op.startswith('d'):
+	elif op == 'ed':
+		print('EPISODE + DETAILS', file=sys.stderr)
+		info = episodes(next(), with_details=True)
+
+	elif op == 'edp':
+		print('EPISODE + DETAILS   PARALLEL', file=sys.stderr)
+		info = episodes(args, with_details=True)
+
+	elif op == 'd':
+		print('DETAILS', file=sys.stderr)
 		info = details(next())
 
-	elif op.startswith('c'):
-		dt = datetime.now() - timedelta(days=1)
+	elif op == 'dp':
+		print('DETAILS   PARALLEL', file=sys.stderr)
+		info = details(args)
+
+	elif op == 'c':
+		print('CHANGES', file=sys.stderr)
+		dt = datetime.now() - timedelta(days=int(next()))
 		info = changes(next(), after=dt, ignore=('images',))
+
+	elif op == 'cp':
+		print('CHANGES   PARALLEL', file=sys.stderr)
+		dt = datetime.now() - timedelta(days=int(next()))
+		info = changes(args, after=dt, ignore=('images',))
 
 	else:
 		print('_self_test: <op> [args...]', file=sys.stderr)
@@ -474,6 +499,7 @@ def _self_test(args):
 
 	print(json.dumps(info, indent=2))
 	print('ENTRIES: %d' % len(info), file=sys.stderr)
+
 
 if __name__ == '__main__':
 	_self_test(sys.argv[1:])
