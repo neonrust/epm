@@ -66,6 +66,9 @@ def set_api_key(key) -> None:
 if _api_key:
 	set_api_key(_api_key)
 
+def ok() -> bool:
+	return bool(_api_key)
+
 def _query(url) -> dict[str, Any]|None:
 	# print('\x1b[2mquery: %s\x1b[m' % url)
 	try:
