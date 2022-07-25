@@ -86,6 +86,9 @@ def search(search, type='series', year=None):
 	if not _api_key:
 		raise NoAPIKey()
 
+	if _qurl is None:
+		return []
+
 	path = 'search'
 	if type == 'series':
 		path += '/tv'
@@ -252,6 +255,9 @@ def episodes(series_id, with_details=False):
 
 	if not _api_key:
 		raise NoAPIKey()
+
+	if _qurl is None:
+		return []
 
 	if series_id.startswith('tt'):
 		series_id = _get_tmdb_id(series_id)
