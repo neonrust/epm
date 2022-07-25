@@ -1244,7 +1244,6 @@ def print_series_title(num:int|None, series:dict, width:int=0, imdb_id:str=None,
 
 	# this function should never touch the BG color
 
-	org_width = width
 
 	# pad title string if width is specified
 	#if width > 0:
@@ -1308,7 +1307,7 @@ def print_series_title(num:int|None, series:dict, width:int=0, imdb_id:str=None,
 
 	print(left, end='')
 	# first move guaranteed to the right edge, then 'r_offset' left
-	print(f'\x1b[{org_width}C\x1b[{r_offset}D{right}', end='')
+	print(f'{_EOL}\x1b[{r_offset}D{right}', end='')
 
 	print(_K)
 
@@ -2102,6 +2101,7 @@ _i = '\x1b[3m'     # italic
 _fi = '\x1b[2;3m'  # faint & italic
 _K = '\x1b[K'      # clear end-of-line
 _E = '\x1b[41;97;1m' # ERROR (white on red)
+_EOL = '\x1b[666C' # move far enough to the right to hit the edge
 
 
 today_date = date.today()
