@@ -47,11 +47,11 @@ def main():
 class context:
 	def __init__(self, args:list[str]):
 		self.global_options = {
-			'verbose': config_int('verbose', 0),
+			'debug': config_int('debug', 0),
 		}
 		self.command:str|None = None
 		self.command_options:dict = {
-			'max-age': config_get('max-age'),
+			'max-age': config_int('max-age'),
 		}
 		self.command_arguments:list = []
 		self._parse_args(args)
