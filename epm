@@ -836,7 +836,7 @@ def cmd_archive(ctx:context, width:int, archiving:bool=True) -> str | None:
 		if partly_seen:
 			print(' (abandoned)', end='')
 		print(f':{_0}')
-		set_meta(series, 'archived', True)
+		set_meta(series, 'archived', now())
 
 	else:
 		print(f'{_b}Series restored', end='')
