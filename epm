@@ -431,13 +431,8 @@ def cmd_show(ctx:context, width:int) -> str|None:
 		else:
 			print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width, gray=is_archived and not only_archived)
 
-			if is_archived and not only_archived:
-				print(f'{_f}       Archived', end='')
-				seen, unseen = seen_unseen_episodes(series)
-				partly_seen = seen and unseen
-				if partly_seen:
-					print(' / Abandoned', end='')
-				print(f'{_0fg}')
+			#if only_archived:
+			print_archive_status(series)
 
 			# don't print "next" if we're printing all unseen episodes anyway
 			print_seen_status(series, gray=is_archived and not only_archived, next=not all_unseen, width=width)
@@ -1498,11 +1493,12 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=Fals
 
 def print_series_details(index:int, series:dict, width:int, gray:bool=False) -> None:
 	print_series_title(index, series, width, imdb_id=series.get('imdb_id'), gray=gray)
+	print_archive_status(series)
 
 	# TODO: word-wrap
-	print(f'  {_o}Overview:{_0fg}', series['overview'])
+	print(f'    {_o}Overview:{_0fg}', series['overview'])
 
-	# TODO: get top-5 writers and directors
+	# collect top-N writers and directors, and guest cast
 	from collections import Counter
 	episodes = series.get('episodes', [])
 	all_writers = []
@@ -1522,20 +1518,30 @@ def print_series_details(index:int, series:dict, width:int, gray:bool=False) -> 
 	guests = [name for name, _ in guests.most_common(10)]
 
 	if writers:
-		print(f'  {_o}Writers:{_0fg}', ', '.join(writers))
+		print(f'    {_o}Writers:{_0fg}  ', f'{_o},{_0fg} '.join(writers))
 	if directors:
-		print(f'  {_o}Directors:{_0fg}', ', '.join(directors))
+		print(f'    {_o}Directors:{_0fg}', f'{_o},{_0fg} '.join(directors))
 	if guests:
-		print(f'  {_o}Guests:   {_0fg}', ', '.join(guests))
+		print(f'    {_o}Guests:   {_0fg}', f'{_o},{_0fg} '.join(guests))
 
 	num_seasons = max(ep.get('season',0) for ep in episodes)
-	print(f'  {_o}Seasons:  {_0fg}', num_seasons)
-	print(f'  {_o}Episodes: {_0fg}', len(episodes))
+	print(f'    {_o}Seasons:  {_0fg}', num_seasons)
+	print(f'    {_o}Episodes: {_0fg}', len(episodes))
 	for season in range(1, num_seasons + 1):
-		print(f'   {_c}{"s%d" % season:>3}{_0fg}', '%3d' % len(list(filter(lambda ep: ep.get('season') == season, episodes))), 'episodes')
+		print(f'     {_c}{"s%d" % season:>3}{_0fg}', '%3d' % len(list(filter(lambda ep: ep.get('season') == season, episodes))), 'episodes')
 
 
 	print_seen_status(series, summary=True, next=True, last=True, width=width)
+
+
+def print_archive_status(series:dict) -> None:
+	if has_meta(series, 'archived'):
+		print(f'{_f}       Archived', end='')
+		seen, unseen = seen_unseen_episodes(series)
+		if seen and unseen:  # some has been seen, but not all
+			print(' / Abandoned', end='')
+		print('  ', get_meta(series, 'archived').split()[0], end='')
+		print(f'{_0fg}')
 
 
 def fmt_duration(seconds: int|float, roughly: bool=False):
