@@ -354,8 +354,7 @@ def _unseen_help() -> None:
 
 setattr(cmd_unseen, 'help', _unseen_help)
 
-
-def cmd_show(ctx:context, width:int) -> str | None:
+def cmd_show(ctx:context, width:int) -> str|None:
 	refresh_series(ctx.db, width)
 
 	# TODO: print header/columns
@@ -367,6 +366,7 @@ def cmd_show(ctx:context, width:int) -> str | None:
 	only_abandoned = 'show:abandoned' in ctx.command_options
 	all_unseen = 'show:all_episodes' in ctx.command_options
 	seen_episodes = 'show:seen_episodes' in ctx.command_options
+	show_details = 'show:details' in ctx.command_options
 
 	if [only_started, only_planned, only_abandoned].count(True) > 1:
 		return 'Specify only one of "started", "planned" and "abandoned"'
@@ -376,6 +376,12 @@ def cmd_show(ctx:context, width:int) -> str | None:
 
 	if not series_list:
 		return no_series(ctx.db)
+
+	if len(series_list) == 1:
+		index, series_id = series_list[0]
+		series = ctx.db[series_id]
+		return print_series_details(index, series, width)
+
 
 	print(f'{_f}Listing ', end='')
 	if only_started: print('started ', end='')
@@ -420,24 +426,27 @@ def cmd_show(ctx:context, width:int) -> str | None:
 		if hilite:
 			print(f'\x1b[48;5;235m{_K}\r', end='')
 
-		print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width, gray=is_archived and not only_archived)
+		if show_details:
+			print_series_details(index, series,width=width, gray=is_archived and not only_archived)
+		else:
+			print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width, gray=is_archived and not only_archived)
 
-		if is_archived and not only_archived:
-			print(f'{_f}       Archived', end='')
-			seen, unseen = seen_unseen_episodes(series)
-			partly_seen = seen and unseen
-			if partly_seen:
-				print(' / Abandoned', end='')
-			print(f'{_0fg}')
+			if is_archived and not only_archived:
+				print(f'{_f}       Archived', end='')
+				seen, unseen = seen_unseen_episodes(series)
+				partly_seen = seen and unseen
+				if partly_seen:
+					print(' / Abandoned', end='')
+				print(f'{_0fg}')
 
-		# don't print "next" if we're printing all unseen episodes anyway
-		print_seen_status(series, gray=is_archived and not only_archived, next=not all_unseen, width=width)
+			# don't print "next" if we're printing all unseen episodes anyway
+			print_seen_status(series, gray=is_archived and not only_archived, next=not all_unseen, width=width)
 
-		if seen_episodes:
-			print_episodes(series, seen, width=width)
+			if seen_episodes:
+				print_episodes(series, seen, width=width)
 
-		if all_unseen:
-			print_episodes(series, unseen, width=width)
+			if all_unseen:
+				print_episodes(series, unseen, width=width)
 
 		if hilite:
 			print(f'{_0}{_K}', end='')
@@ -451,11 +460,11 @@ def cmd_show(ctx:context, width:int) -> str | None:
 
 	return None
 
-def _list_help() -> None:
-	print_cmd_usage('list', '<options> [<title search>...]')
+def _show_help() -> None:
+	print_cmd_usage('show', '<options> [<title search>...]')
 	print(f'    {_o}[<title search>]     {_0} Show only matching series')
 
-setattr(cmd_show, 'help', _list_help)
+setattr(cmd_show, 'help', _show_help)
 
 
 year_ptn = re.compile(r'^(\d{4})|\((\d{4})\)$')  # 1968 or (1968)
@@ -567,13 +576,13 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str | None:
 	ctx.db[series_id] = hit
 
 
-	refresh_series(ctx.db, [series_id])
+	num_s, num_eps = refresh_series(ctx.db, width, subset=[series_id], max_age=-1)
 
 	# TODO: offer to mark seasons as seen?
 
 	save_series_db(ctx.db)
 
-	print(f'{_b}Series added:{_0}  {_f}(series renumbered){_0}')
+	print(f'{_b}Series added:{_0}   {_f}(series list has been renumbered){_0}')
 
 	# need to loop to figure out its list index
 	imdb_id = ctx.db[series_id].get('imdb_id')
@@ -612,7 +621,7 @@ def cmd_delete(ctx:context, width:int) -> str | None:
 	seen, unseen = seen_unseen_episodes(series)
 	partly_seen = seen and unseen
 
-	choices = ['Yes']
+	choices = ['yes']
 	if partly_seen:
 		print('You have seen %d episodes of %d.' % (len(seen), len(seen) + len(unseen)))
 		choices.append('abandon')
@@ -624,7 +633,7 @@ def cmd_delete(ctx:context, width:int) -> str | None:
 		question = 'Delete permanently or archive?'
 		full_answer_a = 'archive'
 
-	answer = input(f'\x1b[41;37;1m{question}{_0} [no/{"/".join(choices)}] ').lower()
+	answer = input(f'\x1b[41;37;1m{question}{_0} [No/{"/".join(choices)}] ').lower()
 	if answer not in ('y', 'yes', 'a', full_answer_a):
 		return 'Cancelled'
 
@@ -637,7 +646,7 @@ def cmd_delete(ctx:context, width:int) -> str | None:
 	del ctx.db[series_id]
 	save_series_db(ctx.db)
 
-	print(f'{_b}Series deleted:{_b} {_f}(series renumbered){_0}')
+	print(f'{_b}Series deleted:{_b}   {_f}(series list has been renumbered){_0}')
 	print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width)
 
 	return None
@@ -1060,6 +1069,7 @@ known_options = {
 		{ 'option': ('-e', '--episodes'), 'key': 'show:all_episodes', 'help': 'Show all unseen episodes (not only first)' },
 		{ 'option': ('-S', '--seen'),     'key': 'show:seen_episodes', 'help': 'Show seen episodes' },
 		{ 'option': ('--abandoned',),     'key': 'show:abandoned',    'help': 'Show only abandoned series' },
+		{ 'option': ('-I', '--details'),  'key': 'show:details',      'help': 'Show more details' },
 	],
 	'unseen': [
 		{ 'option': ('-f', '--future'),   'key': 'unseen:future',       'help': 'Show also future/unreleased episodes' },
@@ -1226,6 +1236,7 @@ def refresh_series(db:dict, width:int, subset:list|None=None, max_age:int|None=N
 		last_refresh = get_meta(series, updated_key)
 
 		if forced or (not last_refresh or age(last_refresh) > max_age):
+			last_refresh = last_refresh or now()
 			to_refresh[series_id] = last_refresh
 
 			if not earliest_refresh or last_refresh < earliest_refresh:
@@ -1233,9 +1244,6 @@ def refresh_series(db:dict, width:int, subset:list|None=None, max_age:int|None=N
 
 	if not to_refresh:
 		return 0, 0
-
-	# print('to_refresh after date:', len(to_refresh))
-	# print(json.dumps({k: (v, age(v)) for k, v in to_refresh.items()}, indent=2))
 
 	touched = 0
 	if not forced:
@@ -1258,9 +1266,6 @@ def refresh_series(db:dict, width:int, subset:list|None=None, max_age:int|None=N
 				set_meta(db[series_id], updated_key, now())
 				touched += 1
 
-	# print('to_refresh after check:', len(to_refresh))
-	# print(json.dumps({k: (v, age(v)) for k, v in to_refresh.items()}, indent=2))
-
 	if not to_refresh:
 		if touched:
 			return touched, 0  # only series affected, no episodes
@@ -1270,24 +1275,18 @@ def refresh_series(db:dict, width:int, subset:list|None=None, max_age:int|None=N
 
 	prog_bar = new_progress(len(to_refresh), width=width - 2)
 	def show_progress(num_done, *_):
-		print(f'\r{_K}%s{_EOL}' % prog_bar(num_done + 1, text='Refreshing...'), end='', flush=True)
+		print(f'\r{_0}{_K}%s{_EOL}' % prog_bar(num_done + 1, text='Refreshing...'), end='', flush=True)
 
 	to_refresh_keys = list(to_refresh.keys())
 	result = tmdb.episodes(to_refresh_keys, with_details=True, progress=show_progress)
 	# 'result' is a list of (details, episodes)-tuples
 
-	print(f'\r{_K}', end='', flush=True)
+	print(f'\r{_0}{_K}', end='', flush=True)
 
 	num_episodes = 0
-
 	now_time = now()
 
-	for series_id, (details, episodes) in zip(list(to_refresh.keys()), result):
-		for ep in episodes:
-			for field in list(ep.keys()):
-				if field not in useful_episode_fields:
-					episode.pop(field, 0)
-
+	for series_id, (details, episodes) in zip(to_refresh_keys, result):
 		series = details
 		series['episodes'] = episodes
 		series[meta_key] = db[series_id].get(meta_key, {})
@@ -1298,15 +1297,12 @@ def refresh_series(db:dict, width:int, subset:list|None=None, max_age:int|None=N
 
 		num_episodes += len(episodes)
 
-		#print(series_id, 'updated:', get_meta(db[series_id], updated_key))
 
 	if to_refresh:
 		save_series_db(db)
 
 	return len(to_refresh), num_episodes
 
-
-useful_episode_fields = [ 'season', 'episode', 'title', 'date', 'overview', 'runtime' ]
 
 def print_series_title(num:int|None, series:dict, width:int=0, imdb_id:str=None, gray:bool=False, tail: str|None=None, tail_style:str|None=None) -> None:
 
@@ -1498,6 +1494,48 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=Fals
 		s = f'{_0fg}\x1b[38;5;246m%s{_0fg}' % strip_ansi(s)
 
 	return s
+
+
+def print_series_details(index:int, series:dict, width:int, gray:bool=False) -> None:
+	print_series_title(index, series, width, imdb_id=series.get('imdb_id'), gray=gray)
+
+	# TODO: word-wrap
+	print(f'  {_o}Overview:{_0fg}', series['overview'])
+
+	# TODO: get top-5 writers and directors
+	from collections import Counter
+	episodes = series.get('episodes', [])
+	all_writers = []
+	all_directors = []
+	all_guests = []
+
+	for ep in episodes:
+		all_writers.extend(ep.get('writer', []))
+		all_directors.extend(ep.get('director', []))
+		all_guests.extend(ep.get('guest_cast', []))
+
+	writers = Counter(all_writers)
+	writers = [name for name, _ in writers.most_common(5)]
+	directors = Counter(all_directors)
+	directors = [name for name, _ in directors.most_common(5)]
+	guests = Counter(all_guests)
+	guests = [name for name, _ in guests.most_common(10)]
+
+	if writers:
+		print(f'  {_o}Writers:{_0fg}', ', '.join(writers))
+	if directors:
+		print(f'  {_o}Directors:{_0fg}', ', '.join(directors))
+	if guests:
+		print(f'  {_o}Guests:   {_0fg}', ', '.join(guests))
+
+	num_seasons = max(ep.get('season',0) for ep in episodes)
+	print(f'  {_o}Seasons:  {_0fg}', num_seasons)
+	print(f'  {_o}Episodes: {_0fg}', len(episodes))
+	for season in range(1, num_seasons + 1):
+		print(f'   {_c}{"s%d" % season:>3}{_0fg}', '%3d' % len(list(filter(lambda ep: ep.get('season') == season, episodes))), 'episodes')
+
+
+	print_seen_status(series, summary=True, next=True, last=True, width=width)
 
 
 def fmt_duration(seconds: int|float, roughly: bool=False):
