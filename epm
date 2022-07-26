@@ -2086,8 +2086,10 @@ def load_series_db() -> dict:
 	if config_bool('debug'):
 		print(f'{_f}[load: %.1fms]{_0fg}' % ((t1 - t0)*1000))
 
-	# migrate meta data to the current structure
-	meta_migrated = 0
+	# migrate DB to current structure
+	legacy_meta_migrated = 0
+	fixed_archived = 0
+
 	for series_id, series in db.items():
 		if meta_key not in series:
 			series[meta_key] = {
@@ -2095,11 +2097,28 @@ def load_series_db() -> dict:
 				for key in legacy_meta_keys
 				if key in series
 			}
-			meta_migrated += 1
+			legacy_meta_migrated += 1
 
-	if meta_migrated > 0:
-		print(f'{_f}Migrated meta-data for %d series{_0}' % meta_migrated)
+		if get_meta(series, 'archived') == True:
+			# fix all "archived" values to be dates (not booleans)
+			seen = get_meta(series, 'seen')
+			last_seen = '0000-00-00 00:00:00'
+			# use datetime from last marked episode
+			for dt in seen.values():
+				if dt > last_seen:
+					last_seen = dt
+
+			set_meta(series, 'archived', last_seen)
+			fixed_archived += 1
+
+
+	if legacy_meta_migrated or fixed_archived:
+		if legacy_meta_migrated:
+			print(f'{_f}Migrated legacy meta-data of %d series{_0}' % legacy_meta_migrated)
+		if fixed_archived:
+			print(f'{_f}Fixed bad "archived" value of %d series{_0}' % fixed_archived)
 		save_series_db(db)
+
 
 	return db
 
