@@ -197,6 +197,7 @@ def details(title_id:str|list[str], type='series'):
 		promises = [
 			executor.submit(_query, _qurl(detail_path)),
 			executor.submit(_query, _qurl('tv/%s/external_ids' % title_id)),
+			executor.submit(_query, _qurl('tv/%s/credits' % title_id)),
 		]
 
 	# details
@@ -253,12 +254,20 @@ def details(title_id:str|list[str], type='series'):
 	})
 	_del_keys(data, ['genres'])
 
-	# TODO: cast, crew?
-
 	if data.get('status') in ('ended', 'canceled') and data.get('end_date'):
 		data['year'] = data['year'] + [ int(data.get('end_date').split('-')[0]) ]
 	else:
 		del data['end_date']
+
+	credits = promises[2].result()
+	cast = credits.get('cast', [])
+	crew = credits.get('crew', [])
+
+	_set_values(data, {
+		'director': lambda ep: _job_people(crew, 'Director'),
+		'writer': lambda ep: _job_people(crew, 'Writer'),
+		'cast': lambda ep: list(map(lambda p: p.get('name') or '', cast))
+	})
 
 	__details[title_id] = data
 
@@ -304,9 +313,9 @@ def episodes(series_id:str|list[str], with_details=False, progress:Callable|None
 			'episode_number': 'episode',
 		})
 		_set_values(data, {
-			'director': lambda ep: _job_persons(ep.get('crew', []), 'Director'),
-			'writer': lambda ep: _job_persons(ep.get('crew', []), 'Writer'),
-			'cast': lambda ep: ', '.join(map(lambda p: p.get('name') or '', ep.get('guest_stars', [])))
+			'director': lambda ep: _job_people(ep.get('crew', []), 'Director'),
+			'writer': lambda ep: _job_people(ep.get('crew', []), 'Writer'),
+			'guest_cast': lambda ep: list(map(lambda p: p.get('name') or '', ep.get('guest_stars', [])))
 		})
 		_del_keys(data, ['id', 'still_path', 'crew', 'guest_stars'])
 
@@ -360,8 +369,8 @@ def changes(series_id:str|list[str], after:datetime, ignore:tuple=None, progress
 	return (data or {}).get('changes', [])
 
 
-def _job_persons(people, job):
-	return ', '.join(
+def _job_people(people, job):
+	return list(
 		person.get('name')
 		for person in people
 		if person.get('job') == job
@@ -427,7 +436,7 @@ def _set_values(data, new_values):
 		for key, setter in new_values.items():
 			try:
 				value = setter(data)
-				if value is not None:
+				if value not in (None, '', [], {}):
 					data[key] = value
 				else:
 					data.pop(key, None)
