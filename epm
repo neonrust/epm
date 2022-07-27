@@ -833,7 +833,7 @@ def cmd_mark(ctx:context, width:int, marking:bool=True) -> str | None:
 		print('Unmarked ', end='')
 
 	print(f'{_c}{len(episodes)}{_0}', end='')
-	print(f' episode{plural(episodes)} as seen:  {_0}{_f}{fmt_duration(episodes_runtime)}{_0}')
+	print(f' episode{_plural(episodes)} as seen:  {_0}{_f}{fmt_duration(episodes_runtime)}{_0}')
 
 	print_series_title(index, series, width, imdb_id=series.get('imdb_id'))
 
@@ -1662,21 +1662,21 @@ def fmt_duration(seconds: int|float, roughly: bool=False):
 	parts = []
 
 	if months > 0:
-		parts.append(templ % (months, unit['m'], plural(months if roughly else 1)))
+		parts.append(templ % (months, unit['m'], _plural(months if roughly else 1)))
 	elif weeks > 0:
-		parts.append(templ % (weeks, unit['w'], plural(weeks if roughly else 1)))
+		parts.append(templ % (weeks, unit['w'], _plural(weeks if roughly else 1)))
 
 	if not roughly or (not months and not weeks):
 		if days > 0:
-			parts.append(templ % (days, unit['d'], plural(days if roughly else 1)))
+			parts.append(templ % (days, unit['d'], _plural(days if roughly else 1)))
 
 	if not roughly:
 		if hours > 0:
-			parts.append(templ % (hours, unit['h'], plural(hours if roughly else 1)))
+			parts.append(templ % (hours, unit['h'], _plural(hours if roughly else 1)))
 		if minutes or (hours > 0 or seconds > 0):
-			parts.append(templ % (minutes, unit['min'], plural(minutes if roughly else 1)))
+			parts.append(templ % (minutes, unit['min'], _plural(minutes if roughly else 1)))
 		if seconds:
-			parts.append(templ % (seconds, unit['s'], plural(seconds if roughly else 1)))
+			parts.append(templ % (seconds, unit['s'], _plural(seconds if roughly else 1)))
 
 	return ' '.join(parts)
 
@@ -2332,7 +2332,7 @@ def save_series_db(config:dict) -> None:
 		os.remove(tmp_name)
 
 
-def plural(n:int|list|tuple|dict) -> str:
+def _plural(n: int | list | tuple | dict) -> str:
 	if isinstance(n, (list, tuple, dict)):
 		N = len(n)
 	else:
