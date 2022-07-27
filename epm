@@ -2296,7 +2296,7 @@ else:
 		os.rename(filename, destination)
 		return True
 
-def save_series_db(config:dict) -> None:
+def save_series_db(db:dict) -> None:
 	db_file = str(config_get('paths/series-db'))
 
 	if not pexists(db_file):
@@ -2310,10 +2310,10 @@ def save_series_db(config:dict) -> None:
 	try:
 		if orjson is not None:
 			with open(tmp_name, 'wb') as fpo:
-				fpo.write(orjson.dumps(config, option=orjson.OPT_INDENT_2 | orjson.OPT_SORT_KEYS))
+				fpo.write(orjson.dumps(db, option=orjson.OPT_INDENT_2 | orjson.OPT_SORT_KEYS))
 		else:
 			with open(tmp_name, 'w') as fps:
-				json.dump(config, fps, indent=2, sort_keys=True)
+				json.dump(db, fps, indent=2, sort_keys=True)
 
 		# rotate backups
 		for idx in range(num_config_backups - 1, 0, -1):
