@@ -1334,8 +1334,11 @@ def refresh_series(db:dict, width:int, subset:list|None=None, max_age:int|None=N
 		print(f'\r{_f}Checking for updates (%d series)...{_0}{_K}' % len(to_refresh), end='', flush=True)
 
 		prog_bar = new_progress(len(to_refresh), width=width - 2)
-		def show_progress(num_done, *_):
-			print(f'\r{_K}%s{_EOL}' % prog_bar(num_done, text='Checking updates...'), end='', flush=True)
+		completed = 0
+		def show_progress(*_):
+			nonlocal completed
+			completed += 1
+			print(f'\r{_K}%s{_EOL}' % prog_bar(completed, text='Checking updates...'), end='', flush=True)
 
 		to_refresh_keys = list(to_refresh.keys())
 		changes = tmdb.changes(to_refresh_keys, datetime.fromisoformat(earliest_refresh), ignore=ignore_changes, progress=show_progress)
@@ -1358,8 +1361,11 @@ def refresh_series(db:dict, width:int, subset:list|None=None, max_age:int|None=N
 	print(f'{_f}Refreshing %d series...{_0}' % len(to_refresh), end='', flush=True)
 
 	prog_bar = new_progress(len(to_refresh), width=width - 2)
-	def show_progress(num_done, *_):
-		print(f'\r{_0}{_K}%s{_EOL}' % prog_bar(num_done + 1, text='Refreshing...'), end='', flush=True)
+	completed = 0
+	def show_progress(*_):
+		nonlocal completed
+		completed += 1
+		print(f'\r{_0}{_K}%s{_EOL}' % prog_bar(completed, text='Refreshing...'), end='', flush=True)
 
 	to_refresh_keys = list(to_refresh.keys())
 	result = tmdb.episodes(to_refresh_keys, with_details=True, progress=show_progress)
