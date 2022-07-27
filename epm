@@ -1021,22 +1021,6 @@ def set_meta(series:dict, key: str, value) -> None:
 def del_meta(series:dict, key: str) -> None:
 	series[meta_key].pop(key, None)
 
-# known commands with aliases
-known_commands = {
-	'search':  { 'alias': ('s', ),      'handler': cmd_search,   'help': 'Search for a series.' },
- 	'add':     { 'alias': ('a', ),      'handler': cmd_add,      'help': 'Search for a series and (optionally) add it.' },
- 	'delete':  { 'alias': (),           'handler': cmd_delete,   'help': 'Completely remove a series - permanently!' },
- 	'show':    { 'alias': ('list', 'ls'), 'handler': cmd_show,   'help': 'Show/list series'},
-	'calendar': { 'alias': (),          'handler': cmd_calendar, 'help': 'Show calendar of episode releases' },
-	'unseen':  { 'alias': ('u', 'us'),  'handler': cmd_unseen,   'help': 'Show unseen episodes of series' },
-	'mark':    { 'alias': ('m', ),      'handler': cmd_mark,     'help': 'Mark a series, season or specific episode as seen.' },
-	'unmark':  { 'alias': ('M', 'um'),  'handler': cmd_unmark,   'help': 'Unmark a series/season/episode - reverse of mark command.' },
-	'archive': { 'alias': ('A', ),      'handler': cmd_archive,  'help': 'Archving series - hides from normal list command.' },
-	'restore': { 'alias': ('R', ),      'handler': cmd_restore,  'help': 'Restore series - reverse of archive command.' },
-	'refresh': { 'alias': ('r', ),      'handler': cmd_refresh,  'help': 'Refresh episode data of all non-archived series.' },
-	'config':  { 'alias': (),           'handler': cmd_config,   'help': 'Configure.' },
-	'help':    { 'alias': (),           'handler': cmd_help,     'help': 'Shows this help page.' },
-}
 
 PRG = basename(sys.argv[0])
 
@@ -1044,21 +1028,21 @@ default_max_refresh_age = 2  # days
 default_max_hits = 10
 
 default_configuration = {
-	'paths': {
-		'series-db': None,  # defaulted in load_config()
-	},
-	'commands': {
-		'default': 'unseen',
-	},
-	'max-age': default_max_refresh_age,
-	'lookup': {
-		'api-key': None,
-		'max-hits': default_max_hits,
-	},
-	'debug': 0,
+		'paths': {
+				'series-db': None,  # defaulted in load_config()
+		},
+		'commands': {
+				'default': 'unseen',
+		},
+		'max-age': default_max_refresh_age,
+		'lookup': {
+				'api-key': None,
+				'max-hits': default_max_hits,
+		},
+		'debug': 0,
 }
 
-
+# type alias for type hints (should be recursive, but mypy doesn't support it)
 ConfigValue = str|int|float|dict|list
 
 def config_get(path:str, default_value:ConfigValue|None=None, convert=None) -> ConfigValue|None:
@@ -1119,6 +1103,24 @@ def config_set(path:str, value:Any) -> None:
 
 		scope = new_scope
 		current.append(key)
+
+
+# known commands with aliases
+known_commands = {
+	'search':  { 'alias': ('s', ),      'handler': cmd_search,   'help': 'Search for a series.' },
+ 	'add':     { 'alias': ('a', ),      'handler': cmd_add,      'help': 'Search for a series and (optionally) add it.' },
+ 	'delete':  { 'alias': (),           'handler': cmd_delete,   'help': 'Completely remove a series - permanently!' },
+ 	'show':    { 'alias': ('list', 'ls'), 'handler': cmd_show,   'help': 'Show/list series'},
+	'calendar': { 'alias': (),          'handler': cmd_calendar, 'help': 'Show episode releases by date' },
+	'unseen':  { 'alias': ('u', 'us'),  'handler': cmd_unseen,   'help': 'Show unseen episodes of series' },
+	'mark':    { 'alias': ('m', ),      'handler': cmd_mark,     'help': 'Mark a series, season or specific episode as seen.' },
+	'unmark':  { 'alias': ('M', 'um'),  'handler': cmd_unmark,   'help': 'Unmark a series/season/episode - reverse of mark command.' },
+	'archive': { 'alias': ('A', ),      'handler': cmd_archive,  'help': 'Archving series - hides from normal list command.' },
+	'restore': { 'alias': ('R', ),      'handler': cmd_restore,  'help': 'Restore series - reverse of archive command.' },
+	'refresh': { 'alias': ('r', ),      'handler': cmd_refresh,  'help': 'Refresh episode data of all non-archived series.' },
+	'config':  { 'alias': (),           'handler': cmd_config,   'help': 'Configure.' },
+	'help':    { 'alias': (),           'handler': cmd_help,     'help': 'Shows this help page.' },
+}
 
 
 def _set_debug(value):
