@@ -8,6 +8,7 @@ from datetime import datetime, date, timedelta
 from tempfile import mkstemp
 from os.path import basename, dirname, expandvars, expanduser, exists as pexists, getsize as psize
 from calendar import Calendar, day_name, month_name, MONDAY, SUNDAY
+import textwrap
 
 from typing import Callable, Any
 from types import ModuleType as Module
@@ -430,14 +431,14 @@ def cmd_show(ctx:context, width:int) -> str|None:
 			#if only_archived:
 			print_archive_status(series)
 
-			# don't print "next" if we're printing all unseen episodes anyway
-			print_seen_status(series, gray=is_archived and not only_archived, next=not all_unseen, width=width)
+		# don't print "next" if we're printing all unseen episodes anyway
+		print_seen_status(series, gray=is_archived and not only_archived, next=not all_unseen, width=width)
 
-			if seen_episodes:
-				print_episodes(series, seen, width=width)
+		if seen_episodes:
+			print_episodes(series, seen, width=width)
 
-			if all_unseen:
-				print_episodes(series, unseen, width=width)
+		if all_unseen:
+			print_episodes(series, unseen, width=width)
 
 		if hilite:
 			print(f'{_0}{_K}', end='')
@@ -1589,8 +1590,12 @@ def print_series_details(index:int, series:dict, width:int, gray:bool=False) -> 
 	print_series_title(index, series, width, imdb_id=series.get('imdb_id'), gray=gray)
 	print_archive_status(series)
 
-	# TODO: word-wrap
-	print(f'    {_o}Overview:{_0fg}', series['overview'])
+	overview = textwrap.wrap(series['overview'], width=width, initial_indent=' '*15)
+	print(f'    {_o}Overview:{_0fg} ', end='')
+	for idx, line in enumerate(overview):
+		if idx == 0:
+			line = line[15:]
+		print(line)
 
 	# collect top-N writers and directors, and guest cast
 	from collections import Counter
@@ -1619,13 +1624,10 @@ def print_series_details(index:int, series:dict, width:int, gray:bool=False) -> 
 		print(f'    {_o}Guests:   {_0fg}', f'{_o},{_0fg} '.join(guests))
 
 	num_seasons = max(ep.get('season',0) for ep in episodes)
-	print(f'    {_o}Seasons:  {_0fg}', num_seasons)
-	print(f'    {_o}Episodes: {_0fg}', len(episodes))
+	print(f'    {_o}Seasons: {_0fg}', num_seasons, end='')
+	print(f'  {_f}/{_0fg}  {_o}Episodes: {_0fg}', len(episodes))
 	for season in range(1, num_seasons + 1):
 		print(f'     {_c}{"s%d" % season:>3}{_0fg}', '%3d' % len(list(filter(lambda ep: ep.get('season') == season, episodes))), 'episodes')
-
-
-	print_seen_status(series, summary=True, next=True, last=True, width=width)
 
 
 def print_archive_status(series:dict) -> None:
