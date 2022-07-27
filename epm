@@ -7,6 +7,7 @@ import time
 from datetime import datetime, date, timedelta
 from tempfile import mkstemp
 from os.path import basename, dirname, expandvars, expanduser, exists as pexists, getsize as psize
+from calendar import Calendar, day_name, month_name, MONDAY, SUNDAY
 
 from typing import Callable, Any
 from types import ModuleType as Module
@@ -460,6 +461,93 @@ def _show_help() -> None:
 	print(f'    {_o}[<title search>]     {_0} Show only matching series')
 
 setattr(cmd_show, 'help', _show_help)
+
+
+def cmd_calendar(ctx:context, width:int) -> str|None:
+
+	num_weeks = int(ctx.command_arguments[0]) if ctx.command_arguments else 1
+
+	cal = Calendar(MONDAY)
+	today = date.today()
+	start_date = today
+
+	episodes_by_date = {}
+
+	# collect episodes over num_weeks*7
+	#   using margin of one extra week, b/c it's simpler
+	t0 = time.time()
+	end_date = today + timedelta(days=(num_weeks+1)*7)
+	for series_id, series in ctx.db.items():
+		if has_meta(series, 'archived'):
+			continue
+
+		for ep in series.get('episodes', []):
+			ep_date_str = ep.get('date')
+			if not ep_date_str:
+				continue
+
+			ep_date = date.fromisoformat(ep_date_str)
+			if ep_date >= today and ep_date < end_date:
+				if ep_date not in episodes_by_date:
+					episodes_by_date[ep_date] = []
+				episodes_by_date[ep_date].append( (series, ep) )
+
+	#print('%.2fms  episodes: %d' % ((time.time() - t0)*1000, len(episodes_by_date)))
+
+	wday_idx = -1
+	days_todo = num_weeks*7
+	def ordinal_suffix(n):
+		digit = n % 10
+		return {1: 'st', 2: 'nd', 3: 'rd'}.get(digit, 'th')
+
+	def print_month_divider(d):
+		print(f'{_f}┏%s┥{_0fg} {_b}%s %s{_0fg}  {_f}week %d{_0fg}' % ('━'*12, month_name[d.month], d.year, d.isocalendar()[1]))
+
+	def print_week_divider(d):
+		print(f'{_f}┠%s week %d{_0fg}' % ('─'*8, d.isocalendar()[1]))
+
+	print_month_divider(start_date)
+	prev_month = start_date.month
+	first = True  # to avoid printing week label the first loop
+
+	# until we've printed enough days, and always end at a full week
+	while days_todo > 0 or wday_idx != SUNDAY:
+		# print('print starting from:', start_date, days_todo)
+		month_days = cal.itermonthdates(start_date.year, start_date.month)
+
+		for mdate in month_days:
+			wday_idx = (wday_idx + 1) % 7
+			if mdate < today:
+				continue
+
+			days_todo -= 1
+
+			if mdate.month != prev_month:
+				print_month_divider(mdate)
+				prev_month = mdate.month
+			elif wday_idx == MONDAY and not first:
+				print_week_divider(mdate)
+			first = False
+
+			wday = day_name[wday_idx]
+			print(f'{_f}┃{_0fg} {_i}{mdate.day:2}{_f}{ordinal_suffix(mdate.day)}{_0fg} {_o}{_i}{_f}{wday}{_0fg}')
+
+			episodes = episodes_by_date.get(mdate, [])
+			for series, ep in episodes:
+				ep_title = format_episode_title(series['title'], ep, include_season=True, include_time=False, width=width - 9)
+				print(f'{_f}┃{_0fg}      {_c}•{_0fg} {ep_title}')
+
+			if days_todo <= 0 and wday_idx == SUNDAY:
+				break
+
+		start_date = (today + timedelta(days=31)).replace(day=1)
+		month_days = cal.itermonthdates(start_date.year, start_date.month)
+
+def _calendar_help():
+	print_cmd_usage('calendar', '[<full weeks>]')
+
+setattr(cmd_calendar, 'help', _calendar_help)
+
 
 
 year_ptn = re.compile(r'^(\d{4})|\((\d{4})\)$')  # 1968 or (1968)
@@ -935,18 +1023,19 @@ def del_meta(series:dict, key: str) -> None:
 
 # known commands with aliases
 known_commands = {
-	'search':  { 'alias': ('s', ),      'handler': cmd_search,  'help': 'Search for a series.' },
- 	'add':     { 'alias': ('a', ),      'handler': cmd_add,     'help': 'Search for a series and (optionally) add it.' },
- 	'delete':  { 'alias': (),           'handler': cmd_delete,  'help': 'Completely remove a series - permanently!' },
- 	'show':    { 'alias': ('list', 'ls'), 'handler': cmd_show,  'help': 'Show/list series'},
-	'unseen':  { 'alias': ('u', 'us'),  'handler': cmd_unseen,  'help': 'Show unseen episodes of series' },
-	'mark':    { 'alias': ('m', ),      'handler': cmd_mark,    'help': 'Mark a series, season or specific episode as seen.' },
-	'unmark':  { 'alias': ('M', 'um'),  'handler': cmd_unmark,  'help': 'Unmark a series/season/episode - reverse of mark command.' },
-	'archive': { 'alias': ('A', ),      'handler': cmd_archive, 'help': 'Archving series - hides from normal list command.' },
-	'restore': { 'alias': ('R', ),      'handler': cmd_restore, 'help': 'Restore series - reverse of archive command.' },
-	'refresh': { 'alias': ('r', ),      'handler': cmd_refresh, 'help': 'Refresh episode data of all non-archived series.' },
-	'config':  { 'alias': (),           'handler': cmd_config,  'help': 'Configure.' },
-	'help':    { 'alias': (),           'handler': cmd_help,    'help': 'Shows this help page.' },
+	'search':  { 'alias': ('s', ),      'handler': cmd_search,   'help': 'Search for a series.' },
+ 	'add':     { 'alias': ('a', ),      'handler': cmd_add,      'help': 'Search for a series and (optionally) add it.' },
+ 	'delete':  { 'alias': (),           'handler': cmd_delete,   'help': 'Completely remove a series - permanently!' },
+ 	'show':    { 'alias': ('list', 'ls'), 'handler': cmd_show,   'help': 'Show/list series'},
+	'calendar': { 'alias': (),          'handler': cmd_calendar, 'help': 'Show calendar of episode releases' },
+	'unseen':  { 'alias': ('u', 'us'),  'handler': cmd_unseen,   'help': 'Show unseen episodes of series' },
+	'mark':    { 'alias': ('m', ),      'handler': cmd_mark,     'help': 'Mark a series, season or specific episode as seen.' },
+	'unmark':  { 'alias': ('M', 'um'),  'handler': cmd_unmark,   'help': 'Unmark a series/season/episode - reverse of mark command.' },
+	'archive': { 'alias': ('A', ),      'handler': cmd_archive,  'help': 'Archving series - hides from normal list command.' },
+	'restore': { 'alias': ('R', ),      'handler': cmd_restore,  'help': 'Restore series - reverse of archive command.' },
+	'refresh': { 'alias': ('r', ),      'handler': cmd_refresh,  'help': 'Refresh episode data of all non-archived series.' },
+	'config':  { 'alias': (),           'handler': cmd_config,   'help': 'Configure.' },
+	'help':    { 'alias': (),           'handler': cmd_help,     'help': 'Shows this help page.' },
 }
 
 PRG = basename(sys.argv[0])
@@ -1358,7 +1447,7 @@ def print_series_title(num:int|None, series:dict, width:int=0, imdb_id:str=None,
 
 
 
-def format_episode_title(prefix:str|None, episode:dict, include_season:bool=False, width:int=0, gray:bool=False, seen:bool|None=None, today:bool=False) -> str:
+def format_episode_title(prefix:str|None, episode:dict, include_season:bool=False, include_time:bool=True, width:int=0, gray:bool=False, seen:bool|None=None, today:bool=False) -> str:
 
 	# this function should never touch the BG color
 
@@ -1443,7 +1532,8 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=Fals
 
 	# print('width 2:', width)
 
-	if not ep_time:
+	if not ep_time or not include_time:
+		ep_time = ''
 		ep_time_w = 0
 
 	if ep_time:
