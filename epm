@@ -464,8 +464,9 @@ setattr(cmd_show, 'help', _show_help)
 
 
 def cmd_calendar(ctx:context, width:int) -> str|None:
+	refresh_series(ctx.db, width)
 
-	num_weeks = int(ctx.command_arguments[0]) if ctx.command_arguments else 1
+	num_weeks = int(ctx.command_arguments[0]) if ctx.command_arguments else config_int('commands/calendar/num_weeks', 1)
 
 	cal = Calendar(MONDAY)
 	today = date.today()
