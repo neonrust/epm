@@ -2026,8 +2026,10 @@ def print_usage(exit_code:int=0) -> None:
 		print(f'  {_f}Using {_b}orjson{_0}{_f} for faster load/save.')
 	else:
 		print(f'  {_f}Install \'orjson\' for faster load/save{_0}')
+	if compressor:
+		print(f'  {_f}Using {_b}{compressor["binary"]}{_0}{_f} to compress database backups.')
 	if not tmdb.ok():
-		print(f'   {_c}Need to set TMDb API key{_0}')
+		print(f'   {_c}NOTE: Need to set TMDb API key (TMDB_API_KEY environment){_0}')
 	sys.exit(exit_code)
 
 
@@ -2219,29 +2221,60 @@ def load_series_db() -> dict:
 	return db
 
 
-compressor:str|None = 'zstd'
-compression_extension = '.zst'
-compression_level = 14
+compressor:dict|None = None
+compressors = [
+	{
+		'binary': 'zstd',
+		'args': ['-10', '-q', '-T0'],
+		'extension': '.zst',
+	},
+	{
+		'binary': 'lz4',
+		'args': ['-9', '-q'],
+	},
+	{
+		'binary': 'gzip',
+		'args': ['-8', '-q'],
+		'extension': '.gz',
+	},
+	{
+		'binary': 'xz',
+		'args': ['-2', '-q', '-T', '0'],
+	}
+]
 
 import shutil
-if isinstance(compressor, str) and not shutil.which(compressor):
-	compressor = None
-	compression_extension = ''
+for method in compressors:
+	if shutil.which(method['binary']):
+		compressor = method
+		break
 
 # TODO: 'mk_backup' should return a waitable promise (so we can do it in parallel with the serialization)
 if compressor:
 	from subprocess import Popen
 
-	def mk_backup(filename:str, destination:str) -> bool:
-		if not isinstance(compressor, str): # redundant, basically to shut mypy up
+	def mk_backup(source:str, destination:str) -> bool:
+		if not isinstance(compressor, dict): # redundant, basically to shut mypy up
 			return False
 
-		tmp_name = mkstemp( dir=dirname(filename))[1]
-		os.rename(filename, tmp_name)
+		destination += compressor.get('extension', compressor['binary'])
+
+		tmp_name = mkstemp(dir=dirname(source))[1]
+		os.rename(source, tmp_name)
 		try:
-			exit_code = Popen([compressor, '-%d' % compression_level, '-q', '-f', tmp_name, '--rm', '-o', destination]).wait()
+			command_line = [compressor['binary']] + compressor['args']
+			# replace "OUTPUT" with destination
+			infp = open(tmp_name, 'rb')
+			outfp = open(destination, 'wb')
+			cmd = Popen(command_line, stdin=infp, stdout=outfp, universal_newlines=False)
+			exit_code = cmd.wait()
+			# copy file times from source to destination
+			file_info = os.stat(tmp_name)
+			os.utime(destination, (file_info.st_atime, file_info.st_mtime))
 			if exit_code != 0:
 				os.rename(tmp_name, destination)
+			else:
+				os.remove(tmp_name)
 
 		except Exception as e:
 			print(f'{_E}ERROR{_0} Failed compressing database backup: %s' % str(e))
@@ -2262,7 +2295,7 @@ def save_series_db(config:dict) -> None:
 		os.makedirs(dirname(db_file), exist_ok=True)
 
 	def backup_name(idx) -> str:
-		return '%s.%d%s' % (db_file, idx, compression_extension)
+		return '%s.%d' % (db_file, idx)
 
 	# write to a temp file and then rename it afterwards
 	tmp_name = mkstemp(dir=dirname(db_file))[1]
@@ -2282,6 +2315,8 @@ def save_series_db(config:dict) -> None:
 		# current file becomes first backup (<name>.1)
 		# TODO: spawn background process to compress to make it appear faster?
 		#   might run into (more) race-conditions of course
+
+		# backup existing(old) db file to 'series.1'
 		mk_backup(db_file, backup_name(1))
 
 		os.rename(tmp_name, db_file)
