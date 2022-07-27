@@ -378,11 +378,6 @@ def cmd_show(ctx:context, width:int) -> str|None:
 	if not series_list:
 		return no_series(ctx.db)
 
-	if len(series_list) == 1:
-		index, series_id = series_list[0]
-		series = ctx.db[series_id]
-		return print_series_details(index, series, width)
-
 
 	print(f'{_f}Listing ', end='')
 	if only_started: print('started ', end='')
