@@ -472,12 +472,12 @@ def cmd_calendar(ctx:context, width:int) -> str|None:
 
 	# collect episodes over num_weeks*7
 	#   using margin of one extra week, b/c it's simpler
-	t0 = time.time()
 	end_date = today + timedelta(days=(num_weeks+1)*7)
 	for series_id, series in ctx.db.items():
 		if has_meta(series, 'archived'):
 			continue
 
+		# faster to loop backwards?
 		for ep in series.get('episodes', []):
 			ep_date_str = ep.get('date')
 			if not ep_date_str:
@@ -488,8 +488,6 @@ def cmd_calendar(ctx:context, width:int) -> str|None:
 				if ep_date not in episodes_by_date:
 					episodes_by_date[ep_date] = []
 				episodes_by_date[ep_date].append( (series, ep) )
-
-	#print('%.2fms  episodes: %d' % ((time.time() - t0)*1000, len(episodes_by_date)))
 
 	wday_idx = -1
 	days_todo = num_weeks*7
@@ -1030,6 +1028,9 @@ default_configuration = {
 		},
 		'commands': {
 				'default': 'unseen',
+				'calendar': {
+					'num_weeks': 1,
+				},
 		},
 		'max-age': default_max_refresh_age,
 		'lookup': {
