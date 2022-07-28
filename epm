@@ -329,7 +329,7 @@ def cmd_unseen(ctx:context, width:int) -> str | None:
 				continue
 
 			print_series()
-			print_seen_status(series, next=True, summary=False, last=False, width=width)
+			print_seen_status(series, summary=False, last=False, next=True, width=width)
 
 			num_shown += 1
 			total_episodes += 1
