@@ -29,7 +29,7 @@ VERSION = '0.8'
 VERSION_DATE = '2022-07-27'
 
 
-def main():
+def start():
 	load_config()
 	# print(orjson.dumps(app_config, option=orjson.OPT_INDENT_2 | orjson.OPT_SORT_KEYS).decode('utf-8'))
 
@@ -2377,11 +2377,11 @@ ignore_changes = (
 app_config_file = pexpand(f'$HOME/.config/{PRG}/config')
 num_config_backups = 10
 
-import tmdb
+from episode_manager import tmdb
 
-if __name__ == '__main__':
+def main():
 	try:
-		main()
+		start()
 	except tmdb.NoAPIKey:
 		print('No TMDb API key.', file=sys.stderr)
 		print(tmdb.api_key_help)
@@ -2389,3 +2389,6 @@ if __name__ == '__main__':
 	except KeyboardInterrupt:
 		print('** User beak', file=sys.stderr)
 		sys.exit(1)
+
+if __name__ == '__main__':
+	main()
