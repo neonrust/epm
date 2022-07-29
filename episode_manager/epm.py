@@ -1588,7 +1588,13 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=Fals
 
 
 def print_series_details(index:int, series:dict, width:int, gray:bool=False) -> None:
-	print_series_title(index, series, width, imdb_id=series.get('imdb_id'), gray=gray)
+
+	tail = None
+	if series.get('imdb_id'):
+		tail = f'    {_o}{_u}%s{_0fg}' % (imdb_url_tmpl % series["imdb_id"])
+	print_series_title(index, series, width, gray=gray, tail=tail)
+
+
 	print_archive_status(series)
 
 	overview = textwrap.wrap(series['overview'], width=width, initial_indent=' '*15)
@@ -2345,18 +2351,20 @@ def pexpand(p):
 
 
 _0 = '\x1b[m'      # normal (reset all)
-_0fg = '\x1b[22;23;39m' # normal FG style
+_0fg = '\x1b[22;23;24;39m' # normal FG style
 _b = '\x1b[1m'     # bold
-_g = '\x1b[32;1m'  # good/green
-_c = '\x1b[33;1m'  # command
-_o = '\x1b[34;1m'  # option
 _f = '\x1b[2m'     # faint
 _i = '\x1b[3m'     # italic
 _fi = '\x1b[2;3m'  # faint & italic
+_u = '\x1b[4m'     # underline
+_g = '\x1b[32;1m'  # good/green
+_c = '\x1b[33;1m'  # command
+_o = '\x1b[34;1m'  # option
 _K = '\x1b[K'      # clear end-of-line
 _E = '\x1b[41;97;1m' # ERROR (white on red)
 _EOL = '\x1b[666C' # move far enough to the right to hit the edge
 
+imdb_url_tmpl = 'https://www.imdb.com/title/%s'
 
 today_date = date.today()
 
