@@ -1639,10 +1639,12 @@ def print_series_details(index:int, series:dict, width:int, gray:bool=False) -> 
 	guests = Counter(all_guests)
 	guests = [name for name, _ in guests.most_common(10)]
 
-	if writers:
-		print(f'    {_o}Writers:{_0fg}  ', f'{_o},{_0fg} '.join(writers))
 	if directors:
 		print(f'    {_o}Directors:{_0fg}', f'{_o},{_0fg} '.join(directors))
+	if writers:
+		print(f'    {_o}Writers:{_0fg}  ', f'{_o},{_0fg} '.join(writers))
+	if series.get('cast'):
+		print(f'    {_o}Cast:{_0fg}     ', f'{_o},{_0fg} '.join(series['cast']))
 	if guests:
 		print(f'    {_o}Guests:   {_0fg}', f'{_o},{_0fg} '.join(guests))
 
