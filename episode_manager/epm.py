@@ -25,8 +25,8 @@ except ImportError:
 # always import std json (useful for debugging sometimes)
 import json
 
-VERSION = '0.8'
-VERSION_DATE = '2022-07-27'
+VERSION = '0.8.1'
+VERSION_DATE = '2022-07-29'
 
 
 def start():
@@ -610,35 +610,22 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str | None:
 		hit_details = tmdb.details(hit['id'] for hit in hits)
 		print(f'\r{_K}', end='')
 
-		for idx, hit in enumerate(hits):
-			hit.update(hit_details[idx])
-			imdb_id = hit.get('imdb_id')
-			print_series_title(idx + 1, hit, imdb_id=imdb_id, width=width)
+		# print a menu and a prompt to select from it
 
-		if not add:
-			return None
+		def print_menu_entry(idx, item):
+			item.update(hit_details[idx])
+			imdb_id = item.get('imdb_id')
+			print_series_title(idx + 1, item, imdb_id=imdb_id, width=width)
 
-		last_num = len(hits)
-		while True:
-			try:
-				answer = input(f'\x1b[44;97;1mSelect series (1 - %d) to add -->{_0} ' % last_num).lstrip('#')
-			except (KeyboardInterrupt, EOFError):
-				print()
-				answer = None
+		prompt = f'\x1b[44;97;1mSelect series (1 - %d) to add -->{_0} ' % len(hits)
 
-			if not answer:
-				return 'Nothing selected, cancelled'
+		selected = menu_select(hits, prompt, print_menu_entry, force_selection=-1 if not add else None)
+		if selected == -1:
+			return
 
-			try:
-				selected = int(answer)
-				if selected <= 0 or selected > last_num:
-					raise ValueError()
-			except ValueError:
-				print(f'{_E}*** Bad selection, try again ***{_0}', file=sys.stderr)
-				continue
+		if selected is None:
+			return 'Nothing selected, cancelled'
 
-			selected -= 1
-			break
 	else:
 		selected = 0
 
@@ -668,6 +655,35 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str | None:
 	print_series_title(index, hit, imdb_id=imdb_id, width=width)
 
 	return None
+
+
+def menu_select(items:list[dict], prompt:str, item_print:Callable, force_selection:int|None=None) -> int|None:
+	for idx, item in enumerate(items):
+		item_print(idx, item)
+
+	if force_selection is not None:
+		return force_selection
+
+	last_num = len(items)
+	while True:
+		try:
+			answer = input(prompt).lstrip('#')
+		except (KeyboardInterrupt, EOFError):
+			print()
+			return None
+
+		try:
+			selected = int(answer)
+			if selected <= 0 or selected > last_num:
+				raise ValueError()
+		except ValueError:
+			print(f'{_E}*** Bad selection, try again ***{_0}', file=sys.stderr)
+			continue
+
+		selected -= 1
+		break
+
+	return selected
 
 
 def _add_help() -> None:
