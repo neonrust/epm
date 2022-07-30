@@ -613,9 +613,13 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str | None:
 		# print a menu and a prompt to select from it
 
 		def print_menu_entry(idx, item):
-			item.update(hit_details[idx])
+			if hit_details[idx]:
+				item.update(hit_details[idx])
 			imdb_id = item.get('imdb_id')
-			print_series_title(idx + 1, item, imdb_id=imdb_id, width=width)
+			tail = None
+			if 'total_episodes' in item:
+				tail = '%5d episodes' % item['total_episodes']
+			print_series_title(idx + 1, item, imdb_id=imdb_id, width=width, tail=tail)
 
 		prompt = f'\x1b[44;97;1mSelect series (1 - %d) to add -->{_0} ' % len(hits)
 

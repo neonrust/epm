@@ -254,12 +254,12 @@ def details(title_id:str|list[str], type='series'):
 	})
 	_del_keys(data, ['genres'])
 
-	if data.get('status') in ('ended', 'canceled') and data.get('end_date'):
+	if data.get('status') in ('ended', 'canceled') and 'end_date' in data and 'year' in data:
 		data['year'] = data['year'] + [ int(data.get('end_date').split('-')[0]) ]
 	else:
 		del data['end_date']
 
-	credits = promises[2].result()
+	credits = promises[2].result() or {}
 	cast = credits.get('cast', [])
 	crew = credits.get('crew', [])
 
