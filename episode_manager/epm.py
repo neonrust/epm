@@ -170,7 +170,19 @@ def eat_option(command:str|None, option:str, args:list[str], options:dict, unkno
 		else:
 			print_usage()
 
+	option_arg:str|None = None
+
+	# check if it's a long option combined with an argument, i.e. --option=argument
+	m = long_option_arg_ptn.search(option)
+	if m:
+		option = m.group('option')
+		option_arg = m.groupdict().get('arg', None)
+
+	# print('option:', option, 'arg:', option_arg)
+
 	opt_def = option_def(command, option)
+
+	# print('def:', opt_def)
 
 	if not opt_def:
 		if unknown_ok:
