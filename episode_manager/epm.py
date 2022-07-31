@@ -263,6 +263,13 @@ def cmd_unseen(ctx:context, width:int) -> str | None:
 	find_idx, match = find_idx_or_match(ctx.command_arguments)
 	series_list = get_series(ctx.db, archived=False, index=find_idx, match=match)
 
+	print(f'Listing {_0}', end='')
+	if only_started: print('started ', end='')
+	elif only_planned: print('planned ', end='')
+	print(f'series with unseen episodes', end='')
+	if match: print(', matching: %s' % match.styled_description, end='')
+	print(f'{_0}.')
+
 	if not series_list:
 		return no_series(ctx.db)
 
@@ -278,13 +285,6 @@ def cmd_unseen(ctx:context, width:int) -> str | None:
 			return 'Nothing matched: %s (or everything already seen)' % match.pattern
 		return 'Everything has been seen, better add some series!'
 
-
-	print(f'{_f}Listing {_0}', end='')
-	if only_started: print('started ', end='')
-	elif only_planned: print('planned ', end='')
-	print(f'{_f}series with unseen episodes', end='')
-	if match: print(', matching "%s"' % match.pattern, end='')
-	print(f'.{_0}')
 
 	# TODO: optionally sort series by "earliest" episode in summary mode
 
@@ -379,11 +379,7 @@ def cmd_show(ctx:context, width:int) -> str|None:
 	find_idx, match = find_idx_or_match(ctx.command_arguments)
 	series_list = get_series(ctx.db, index=find_idx, match=match)
 
-	if not series_list:
-		return no_series(ctx.db)
-
-
-	print(f'{_f}Listing ', end='')
+	print(f'Listing ', end='')
 	if only_started: print('started ', end='')
 	elif only_planned: print('planned ', end='')
 	elif only_archived: print('archived ', end='')
@@ -392,6 +388,9 @@ def cmd_show(ctx:context, width:int) -> str|None:
 	print('series', end='')
 	if match: print(', matching "%s"' % match.pattern, end='')
 	print(f'.{_0}')
+	if not series_list:
+		return no_series(ctx.db, filtering=match or filter_director or filter_writer or filter_cast or filter_year)
+
 
 	num_shown = 0
 	num_archived = 0
