@@ -182,12 +182,13 @@ def eat_option(command:str|None, option:str, args:list[str], options:dict, unkno
 	set_func = opt_def.get('func')
 	if not set_func:
 		def _set_opt(v):
+			# print('OPT>', key, '=', v)
 			options[key] = v
 		set_func = _set_opt
 
-	option_arg:str|None = None
-
 	arg_type = opt_def.get('arg')
+
+	# print('arg type:', arg_type.__name__)
 
 	if not arg_type:
 		if option_arg:
@@ -196,12 +197,9 @@ def eat_option(command:str|None, option:str, args:list[str], options:dict, unkno
 		set_func(True)
 
 	else:
-		# check if it's a long option combined with an argument, i.e. --option=argument
-		m = long_option_arg_ptn.search(option)
 		if m:
-			option = m.group('option')
-			option_arg = m.groupdict().get('arg', None)
-			if not option_arg and args:
+			# long option expecting argument (but none yet supplied)
+			if option_arg is None and args:
 				option_arg = args.pop(0)
 
 		elif args:
@@ -214,7 +212,10 @@ def eat_option(command:str|None, option:str, args:list[str], options:dict, unkno
 
 		validator = opt_def.get('validator', lambda _: True)
 
-		if arg_type is int:
+		if arg_type is str:
+			set_func(arg_str)
+
+		elif arg_type is int:
 			try:
 				v = int(arg_str)
 				if not validator(v):
@@ -235,6 +236,8 @@ def eat_option(command:str|None, option:str, args:list[str], options:dict, unkno
 		elif not validator(arg_str):
 			bad_opt_arg(command, option, arg_str, arg_type, validator.__doc__)
 
+		else:
+			raise NotImplementedError('Argument type %s' % arg_type.__name__)
 
 
 	return True
