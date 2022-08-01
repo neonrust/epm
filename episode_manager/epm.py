@@ -1190,10 +1190,12 @@ def _valid_int(a:int, b:int) -> Callable[[int], bool]:
 # TODO: merge with 'known_commands' ?  (at least for the command-specific options)
 
 __opt_max_hits = {
-	'name': ( '-n',),
-	'arg': int,
-	'validator': _valid_int(1, 40),
-	'help': 'Limit number of hits [1-40] (default: %d)' % default_max_hits,
+	'search:max-hits': {
+		'name': '-n',
+		'arg': int,
+		'validator': _valid_int(1, 40),
+		'help': 'Limit number of hits [1-40] (default: %d)' % default_max_hits,
+	}
 }
 
 command_options = {
@@ -1227,10 +1229,10 @@ command_options = {
 		'max-age':       { 'name': '--max-age',  'arg': int,  'help': 'Refresh older than N days (default: %s)' % default_max_refresh_age },
 	},
 	'add': {
-		'search:max-hits': __opt_max_hits,
+		**__opt_max_hits,
 	},
 	'search': {
-		'search:max-hits': __opt_max_hits,
+		**__opt_max_hits,
 	}
 }
 
