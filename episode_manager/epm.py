@@ -1459,8 +1459,6 @@ def refresh_series(ctx:context, width:int, subset:list|None=None, max_age:int|No
 
 	forced = max_age < 0
 
-	# print('max_age:', max_age, forced)
-
 	to_refresh = {}
 
 	now_dt = now_datetime()
@@ -1474,6 +1472,8 @@ def refresh_series(ctx:context, width:int, subset:list|None=None, max_age:int|No
 		last_refresh = get_meta(series, updated_key)
 
 		if forced or (not last_refresh or age(last_refresh) > max_age):
+			# print('stale:', series_id, last_refresh)
+
 			last_refresh = last_refresh or now()
 			to_refresh[series_id] = last_refresh
 
@@ -1483,7 +1483,12 @@ def refresh_series(ctx:context, width:int, subset:list|None=None, max_age:int|No
 	if not to_refresh:
 		return 0, 0
 
+	# remember last update check (regardless whether there actually were any updates)
 	touched = 0
+	for series_id in to_refresh:
+		set_meta(db[series_id], updated_key, now())
+		touched += 1
+
 	if not forced:
 		print(f'\r{_f}Checking for updates (%d series)...{_00}{_K}' % len(to_refresh), end='', flush=True)
 
@@ -1501,15 +1506,13 @@ def refresh_series(ctx:context, width:int, subset:list|None=None, max_age:int|No
 
 		for series_id, changes in zip(to_refresh_keys, changes):
 			if not changes:
-				# to_refresh.remove(series_id)
 				del to_refresh[series_id]
-				# remember last update check
-				set_meta(db[series_id], updated_key, now())
-				touched += 1
 
 	if not to_refresh:
 		if touched:
+			save_series_db(ctx)
 			return touched, 0  # only series affected, no episodes
+
 		return 0, 0
 
 	print(f'{_f}Refreshing %d series...{_00}' % len(to_refresh), end='', flush=True)
