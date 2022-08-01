@@ -25,8 +25,8 @@ except ImportError:
 # always import std json (useful for debugging sometimes)
 import json
 
-VERSION = '0.8.1'
-VERSION_DATE = '2022-07-29'
+VERSION = '0.9'
+VERSION_DATE = '2022-08-01'
 
 
 def start():
