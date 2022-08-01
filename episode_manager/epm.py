@@ -62,7 +62,10 @@ class context:
 
 
 	def invoke(self, width:int) -> str|None:
-		self.db = load_series_db()
+		if not load_series_db(self):
+			print(f'{_E}ERROR{_00} Could not load series db!', file=sys.stderr)
+			sys.exit(1)
+
 		return self.handler(self, width=width)
 
 
@@ -260,7 +263,7 @@ def eat_option(command:str|None, option:str, args:list[str], options:dict, unkno
 
 
 def cmd_unseen(ctx:context, width:int) -> str | None:
-	refresh_series(ctx.db, width)
+	refresh_series(ctx, width)
 
 	# TODO: print header/columns
 
@@ -372,7 +375,7 @@ def _unseen_help() -> None:
 setattr(cmd_unseen, 'help', _unseen_help)
 
 def cmd_show(ctx:context, width:int) -> str|None:
-	refresh_series(ctx.db, width)
+	refresh_series(ctx, width)
 
 	# TODO: print header/columns
 
@@ -493,7 +496,7 @@ setattr(cmd_show, 'help', _show_help)
 
 
 def cmd_calendar(ctx:context, width:int) -> str|None:
-	refresh_series(ctx.db, width)
+	refresh_series(ctx, width)
 
 	num_weeks = int(ctx.command_arguments[0]) if ctx.command_arguments else config_int('commands/calendar/num_weeks', 1)
 
@@ -678,11 +681,11 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str | None:
 	ctx.db[series_id] = hit
 
 
-	num_s, num_eps = refresh_series(ctx.db, width, subset=[series_id], max_age=-1)
+	num_s, num_eps = refresh_series(ctx, width, subset=[series_id], max_age=-1)
 
 	# TODO: offer to mark seasons as seen?
 
-	save_series_db(ctx.db)
+	save_series_db(ctx)
 
 	print(f'{_b}Series added:{_00}   {_f}(series list has been renumbered){_00}')
 
@@ -775,7 +778,7 @@ def cmd_delete(ctx:context, width:int) -> str | None:
 	# delete it
 
 	del ctx.db[series_id]
-	save_series_db(ctx.db)
+	save_series_db(ctx)
 
 	print(f'{_b}Series deleted:{_b}   {_f}(series list has been renumbered){_00}')
 	print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width)
@@ -789,7 +792,7 @@ def _delete_help() -> None:
 setattr(cmd_delete, 'help', _delete_help)
 
 def cmd_mark(ctx:context, width:int, marking:bool=True) -> str | None:
-	refresh_series(ctx.db, width)
+	refresh_series(ctx, width)
 
 	if not ctx.command_arguments:
 		return 'Required argument missing: # / <IMDb ID>'
@@ -906,7 +909,7 @@ def cmd_mark(ctx:context, width:int, marking:bool=True) -> str | None:
 		ctx.command_arguments = [find_id]
 		return cmd_restore(ctx, width)
 
-	save_series_db(ctx.db)
+	save_series_db(ctx)
 
 	return None
 
@@ -978,7 +981,7 @@ def cmd_archive(ctx:context, width:int, archiving:bool=True) -> str | None:
 
 	print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width)
 
-	save_series_db(ctx.db)
+	save_series_db(ctx)
 
 	return None
 
@@ -1018,7 +1021,7 @@ def cmd_refresh(ctx:context, width:int) -> str|None:
 
 	t0 = time.time()
 
-	num_series, num_episodes = refresh_series(ctx.db, width, subset=subset, max_age=max_age if not forced else -1)
+	num_series, num_episodes = refresh_series(ctx, width, subset=subset, max_age=max_age if not forced else -1)
 	if not num_episodes:
 		return 'Nothing to update (max age: %d days)' % (max_age/(3600*24))
 
@@ -1026,7 +1029,7 @@ def cmd_refresh(ctx:context, width:int) -> str|None:
 		if num_episodes > 0:
 			print(f'{_f}Refreshed %d episodes across %d series [%.1fs].{_00}' % (num_episodes, num_series, time.time() - t0))
 
-		save_series_db(ctx.db)
+		save_series_db(ctx)
 
 	return None
 
@@ -1445,7 +1448,9 @@ def no_series(db:dict, filtering:bool=False) -> str:
 		return 'No series added. %s' % suffix
 
 
-def refresh_series(db:dict, width:int, subset:list|None=None, max_age:int|None=None) -> tuple[int, int]:
+def refresh_series(ctx:context, width:int, subset:list|None=None, max_age:int|None=None) -> tuple[int, int]:
+
+	db = ctx.db
 
 	subset = subset or list(db.keys())
 	max_age = (max_age or config_int('max-age'))*3600*24
@@ -1536,7 +1541,7 @@ def refresh_series(db:dict, width:int, subset:list|None=None, max_age:int|None=N
 
 
 	if to_refresh:
-		save_series_db(db)
+		save_series_db(ctx)
 
 	return len(to_refresh), num_episodes
 
@@ -2320,13 +2325,14 @@ def save_config():
 
 
 
-def load_series_db() -> dict:
+def load_series_db(ctx:context) -> bool:
 
 	db_file = str(config_get('paths/series-db'))
 
 	t0 = time.time()
 
 	db = {}
+
 	if pexists(db_file) and psize(db_file) > 1:
 		if orjson is not None:
 			with open(db_file, 'rb') as fp:
@@ -2339,9 +2345,35 @@ def load_series_db() -> dict:
 	if config_bool('debug'):
 		print(f'{_f}[load: %.1fms]{_0}' % ((t1 - t0) * 1000))
 
-	# migrate DB to current structure
-	legacy_meta_migrated = 0
+	modified = migrate_db(db)
+
+	ctx.db = db
+	ctx.db_meta = db.pop(meta_key)
+
+	if modified:
+		save_series_db(ctx)
+
+	return True
+
+
+def migrate_db(db:dict) -> bool:
+
+	modified = False
+
+	# no db meta data, yikes!
+	if meta_key not in db:
+		db[meta_key] = {}
+		modified = True
+
+	db_version = db[meta_key].get('version')
+
+	# 1. migrate legacy series meta data
+	fixed_legacy_meta = 0
+	# 2. fix incorrectly written value to 'archived'
 	fixed_archived = 0
+
+	# remove meta data while migrating
+	meta_data = db.pop(meta_key, None)
 
 	for series_id, series in db.items():
 		if meta_key not in series:
@@ -2350,7 +2382,7 @@ def load_series_db() -> dict:
 				for key in legacy_meta_keys
 				if key in series
 			}
-			legacy_meta_migrated += 1
+			fixed_legacy_meta += 1
 
 		if get_meta(series, 'archived') == True:
 			# fix all "archived" values to be dates (not booleans)
@@ -2364,16 +2396,23 @@ def load_series_db() -> dict:
 			set_meta(series, 'archived', last_seen)
 			fixed_archived += 1
 
+	# restore meta data
+	db[meta_key] = meta_data
 
-	if legacy_meta_migrated or fixed_archived:
-		if legacy_meta_migrated:
-			print(f'{_f}Migrated legacy meta-data of %d series{_00}' % legacy_meta_migrated)
-		if fixed_archived:
-			print(f'{_f}Fixed bad "archived" value of %d series{_00}' % fixed_archived)
-		save_series_db(db)
+	# if no version exists, set to current version
+	if db_version is None:
+		db[meta_key]['version'] = DB_VERSION
+		print(f'{_f}Set DB version: None -> %s{_0}' % DB_VERSION)
+		modified = True
 
+	if fixed_legacy_meta:
+		print(f'{_f}Migrated legacy meta-data of %d series{_0}' % fixed_legacy_meta)
+		modified = True
+	if fixed_archived:
+		print(f'{_f}Fixed bad "archived" value of %d series{_0}' % fixed_archived)
+		modified = True
 
-	return db
+	return modified
 
 
 compressor:dict|None = None
@@ -2443,7 +2482,8 @@ else:
 		os.rename(filename, destination)
 		return True
 
-def save_series_db(db:dict) -> None:
+def save_series_db(ctx:context) -> None:
+
 	db_file = str(config_get('paths/series-db'))
 
 	if not pexists(db_file):
@@ -2452,15 +2492,23 @@ def save_series_db(db:dict) -> None:
 	def backup_name(idx) -> str:
 		return '%s.%d' % (db_file, idx)
 
+
 	# write to a temp file and then rename it afterwards
 	tmp_name = mkstemp(dir=dirname(db_file))[1]
 	try:
+		db = ctx.db
+		# put meta data "inline" for saving
+		db[meta_key] = ctx.db_meta
+
 		if orjson is not None:
 			with open(tmp_name, 'wb') as fpo:
 				fpo.write(orjson.dumps(db, option=orjson.OPT_INDENT_2 | orjson.OPT_SORT_KEYS))
 		else:
 			with open(tmp_name, 'w') as fps:
 				json.dump(db, fps, indent=2, sort_keys=True)
+
+		# remove the meta data afterwards
+		db.pop(meta_key, None)
 
 		# rotate backups
 		for idx in range(num_config_backups - 1, 0, -1):
@@ -2526,6 +2574,8 @@ ignore_changes = (
 # TODO: $XDG_CONFIG_HOME
 app_config_file = pexpand(f'$HOME/.config/{PRG}/config')
 num_config_backups = 10
+
+DB_VERSION = 1
 
 from episode_manager import tmdb
 
