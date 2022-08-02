@@ -292,8 +292,8 @@ def episodes(series_id:str|list[str], with_details=False, progress:Callable|None
 	# unfortunately we must synchronously get the details first
 	ser_details = details(series_id, type='series')
 
-	num_seasons = ser_details.get('total_seasons', 1)
-	ep_runtime = ser_details.get('episode_run_time')
+	num_seasons = (ser_details or {}).get('total_seasons', 1)
+	ep_runtime = (ser_details or {}).get('episode_run_time')
 
 	def fetch_season(season):
 		data = _query(_qurl('tv/%s/season/%d' % (series_id, season))) or {}
