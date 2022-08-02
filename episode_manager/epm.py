@@ -760,23 +760,27 @@ def menu_select(items:list[dict], width:int, item_print:Callable, force_selectio
 
 	import sys, tty, termios, array
 	infd = sys.stdin.fileno()
-	old_settings = termios.tcgetattr(infd)
+
+	# some keys we want to detect
 	UP = '\x1b[A'
 	DOWN = '\x1b[B'
 	RETURN = ('\x0a', '\x0d')
 	CTRL_C = '\x03'
 	ESC = '\x1b'
+
+	import fcntl
+	old_settings = termios.tcgetattr(infd)
 	try:
 		tty.setraw(sys.stdin.fileno())
-		availbuf = array.array('i', [0])
+		avail_buf = array.array('i', [0])
 		while True:
-			import fcntl
-			fcntl.ioctl(infd, termios.FIONREAD, availbuf, 1)
-			avail = availbuf[0]
+			fcntl.ioctl(infd, termios.FIONREAD, avail_buf, 1)
+			avail = avail_buf[0]
 			if avail == 0:
 				time.sleep(0.1)
 				continue
 
+			# TODO: append (and consume below)
 			buf = sys.stdin.read(avail)
 
 			if buf in (CTRL_C, ESC):
@@ -786,14 +790,12 @@ def menu_select(items:list[dict], width:int, item_print:Callable, force_selectio
 			if buf in RETURN:
 				break
 
-			if buf == UP:
-				if selected > 0:
-					selected -= 1
-					draw_menu()
-			elif buf == DOWN:
-				if selected < len(items) - 1:
-					selected += 1
-					draw_menu()
+			if buf == UP and selected > 0:
+				selected -= 1
+				draw_menu()
+			elif buf == DOWN and selected < len(items) - 1:
+				selected += 1
+				draw_menu()
 	finally:
 		termios.tcsetattr(infd, termios.TCSADRAIN, old_settings)
 
