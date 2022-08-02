@@ -9,6 +9,7 @@ from tempfile import mkstemp
 from os.path import basename, dirname, expandvars, expanduser, exists as pexists, getsize as psize
 from calendar import Calendar, day_name, month_name, MONDAY, SUNDAY
 import textwrap
+from subprocess import Popen, PIPE
 
 from typing import Callable, Any
 from types import ModuleType as Module
@@ -39,7 +40,9 @@ def start():
 
 	ctx = context(sys.argv[1: ])
 
-	err = ctx.invoke(width=term_width())
+	width, height = term_size()
+
+	err = ctx.invoke(width=width)
 	if err is not None:
 		print(f'{warning_prefix(ctx.command)} {err}')
 		sys.exit(1)
@@ -589,6 +592,19 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str | None:
 
 	max_hits = int(ctx.command_options.get('search:max-hits') or 0) or config_int('lookup/max-hits')
 
+	height = term_size()[1]
+	# 'Found...' + divider above overview + divider below overview + "status bar"
+	menu_padding = 1 + 1 + 1 + 1
+
+	overview_limit = 8
+	term_max_hits = height - menu_padding - overview_limit
+	if term_max_hits < 1:
+		return 'Terminal too small'
+
+	if max_hits > term_max_hits:
+		max_hits = term_max_hits
+		print(f'{warning_prefix(ctx.command)} limited hits to %d (resize terminal to fit more)' % max_hits)
+
 	args = list(a for a in ' '.join(ctx.command_arguments).split())
 	year = None
 	if len(args) >= 2:
@@ -717,19 +733,20 @@ def menu_select(items:list[dict], width:int, item_print:Callable, force_selectio
 		item = items[idx]
 
 		if not item.get('overview'):
-			print(f'{_i}{_f}no overview available{_0}', end=f'{_K}\n\r')
-			return 2
-
-		overview = textwrap.wrap(item['overview'], width=width - 1, initial_indent=' '*11)
-		if overview and len(overview[0]) > 11:
-			overview[0] = overview[0][11:]
+			overview = [ f'{_i}{_f}no overview available{_0}' ]
+		else:
+			overview = textwrap.wrap(item['overview'], width=width - 1, initial_indent=' '*11)
+			if overview and len(overview[0]) > 11:
+				overview[0] = overview[0][11:]
 
 		for idx, line in enumerate(overview):
 			if idx > 0:
 				print(f'{_f}┃{_0}', end='')
 			print(line, end=f'{_K}\n\r')
 
-		return 1 + len(overview)
+		print(f'{_f}┗%s{_0}' % ('━'*(width-1)), end=f'{_K}\n\r')
+
+		return 1 + len(overview) + 1
 
 	selected = 0
 	last_info_lines = None
@@ -2165,11 +2182,25 @@ def seen_unseen_episodes(series:dict, before=None) -> tuple[list,list]:
 	return seen_eps, unseen_eps
 
 
-def term_width() -> int:
+_term_size = None
+
+def term_size() -> tuple[int, int]:
+	global _term_size
+	if _term_size is not None:
+		return _term_size
+
 	try:
-		return int(os.popen('stty size', 'r').read().split()[1])
+		stty = Popen(['stty', 'size'], stdout=PIPE)
+		stty.wait()
+		stty_size = stty.stdout.readline().split()
+		_term_size = tuple(
+			int(n)
+			for n in reversed(stty_size)
+		)
 	except:
-		return 100
+		_term_size = (100, 60)
+
+	return _term_size
 
 
 def option_def(command:str, option:str|None=None):
@@ -2529,8 +2560,6 @@ for method in compressors:
 
 # TODO: 'mk_backup' should return a waitable promise (so we can do it in parallel with the serialization)
 if compressor:
-	from subprocess import Popen
-
 	def mk_backup(source:str, destination:str) -> bool:
 		if not isinstance(compressor, dict): # redundant, basically to shut mypy up
 			return False
