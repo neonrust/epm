@@ -133,6 +133,13 @@ For a bit more "fancy" display of future episodes, use the `calendar` command:
 Sadly, these examples doesn't show that all output from epm is colorized
 for clarity and emphasis.
 
+But here's a screenshot of the menu shown by the `search` command (similar to `add`):
+
+![search](screenshots/search.png)
+
+Basically the difference when using the `add` command is that the bottom text `... to exit` 
+then says `[RET] to add  [ESC] to exit`. 
+
 
 ## Usage
 
