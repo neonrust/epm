@@ -20,6 +20,7 @@ classifiers = [
   "Environment :: Console",
   "Topic :: Games/Entertainment",
   "Topic :: Utilities"
+  "Topic :: Terminal"
 ]
 
 
