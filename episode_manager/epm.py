@@ -626,19 +626,24 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str | None:
 		return 'Nothing found. Try generalizing your search.'
 
 	# exclude ones we already have in our config
-	already = list(filter(lambda H: H['id'] in ctx.db, hits))
-	if already:
-		print(f'{_f}Already added: %d{_00}' % len(already))
-		for hit in already:
-			if has_meta(ctx.db[hit['id']], 'archived'):
-				arch_tail = f'  \x1b[33m(archived){_00}'
-			else:
-				arch_tail = None
+	if add:
+		already = list(filter(lambda H: H['id'] in ctx.db, hits))
+		if already:
+			print(f'{_f}Already added: %d{_00}' % len(already))
+			for hit in already:
+				if has_meta(ctx.db[hit['id']], 'archived'):
+					arch_tail = f'  \x1b[33m(archived){_00}'
+				else:
+					arch_tail = None
 
-			imdb_id = ctx.db[hit['id']].get('imdb_id')
-			print_series_title(None, ctx.db[hit['id']], imdb_id=imdb_id, gray=True, tail=arch_tail, width=width)
+				imdb_id = ctx.db[hit['id']].get('imdb_id')
+				print_series_title(None, ctx.db[hit['id']], imdb_id=imdb_id, gray=True, tail=arch_tail, width=width)
 
-	hits = list(filter(lambda H: H['id'] not in ctx.db, hits))
+		hits = list(filter(lambda H: H['id'] not in ctx.db, hits))
+
+		if not hits:
+			return 'No new series found. Try generalizing your search.'
+
 	print(f'{_g}Found {_00}{_b}%d{_00} {_g}series:{_00}' % len(hits))
 
 	print(f'{_f}Enriching search hits...{_00}', end='', flush=True)
