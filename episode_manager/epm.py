@@ -326,7 +326,7 @@ def cmd_unseen(ctx:context, width:int) -> str | None:
 		series_printed = False
 		def print_series():
 			if hilite:
-				print(f'\x1b[48;5;234m{_K}', end='')
+				print(f'\x1b[48;5;234m{_K}', end='')  # TODO: use constant, share with cmd_show
 
 			print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width, tail=tail, tail_style=_f)
 			nonlocal series_printed
@@ -457,7 +457,7 @@ def cmd_show(ctx:context, width:int) -> str|None:
 		# alternate styling odd/even rows
 		hilite = (num_shown % 2) == 0
 		if hilite:
-			print(f'\x1b[48;5;234m{_K}\r', end='')
+			print(f'\x1b[48;5;234m{_K}\r', end='') # TODO: use constant, share with cmd_unseen
 
 		if show_details:
 			print_series_details(index, series,width=width, gray=is_archived and not only_archived)
@@ -625,49 +625,46 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str | None:
 	if not hits:
 		return 'Nothing found. Try generalizing your search.'
 
-	if not add or len(hits) > 1:
-		# exclude ones we already have in our config
-		already = list(filter(lambda H: H['id'] in ctx.db, hits))
-		if already:
-			print(f'{_f}Already added: %d{_00}' % len(already))
-			for hit in already:
-				if has_meta(ctx.db[hit['id']], 'archived'):
-					arch_tail = f'  \x1b[33m(archived){_00}'
-				else:
-					arch_tail = None
+	# exclude ones we already have in our config
+	already = list(filter(lambda H: H['id'] in ctx.db, hits))
+	if already:
+		print(f'{_f}Already added: %d{_00}' % len(already))
+		for hit in already:
+			if has_meta(ctx.db[hit['id']], 'archived'):
+				arch_tail = f'  \x1b[33m(archived){_00}'
+			else:
+				arch_tail = None
 
-				imdb_id = ctx.db[hit['id']].get('imdb_id')
-				print_series_title(None, ctx.db[hit['id']], imdb_id=imdb_id, gray=True, tail=arch_tail, width=width)
+			imdb_id = ctx.db[hit['id']].get('imdb_id')
+			print_series_title(None, ctx.db[hit['id']], imdb_id=imdb_id, gray=True, tail=arch_tail, width=width)
 
-		hits = list(filter(lambda H: H['id'] not in ctx.db, hits))
-		print(f'{_g}Found {_00}{_b}%d{_00} {_g}series:{_00}' % len(hits))
+	hits = list(filter(lambda H: H['id'] not in ctx.db, hits))
+	print(f'{_g}Found {_00}{_b}%d{_00} {_g}series:{_00}' % len(hits))
 
-		print(f'{_f}Enriching search hits...{_00}', end='', flush=True)
-		hit_details = tmdb.details(hit['id'] for hit in hits)
-		print(f'\r{_K}', end='')
+	print(f'{_f}Enriching search hits...{_00}', end='', flush=True)
+	hit_details = tmdb.details(hit['id'] for hit in hits)
+	print(f'\r{_K}', end='')
 
-		# print a menu and a prompt to select from it
+	# print a menu and a prompt to select from it
 
-		def print_menu_entry(idx, item):
-			if hit_details[idx]:
-				item.update(hit_details[idx])
-			imdb_id = item.get('imdb_id')
-			tail = None
-			if 'total_episodes' in item:
-				tail = '%5d episodes' % item['total_episodes']
-			print_series_title(idx + 1, item, imdb_id=imdb_id, width=width, tail=tail)
+	def print_menu_entry(idx, item, current:bool=False):
+		if hit_details[idx]:
+			item.update(hit_details[idx])
+		imdb_id = item.get('imdb_id')
+		tail = None
+		if 'total_episodes' in item:
+			tail = '%5d episodes' % item['total_episodes']
+		if current:
+			print(f'\x1b[48;2;60;70;90m{_K}', end='')
+		print_series_title(idx + 1, item, imdb_id=imdb_id, width=width, tail=tail)
+		print(f'{_0B}{_K}', end='')
 
-		prompt = f'\x1b[44;97;1mSelect series (1 - %d) to add -->{_00} ' % len(hits)
+	selected = menu_select(hits, width, print_menu_entry, force_selection=-1 if not add else None)
+	if selected == -1:
+		return
 
-		selected = menu_select(hits, prompt, print_menu_entry, force_selection=-1 if not add else None)
-		if selected == -1:
-			return
-
-		if selected is None:
-			return 'Nothing selected, cancelled'
-
-	else:
-		selected = 0
+	if selected is None:
+		return 'Nothing selected, cancelled'
 
 	hit = hits[selected]
 	series_id = hit['id']
@@ -681,7 +678,7 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str | None:
 	ctx.db[series_id] = hit
 
 
-	num_s, num_eps = refresh_series(ctx, width, subset=[series_id], max_age=-1)
+	refresh_series(ctx, width, subset=[series_id], max_age=-1)
 
 	# TODO: offer to mark seasons as seen?
 
@@ -697,31 +694,104 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str | None:
 	return None
 
 
-def menu_select(items:list[dict], prompt:str, item_print:Callable, force_selection:int|None=None) -> int|None:
-	for idx, item in enumerate(items):
-		item_print(idx, item)
+def menu_select(items:list[dict], width:int, item_print:Callable, force_selection:int|None=None) -> int|None:
+
+	def print_items(current):
+		for idx, item in enumerate(items):
+			is_current = idx == current
+			print(_K, end='')
+			item_print(idx, item, current=is_current)
+			print('\r', end='')
+			if is_current:
+				print('\x1b[1A⯈\r\x1b[1B', end='') # move up, print, then down again
+
+	def print_info(idx):
+		print(f'{_f}┏%s{_0}' % ('━'*(width-1)), end=f'{_K}\n\r')
+		print(f'{_f}┃{_0} {_o}Overview:{_0} ', end='')
+
+		item = items[idx]
+
+		if not item.get('overview'):
+			print(f'{_i}{_f}no overview available{_0}', end=f'{_K}\n\r')
+			return 2
+
+		overview = textwrap.wrap(item['overview'], width=width - 1, initial_indent=' '*11)
+		if overview and len(overview[0]) > 11:
+			overview[0] = overview[0][11:]
+
+		for idx, line in enumerate(overview):
+			if idx > 0:
+				print(f'{_f}┃{_0}', end='')
+			print(line, end=f'{_K}\n\r')
+
+		return 1 + len(overview)
+
+	selected = 0
+	last_info_lines = None
+
+	def draw_menu():
+		nonlocal last_info_lines
+		if last_info_lines is not None:
+			print('\x1b[%dA' % (len(items) + last_info_lines), end='')
+
+		print_items(selected)
+
+		info_lines = print_info(selected)
+		if last_info_lines is not None and info_lines < last_info_lines:
+			print(_00, end=_K)
+			for n in range(info_lines, last_info_lines):
+				print(f'\n{_K}', end='')
+			print('\x1b[%dA' % (last_info_lines - info_lines), end='', flush=True)
+		last_info_lines = info_lines
+
+		if force_selection is None:
+			print(f' \x1b[97;48;2;60;60;90m 🠕 and 🠗 keys to select   [RET] to add   [ESC] to cancel{_K}{_00}', end='\r')
+
+	draw_menu()
 
 	if force_selection is not None:
 		return force_selection
 
-	last_num = len(items)
-	while True:
-		try:
-			answer = input(prompt).lstrip('#')
-		except (KeyboardInterrupt, EOFError):
-			print()
-			return None
+	import sys, tty, termios, array
+	infd = sys.stdin.fileno()
+	old_settings = termios.tcgetattr(infd)
+	UP = '\x1b[A'
+	DOWN = '\x1b[B'
+	RETURN = ('\x0a', '\x0d')
+	CTRL_C = '\x03'
+	ESC = '\x1b'
+	try:
+		tty.setraw(sys.stdin.fileno())
+		availbuf = array.array('i', [0])
+		while True:
+			import fcntl
+			fcntl.ioctl(infd, termios.FIONREAD, availbuf, 1)
+			avail = availbuf[0]
+			if avail == 0:
+				time.sleep(0.1)
+				continue
 
-		try:
-			selected = int(answer)
-			if selected <= 0 or selected > last_num:
-				raise ValueError()
-		except ValueError:
-			print(f'{_E}*** Bad selection, try again ***{_00}', file=sys.stderr)
-			continue
+			buf = sys.stdin.read(avail)
 
-		selected -= 1
-		break
+			if buf in (CTRL_C, ESC):
+				selected = None  # canceled
+				break
+
+			if buf in RETURN:
+				break
+
+			if buf == UP:
+				if selected > 0:
+					selected -= 1
+					draw_menu()
+			elif buf == DOWN:
+				if selected < len(items) - 1:
+					selected += 1
+					draw_menu()
+	finally:
+		termios.tcsetattr(infd, termios.TCSADRAIN, old_settings)
+
+	print(_K)
 
 	return selected
 
@@ -1756,10 +1826,8 @@ def print_series_details(index:int, series:dict, width:int, gray:bool=False) -> 
 
 	overview = textwrap.wrap(series['overview'], width=width, initial_indent=' '*15)
 	print(f'    {_o}Overview:{_0} ', end='')
-	for idx, line in enumerate(overview):
-		if idx == 0:
-			line = line[15:]
-		print(line)
+	overview[0] = overview[0][15:]
+	print('\n'.join(overview))
 
 	# collect top-N writers and directors, and guest cast
 	from collections import Counter
@@ -2545,8 +2613,9 @@ def pexpand(p):
 	return expanduser(expandvars(p))
 
 
-_00 = '\x1b[m'      # normal (reset all)
+_00 = '\x1b[m'     # normal (reset all)
 _0 = '\x1b[22;23;24;39m' # normal FG style
+_0B = '\x1b[49m'  # normal BG color
 _b = '\x1b[1m'     # bold
 _f = '\x1b[2m'     # faint
 _i = '\x1b[3m'     # italic
@@ -2558,6 +2627,9 @@ _o = '\x1b[34;1m'  # option
 _K = '\x1b[K'      # clear end-of-line
 _E = '\x1b[41;97;1m' # ERROR (white on red)
 _EOL = '\x1b[666C' # move far enough to the right to hit the edge
+_S = '\x1b[s'      # save cursor position
+_L = '\x1b[u'      # load/restore saved cursor position
+
 
 imdb_url_tmpl = 'https://www.imdb.com/title/%s'
 
