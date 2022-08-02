@@ -618,9 +618,6 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str | None:
 
 		page += 1
 
-	if len(hits) > max_hits:
-		hits = hits[: max_hits]
-
 	print(f'\r{_K}', end='')
 	if not hits:
 		return 'Nothing found. Try generalizing your search.'
@@ -643,6 +640,9 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str | None:
 
 		if not hits:
 			return 'No new series found. Try generalizing your search.'
+
+	if len(hits) > max_hits:
+		hits = hits[: max_hits]
 
 	print(f'{_g}Found {_00}{_b}%d{_00} {_g}series:{_00}' % len(hits))
 
