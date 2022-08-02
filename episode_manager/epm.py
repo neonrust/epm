@@ -744,13 +744,14 @@ def menu_select(items:list[dict], width:int, item_print:Callable, force_selectio
 			print('\x1b[%dA' % (last_info_lines - info_lines), end='', flush=True)
 		last_info_lines = info_lines
 
+		print(f' \x1b[97;48;2;60;60;90m 🠕 and 🠗 keys to select', end='')
 		if force_selection is None:
-			print(f' \x1b[97;48;2;60;60;90m 🠕 and 🠗 keys to select   [RET] to add   [ESC] to cancel{_K}{_00}', end='\r')
+			print(f'   [RET] to add   [ESC] to cancel', end='')
+		else:
+			print(f'   [RET]/[ESC] to exit', end='')
+		print(f'{_K}{_00}', end='\r')
 
 	draw_menu()
-
-	if force_selection is not None:
-		return force_selection
 
 	import sys, tty, termios, array
 	infd = sys.stdin.fileno()
@@ -792,6 +793,9 @@ def menu_select(items:list[dict], width:int, item_print:Callable, force_selectio
 		termios.tcsetattr(infd, termios.TCSADRAIN, old_settings)
 
 	print(_K)
+
+	if force_selection is not None:
+		return force_selection
 
 	return selected
 
