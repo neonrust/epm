@@ -9,6 +9,7 @@ from tempfile import mkstemp
 from os.path import basename, dirname, expandvars, expanduser, exists as pexists, getsize as psize
 from calendar import Calendar, day_name, month_name, MONDAY, SUNDAY
 import textwrap
+import random
 from subprocess import Popen, PIPE
 
 from typing import Callable, Any
@@ -1583,10 +1584,21 @@ def refresh_series(ctx:context, width:int, subset:list|None=None, max_age:int|No
 	if not to_refresh:
 		return 0, 0
 
+	def spread_stamp(a, b):
+		# generate a stamp between 'a' and 'b'
+		ad = datetime.fromisoformat(a)
+		bd = datetime.fromisoformat(b)
+		diff = (bd - ad).total_seconds()
+		rnd = ad + timedelta(seconds=int(random.random()*diff))
+		return rnd.isoformat(' ')
+
 	# remember last update check (regardless whether there actually were any updates)
 	touched = 0
+	now_stamp = now()
 	for series_id in to_refresh:
-		set_meta(db[series_id], updated_key, now())
+		prev_update = get_meta(db[series_id], updated_key)
+		stamp = spread_stamp(prev_update, now_stamp)
+		set_meta(db[series_id], updated_key, stamp)
 		touched += 1
 
 	if not forced:
@@ -1610,12 +1622,12 @@ def refresh_series(ctx:context, width:int, subset:list|None=None, max_age:int|No
 			if not changes:
 				del to_refresh[series_id]
 
-	if not to_refresh:
-		if touched:
-			save_series_db(ctx)
-			return touched, 0  # only series affected, no episodes
+		if not to_refresh:
+			if touched:
+				save_series_db(ctx)
+				return touched, 0  # only series affected, no episodes
 
-		return 0, 0
+			return 0, 0
 
 	#print(f'{_f}Refreshing %d series...{_00}' % len(to_refresh), end='', flush=True)
 
