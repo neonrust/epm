@@ -1588,9 +1588,11 @@ def refresh_series(ctx:context, width:int, subset:list|None=None, max_age:int|No
 		touched += 1
 
 	if not forced:
-		print(f'\r{_f}Checking for updates (%d series)...{_00}{_K}' % len(to_refresh), end='', flush=True)
+		#print(f'\r{_f}Checking for updates (%d series)...{_00}{_K}' % len(to_refresh), end='', flush=True)
 
 		prog_bar = new_progress(len(to_refresh), width=width - 2)
+		print(f'\r{_00}{_K}%s{_EOL}' % prog_bar(None, text='Checking %d series for updates...' % len(to_refresh)), end='', flush=True)
+
 		completed = 0
 		def show_progress(*_):
 			nonlocal completed
@@ -1613,9 +1615,11 @@ def refresh_series(ctx:context, width:int, subset:list|None=None, max_age:int|No
 
 		return 0, 0
 
-	print(f'{_f}Refreshing %d series...{_00}' % len(to_refresh), end='', flush=True)
+	#print(f'{_f}Refreshing %d series...{_00}' % len(to_refresh), end='', flush=True)
 
 	prog_bar = new_progress(len(to_refresh), width=width - 2)
+	print(f'\r{_00}{_K}%s{_EOL}' % prog_bar(None, f'Refreshing %d series...' % len(to_refresh)), end='', flush=True)
+
 	completed = 0
 	def show_progress(*_):
 		nonlocal completed
