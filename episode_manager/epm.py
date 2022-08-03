@@ -754,6 +754,7 @@ def menu_select(items:list[dict], width:int, item_print:Callable, force_selectio
 	def draw_menu():
 		nonlocal last_info_lines
 		if last_info_lines is not None:
+			# move up to beginning of menu
 			print('\x1b[%dA' % (len(items) + last_info_lines), end='')
 
 		print_items(selected)
@@ -766,6 +767,7 @@ def menu_select(items:list[dict], width:int, item_print:Callable, force_selectio
 			print('\x1b[%dA' % (last_info_lines - info_lines), end='', flush=True)
 		last_info_lines = info_lines
 
+		# print "status bar"
 		print(f' \x1b[97;48;2;60;60;90m 🠕 and 🠗 keys to select', end='')
 		if force_selection is None:
 			print(f'   [RET] to add   [ESC] to cancel', end='')
