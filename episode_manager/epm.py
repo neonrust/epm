@@ -1605,7 +1605,7 @@ def refresh_series(ctx:context, width:int, subset:list|None=None, max_age:int|No
 		#print(f'\r{_f}Checking for updates (%d series)...{_00}{_K}' % len(to_refresh), end='', flush=True)
 
 		prog_bar = new_progress(len(to_refresh), width=width - 2)
-		print(f'\r{_00}{_K}%s{_EOL}' % prog_bar(None, text='Checking %d series for updates...' % len(to_refresh)), end='', flush=True)
+		print(f'\r{_00}{_K}%s{_EOL}' % prog_bar('Checking %d series for updates...' % len(to_refresh)), end='', flush=True)
 
 		completed = 0
 		def show_progress(*_):
@@ -1632,7 +1632,7 @@ def refresh_series(ctx:context, width:int, subset:list|None=None, max_age:int|No
 	#print(f'{_f}Refreshing %d series...{_00}' % len(to_refresh), end='', flush=True)
 
 	prog_bar = new_progress(len(to_refresh), width=width - 2)
-	print(f'\r{_00}{_K}%s{_EOL}' % prog_bar(None, f'Refreshing %d series...' % len(to_refresh)), end='', flush=True)
+	print(f'\r{_00}{_K}%s{_EOL}' % prog_bar(f'Refreshing %d series...' % len(to_refresh)), end='', flush=True)
 
 	completed = 0
 	def show_progress(*_):
@@ -2011,29 +2011,35 @@ def new_progress(total:int, width:int, color:int|str|None=None, bg_color:int|str
 	right_margin = 1
 	right_pad = ' '*right_margin
 
-	def gen(curr, text=None):
+	def gen(curr:int|float|str, text=None):
 		ltotal = total
 		lwidth = width
 
 		# if 'curr' is a string, show an "indeterminate" progress bar
-		if isinstance(curr, str):
+		is_indeterminate = isinstance(curr, str)
+
+		if is_indeterminate:
 			text = curr
 			curr = None
 			ltotal = None
 
 		#print(f'new_progress.gen: curr:{curr} text:{text}')
 
-		if curr is None or ltotal is None:  # indeterminate progress bar
-			percent = f'{DIM}{"?":4}{RST}'
-			bar_w = lwidth
-			info = '?'
+		pct_w = 4 + left_margin  # ' 42% '
 
+		if is_indeterminate:
+			percent = f'{DIM}  ? {RST}'
+			info = '?/?'
 		else:
-			pct_w = 4 + left_margin  # ' 42% '
 			progress = curr/ltotal
 			percent = '%3.0f%%' % (100*progress)
 			info = fmt_info(curr, ltotal)
-			lwidth -= pct_w + right_margin + len(info)
+
+		lwidth -= pct_w + right_margin + len(info)
+
+		if is_indeterminate:
+			bar_w = lwidth
+		else:
 			bar_w = progress*lwidth
 
 		# widths of completed (head) and remaining (tail) segments
