@@ -346,7 +346,7 @@ def cmd_unseen(ctx:context, width:int) -> str | None:
 			total_duration += sum(ep.get('runtime') or 0 for ep in episodes_by_key(series, printed_keys))
 
 		else:
-			# print first episode
+			# print first unseen episode
 			if not (also_future or is_released(unseen[0])):
 				continue
 
@@ -2139,11 +2139,11 @@ def print_seen_status(series:dict, gray: bool=False, summary=True, next=True, la
 			print(_f, end='')
 		header = f'{ind}Last: '
 		print(header, end='')
-		print(format_episode_title('', seen[-1], gray=gray, include_season=True, width=width - len(header)))
+		print(format_episode_title('', seen[-1], gray=gray, include_season=True, today=True, width=width - len(header)))
 
 	if next and unseen:
 		header = f'{ind}Next: '
-		s = format_episode_title('', unseen[0], gray=gray, include_season=True, width=width - len(header))
+		s = format_episode_title('', unseen[0], gray=gray, include_season=True, today=True, width=width - len(header))
 		if s:
 			if gray:
 				print(_f, end='')
