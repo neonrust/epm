@@ -1601,11 +1601,14 @@ def refresh_series(ctx:context, width:int, subset:list|None=None, max_age:int|No
 		set_meta(db[series_id], updated_key, stamp)
 		touched += 1
 
-	if not forced:
-		#print(f'\r{_f}Checking for updates (%d series)...{_00}{_K}' % len(to_refresh), end='', flush=True)
+	def mk_prog(total):
+		return new_progress(total, width=width - 2, bg_color=rgb('#404040'), bar_color=rgb('#686868'), text_color=rgb('#cccccc'))
 
-		prog_bar = new_progress(len(to_refresh), width=width - 2)
+
+	if not forced:
+		prog_bar = mk_prog(len(to_refresh))
 		print(f'\r{_00}{_K}%s{_EOL}' % prog_bar('Checking %d series for updates...' % len(to_refresh)), end='', flush=True)
+		# TODO: show 'spinner' during indeterminate state
 
 		completed = 0
 		def show_progress(*_):
@@ -1629,10 +1632,9 @@ def refresh_series(ctx:context, width:int, subset:list|None=None, max_age:int|No
 
 			return 0, 0
 
-	#print(f'{_f}Refreshing %d series...{_00}' % len(to_refresh), end='', flush=True)
-
-	prog_bar = new_progress(len(to_refresh), width=width - 2)
+	prog_bar = mk_prog(len(to_refresh))
 	print(f'\r{_00}{_K}%s{_EOL}' % prog_bar(f'Refreshing %d series...' % len(to_refresh)), end='', flush=True)
+	# TODO: show 'spinner'
 
 	completed = 0
 	def show_progress(*_):
@@ -2721,6 +2723,22 @@ _E = '\x1b[41;97;1m' # ERROR (white on red)
 _EOL = '\x1b[666C' # move far enough to the right to hit the edge
 _S = '\x1b[s'      # save cursor position
 _L = '\x1b[u'      # load/restore saved cursor position
+
+
+def rgb(*args):
+	if len(args) == 3 and isinstance(args[0], int) and isinstance(args[1], int) and isinstance(args[2], int):
+		r, g, b = args
+
+	elif len(args) == 1 and isinstance(args[0], str):
+		c_hex = args[0]
+		if c_hex[0] == '#':
+			c_hex = c_hex[1:]
+		assert len(c_hex) == 6, 'length of hex color string is not 6'
+		r = int(c_hex[:2], 16)
+		g = int(c_hex[2:4], 16)
+		b = int(c_hex[4:6], 16)
+
+	return f'8;2;{r};{g};{b}'
 
 
 imdb_url_tmpl = 'https://www.imdb.com/title/%s'
