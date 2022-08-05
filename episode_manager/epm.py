@@ -1961,40 +1961,67 @@ def fmt_duration(seconds: int|float, roughly: bool=False):
 	return ' '.join(parts)
 
 
-def new_progress(total:int, width:int, color:int|str|None=None, bg_color:int|str=4, text_color:str|int|None=None, fmt_info:Callable|None=None):
+def new_progress(total:int|float, width:int, bar_color:int|str|None=None, bg_color:int|str=4, text_color:str|int|None=None, l_info:Callable|None=None, r_info: Callable|None=None):
+	"""
+	:param total: Total number of items to process (e.g. 100)
+	:param width: Render width
+	:param color: Bar color.
+	:param bg_color: Bar background color, default: blue.
+	:param text_color: Color of text inside bar.
+	:param r_info: Function that returns a formatted string for the right-side info text.
+	:return: Rendered progress bar string.
+	Returns a function that, when called, returns a printable progress bar.
+	This function should be kept self-contained (to make it easier to copy, could arguably be a separate package...)
+	"""
 	#print(f'new_progress: total:{total} width:{width} bg_color:{bg_color} text_color:{text_color} fmt_info:{fmt_info}')
 
 	bar_ch = ('▏', '▎', '▍', '▌', '▋', '▊', '▉')
 
-	info_width = len(str(total))
-	if fmt_info is None:
-		def fmt_info(c, t):
-			return f'%{info_width}s/%-{info_width}s' % (c, t)
 
-	CLR = '\x1b[K'  # clear to end-of-line
-	INV = '\x1b[7m' # video inversion
-	RST = '\x1b[m'  # reset all attributes
-	DIM = '\x1b[2m' # faint/dim color
-	SAV = '\x1b[s'  # save cursor position
+	rinfo_w = len(str(total))
+	def _default_rinfo(c, t):
+		if not isinstance(c, (int, float)) or t is None:
+			c = '?'
+			t = '?'
+		return f'{c:>{rinfo_w}}/{t:<{rinfo_w}}'
+
+	if r_info is None:
+		r_info = _default_rinfo
+
+	def _default_linfo(c, t):
+		if not isinstance(c, (int, float)) or t is None:
+			return '  ? '
+		else:
+			percent = int(float(c)/float(t) * 100)
+			return '%3.0f%%' % percent
+
+	if l_info is None:
+		l_info = _default_linfo
+
+	CLR = '\x1b[K'   # clear to end-of-line
+	INV = '\x1b[7m'  # video inversion
+	RST = '\x1b[m'   # reset all attributes
+	DIM = '\x1b[2m'  # faint/dim color
+	SAVE = '\x1b[s'  # save cursor position
 	LOAD = '\x1b[u'  # restore saved cursor position
 
 
-	b0 = ''
-	b1 = RST
-	bh = f'\x1b[4{bg_color}m'
-	t0 = ''
-	t1 = b0
+	bar_0 = ''
+	bar_1 = RST
+	bar_head = f'\x1b[4{bg_color}m'
 
-	if color is not None:
-		b0 = f'\x1b[3{color}m'  # w/ inversion
-		bh = b0 + bh            # no inversion
-		t0 = b0
+	if bar_color is not None:
+		bar_0 = f'\x1b[3{bar_color}m'  # will use inversion
+		bar_head = bar_0 + bar_head    # no inversion
+
+	text_0 = bar_0
+	text_1 = bar_0
 
 	if text_color is not None:
-		if color:
-			t0 = f'\x1b[4{text_color};3{color}m'  # w/ inversion
+		if bar_color:
+			text_0 = f'\x1b[4{text_color};3{bar_color}m'  # w/ inversion
 		else:
-			t0 = f'\x1b[4{text_color}m'           # w/ inversion
+			text_0 = f'\x1b[4{text_color}m'               # w/ inversion
 
 
 	def _replace_reps(s, find, repl):
@@ -2006,10 +2033,11 @@ def new_progress(total:int, width:int, color:int|str|None=None, bg_color:int|str
 
 		return ptn.sub(replacer, s)
 
-	left_margin = 1
-	left_pad = ' '*left_margin
-	right_margin = 1
-	right_pad = ' '*right_margin
+	left_margin = 1  # >= 1
+	right_margin = 1 # >= 1
+
+	left_pad = ' '*(left_margin - 1) + '▕'
+	right_pad = '▏' + ' '*(right_margin - 1)
 
 	def gen(curr:int|float|str, text=None):
 		ltotal = total
@@ -2023,30 +2051,22 @@ def new_progress(total:int, width:int, color:int|str|None=None, bg_color:int|str
 			curr = None
 			ltotal = None
 
-		#print(f'new_progress.gen: curr:{curr} text:{text}')
+		left_info = l_info(curr, ltotal)
+		right_info = r_info(curr, ltotal)
 
-		pct_w = 4 + left_margin  # ' 42% '
-
-		if is_indeterminate:
-			percent = f'{DIM}  ? {RST}'
-			info = '?/?'
-		else:
-			progress = curr/ltotal
-			percent = '%3.0f%%' % (100*progress)
-			info = fmt_info(curr, ltotal)
-
-		lwidth -= pct_w + right_margin + len(info)
+		linfo_w = 4 + left_margin  # ' 42% '
+		lwidth -= linfo_w + right_margin + len(right_info)
 
 		if is_indeterminate:
 			bar_w = lwidth
 		else:
-			bar_w = progress*lwidth
+			completed = curr/ltotal   # 0 to 1
+			bar_w = completed*lwidth  # number of completed segments
 
 		# widths of completed (head) and remaining (tail) segments
 		int_w = int(bar_w)
 		head = bar_ch[int((bar_w % 1)*len(bar_ch))]
 		tail_w = lwidth - int_w - 1
-		# print('int_w:', int_w)
 
 		opt_text = ''
 		if text:
@@ -2055,29 +2075,37 @@ def new_progress(total:int, width:int, color:int|str|None=None, bg_color:int|str
 
 			opt_text = ''
 			if text_done:
-				opt_text += f'{INV}{t0}{text_done}{t1}'
+				opt_text += f'{INV}{text_0}{text_done}{text_1}'
 			if text_todo:
-				opt_text += f'{RST}{bh}{text_todo}'
+				opt_text += f'{RST}{bar_head}{text_todo}'
 			if opt_text:
 				opt_text += LOAD
 
 		last_bar = ''.join([
 				CLR,
-				percent,
+				# display 'left info'
+				DIM,
+				left_info,
+				bar_0,
 				left_pad,
+				SAVE,
 				# completed bar segments
-				(f'{INV}{SAV}{b0}%{int_w}s{b1}' % '') if int_w else '',
-				# the "head" segment
-				f'{bh}{head}',
+				INV,
+				' '*int_w,
+				bar_1,
+				# the "head" segment (single cell, partially completed)
+				bar_head, head,
 				# remaining bar segments
 				(f'%{tail_w}s' % '') if tail_w else '',
 				LOAD,
 				opt_text,          # ends with LOAD if non-empty
 				f'\x1b[{lwidth}C',  # move to right edge
+				bar_0, right_pad,
 				RST,
-				right_pad,
-				# display "info"
-				DIM, info, RST,
+				# display 'right info'
+				DIM,
+				right_info,
+				RST,
 		])
 		#print('BAR:', last_bar.replace('\x1b', 'Σ').replace('\r', 'ΣR').replace('Σ', '\x1b[35;1mΣ\x1b[m'))
 		return last_bar
