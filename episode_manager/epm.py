@@ -1577,24 +1577,20 @@ def refresh_series(ctx:context, width:int, subset:list|None=None, max_age:int|No
 
 	to_refresh = {}
 
-	now_dt = now_datetime()
-	def age(dt):
-		return (now_dt - datetime.fromisoformat(dt)).total_seconds()
-
-	earliest_refresh = None  # can never be earlier than this
+	earliest_refresh = now_datetime() + timedelta(days=1)  # in the future: guarantee to be set below
 
 	for series_id in subset:
 		series = db[series_id]
-		last_refresh = get_meta(series, updated_key)
 
-		if forced or (not last_refresh or age(last_refresh) > max_age):
-			# print('stale:', series_id, last_refresh)
+		stale, last_updated = is_stale(series, max_age)
+		if forced or stale:
+			# print('stale:', series_id, last_updated)
 
-			last_refresh = last_refresh or now()
-			to_refresh[series_id] = last_refresh
+			last_updated = last_updated or now()
+			to_refresh[series_id] = last_updated
 
-			if not earliest_refresh or last_refresh < earliest_refresh:
-				earliest_refresh = last_refresh
+			if last_updated < earliest_refresh:
+				earliest_refresh = last_updated
 
 	if not to_refresh:
 		return 0, 0
@@ -1633,7 +1629,7 @@ def refresh_series(ctx:context, width:int, subset:list|None=None, max_age:int|No
 			print(f'\r{_K}%s{_EOL}' % prog_bar(completed, text='Checking updates...'), end='', flush=True)
 
 		to_refresh_keys = list(to_refresh.keys())
-		changes = tmdb.changes(to_refresh_keys, datetime.fromisoformat(earliest_refresh), ignore=ignore_changes, progress=show_progress)
+		changes = tmdb.changes(to_refresh_keys, earliest_refresh, ignore=ignore_changes, progress=show_progress)
 
 		print(f'\r{_K}', end='', flush=True)
 
@@ -2457,8 +2453,12 @@ def now() -> str:
 	return now_datetime().isoformat(' ', timespec='seconds')
 
 
+_now_datetime = None
 def now_datetime() -> datetime:
-	return datetime.now()
+	global _now_datetime
+	if _now_datetime is None:
+		_now_datetime = datetime.now()
+	return _now_datetime
 
 
 app_config = {}
