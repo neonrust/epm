@@ -644,14 +644,14 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str | None:
 		already = list(filter(lambda H: H['id'] in ctx.db, hits))
 		if already:
 			print(f'{_f}Already added: %d{_00}' % len(already))
-			for hit in already:
-				if has_meta(ctx.db[hit['id']], 'archived'):
+			for new_series in already:
+				if has_meta(ctx.db[new_series['id']], 'archived'):
 					arch_tail = f'  \x1b[33m(archived){_00}'
 				else:
 					arch_tail = None
 
-				imdb_id = ctx.db[hit['id']].get('imdb_id')
-				print_series_title(None, ctx.db[hit['id']], imdb_id=imdb_id, gray=True, tail=arch_tail, width=width)
+				imdb_id = ctx.db[new_series['id']].get('imdb_id')
+				print_series_title(None, ctx.db[new_series['id']], imdb_id=imdb_id, gray=True, tail=arch_tail, width=width)
 
 		hits = list(filter(lambda H: H['id'] not in ctx.db, hits))
 
@@ -688,16 +688,21 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str | None:
 	if selected is None:
 		return 'Nothing selected, cancelled'
 
-	hit = hits[selected]
-	series_id = hit['id']
+	new_series = hits[selected]
+	series_id = new_series['id']
 
-	hit[meta_key] = {}
-	set_meta(hit, 'seen', {})
-	set_meta(hit, 'added', now())
+	new_series[meta_key] = {}
+	set_meta(new_series, 'seen', {})
+	set_meta(new_series, 'added', now())
 
-	hit.pop('id', None)
+	# assign 'list index', and advance the global
+	next_list_index = get_meta(ctx.db, 'next_list_index')
+	set_meta(new_series, 'list_index', next_list_index)
+	set_meta(ctx.db, 'next_list_index', next_list_index + 1)
 
-	ctx.db[series_id] = hit
+	new_series.pop('id', None)
+
+	ctx.db[series_id] = new_series
 
 
 	refresh_series(ctx, width, subset=[series_id], max_age=-1)
@@ -706,12 +711,12 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str | None:
 
 	save_series_db(ctx)
 
-	print(f'{_b}Series added:{_00}   {_f}(series list has been renumbered){_00}')
+	print(f'{_b}Series added:{_00}')
 
 	# need to loop to figure out its list index
 	imdb_id = ctx.db[series_id].get('imdb_id')
 	index = find_list_index(ctx.db, series_id)
-	print_series_title(index, hit, imdb_id=imdb_id, width=width)
+	print_series_title(index, new_series, imdb_id=imdb_id, width=width)
 
 	return None
 
@@ -851,7 +856,7 @@ def cmd_delete(ctx:context, width:int) -> str | None:
 		return err
 
 	print(f'{_b}Deleting series:{_00}')
-	print_series_title(None, series, imdb_id=series.get('imdb_id'), width=width)
+	print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width)
 
 	seen, unseen = seen_unseen_episodes(series)
 	partly_seen = seen and unseen
@@ -881,7 +886,7 @@ def cmd_delete(ctx:context, width:int) -> str | None:
 	del ctx.db[series_id]
 	save_series_db(ctx)
 
-	print(f'{_b}Series deleted:{_b}   {_f}(series list has been renumbered){_00}')
+	print(f'{_b}Series deleted:{_b}')
 	print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width)
 
 	return None
@@ -2185,20 +2190,23 @@ def series_num_archived(db:dict) -> int:
 
 
 def get_series(db:dict, archived:bool|None=None, index=None, match=None) -> list[tuple[int, str]]:
+
 	series_ids = sorted(db, key=lambda sid: (db[sid]['title'].casefold(), db[sid].get('year', '')))
 
 	series_list:list[tuple[int, str, dict]] = []
 
 	find_index = index
-	index = 0
 
 	for series_id in series_ids:
-		index += 1
 		series = db[series_id]
 
 		is_archived = has_meta(series, 'archived')
 		if archived is not None and is_archived != archived:
 			continue
+
+		index = get_meta(series, 'list_index')
+
+		# for clarity and consistency, we _skip_ non-matching entries (instead of adding matching ones)
 
 		if find_index is not None:
 			if find_index != index:
@@ -2512,7 +2520,7 @@ def load_series_db(ctx:context) -> bool:
 
 	t1 = time.time()
 	if config_bool('debug'):
-		print(f'{_f}[load: %.1fms]{_0}' % ((t1 - t0) * 1000))
+		print(f'{_f}[load: %.1fms, version: %d]{_0}' % ((t1 - t0) * 1000, get_meta(db, 'version')))
 
 	modified = migrate_db(db)
 
@@ -2534,7 +2542,7 @@ def migrate_db(db:dict) -> bool:
 		db[meta_key] = {}
 		modified = True
 
-	db_version = db[meta_key].get('version')
+	db_version = db[meta_key].get('version', 0)
 
 	# 1. migrate legacy series meta data
 	fixed_legacy_meta = 0
@@ -2544,39 +2552,52 @@ def migrate_db(db:dict) -> bool:
 	# remove meta data while migrating
 	meta_data = db.pop(meta_key, None)
 
+	list_index = 1
+
 	for series_id, series in db.items():
-		if meta_key not in series:
-			series[meta_key] = {
-				key: series.pop(key)
-				for key in legacy_meta_keys
-				if key in series
-			}
-			fixed_legacy_meta += 1
+		if db_version == 0:
+			if meta_key not in series:
+				series[meta_key] = {
+					key: series.pop(key)
+					for key in legacy_meta_keys
+					if key in series
+				}
+				fixed_legacy_meta += 1
 
-		if get_meta(series, 'archived') == True:
-			# fix all "archived" values to be dates (not booleans)
-			seen = get_meta(series, 'seen')
-			last_seen = '0000-00-00 00:00:00'
-			# use datetime from last marked episode
-			for dt in seen.values():
-				if dt > last_seen:
-					last_seen = dt
+			if get_meta(series, 'archived') == True:
+				# fix all "archived" values to be dates (not booleans)
+				seen = get_meta(series, 'seen')
+				last_seen = '0000-00-00 00:00:00'
+				# use datetime from last marked episode
+				for dt in seen.values():
+					if dt > last_seen:
+						last_seen = dt
 
-			set_meta(series, 'archived', last_seen)
-			fixed_archived += 1
+				set_meta(series, 'archived', last_seen)
+				fixed_archived += 1
+
+		if db_version < 2:
+			set_meta(series, 'list_index', list_index)
+			list_index += 1
 
 	# restore meta data
 	db[meta_key] = meta_data
 
 	# if no version exists, set to current version
-	if db_version is None:
-		db[meta_key]['version'] = DB_VERSION
-		print(f'{_f}Set DB version: None -> %s{_0}' % DB_VERSION)
+	if db_version != DB_VERSION:
+		print(f'{_f}Set DB version: %s -> %s{_0}' % (get_meta(db, 'version'), DB_VERSION))
+		set_meta(db, 'version', DB_VERSION)
+		modified = True
+
+	if db_version < 2:
+		set_meta(db, 'next_list_index', list_index)
+		print(f'{_f}Built list indexes for all %d series, next index: %d{_0}' % (len(db), list_index))
 		modified = True
 
 	if fixed_legacy_meta:
 		print(f'{_f}Migrated legacy meta-data of %d series{_0}' % fixed_legacy_meta)
 		modified = True
+
 	if fixed_archived:
 		print(f'{_f}Fixed bad "archived" value of %d series{_0}' % fixed_archived)
 		modified = True
@@ -2762,7 +2783,7 @@ ignore_changes = (
 app_config_file = pexpand(f'$HOME/.config/{PRG}/config')
 num_config_backups = 10
 
-DB_VERSION = 1
+DB_VERSION = 2
 
 from episode_manager import tmdb
 
