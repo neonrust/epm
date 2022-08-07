@@ -703,9 +703,9 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str | None:
 	set_meta(new_series, 'added', now())
 
 	# assign 'list index', and advance the global
-	next_list_index = get_meta(ctx.db, 'next_list_index')
+	next_list_index = get_meta(ctx, 'next_list_index')
 	set_meta(new_series, 'list_index', next_list_index)
-	set_meta(ctx.db, 'next_list_index', next_list_index + 1)
+	set_meta(ctx, 'next_list_index', next_list_index + 1)
 
 	new_series.pop('id', None)
 
@@ -1176,17 +1176,25 @@ def _help_help() -> None:
 setattr(cmd_help, 'help', _help_help)
 
 
-def get_meta(series:dict, key: str, def_value=None) -> Any:
-	return series.get(meta_key, {}).get(key, def_value)
+def get_meta(obj:dict|context, key:str, def_value:Any=None) -> Any:
+	if isinstance(obj, context):
+		return obj.db_meta.get(key, def_value)
+	return obj.get(meta_key, {}).get(key, def_value)
 
-def has_meta(series:dict, key: str) -> bool:
-	return get_meta(series, key, None) is not None
+def has_meta(obj:dict|context, key:str) -> bool:
+	return get_meta(obj, key, None) is not None
 
-def set_meta(series:dict, key: str, value) -> None:
-	series[meta_key][key] = value
+def set_meta(obj:dict|context, key: str, value) -> None:
+	if isinstance(obj, context):
+		obj.db_meta[key] = value
+	else:
+		obj[meta_key][key] = value
 
-def del_meta(series:dict, key: str) -> None:
-	series[meta_key].pop(key, None)
+def del_meta(obj:dict|context, key: str) -> None:
+	if isinstance(obj, context):
+		obj.db_meta.pop(key, None)
+	else:
+		obj[meta_key].pop(key, None)
 
 
 PRG = basename(sys.argv[0])
