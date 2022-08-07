@@ -2552,8 +2552,6 @@ def migrate_db(db:dict) -> bool:
 	# remove meta data while migrating
 	meta_data = db.pop(meta_key, None)
 
-	list_index = 1
-
 	for series_id, series in db.items():
 		if db_version == 0:
 			if meta_key not in series:
@@ -2576,9 +2574,13 @@ def migrate_db(db:dict) -> bool:
 				set_meta(series, 'archived', last_seen)
 				fixed_archived += 1
 
-		if db_version < 2:
+	if db_version < 2:
+		# assign 'list_index' ordered by "added" time
+		list_index = 1
+		for series in sorted(db.values(), key=lambda series: get_meta(series, 'added')):
 			set_meta(series, 'list_index', list_index)
 			list_index += 1
+		modified = True
 
 	# restore meta data
 	db[meta_key] = meta_data
