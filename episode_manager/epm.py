@@ -1874,7 +1874,7 @@ def print_series_details(index:int, series:dict, width:int, gray:bool=False) -> 
 		tail = f'    {_o}{_u}%s{_0}' % (imdb_url_tmpl % series["imdb_id"])
 	print_series_title(index, series, width, gray=gray, tail=tail)
 
-
+	print(f'    {_o}Added:{_0}', get_meta(series, 'added'))
 	print_archive_status(series)
 
 	overview = textwrap.wrap(series['overview'], width=width, initial_indent=' '*15)
