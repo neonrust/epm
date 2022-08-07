@@ -1685,6 +1685,17 @@ def refresh_series(ctx:context, width:int, subset:list|None=None, max_age:int|No
 	return len(to_refresh), num_episodes
 
 
+def is_stale(item:dict, max_age_seconds:int=2*3600*24) -> tuple[bool, str|None]:
+	updated_stamp = get_meta(item, updated_key)
+	if not updated_stamp:
+		return True, None
+
+	updated = datetime.fromisoformat(updated_stamp)
+	age_seconds = (now_datetime() - updated).total_seconds()
+
+	return age_seconds > max_age_seconds, updated
+
+
 def print_series_title(num:int|None, series:dict, width:int=0, imdb_id:str=None, gray:bool=False, tail: str|None=None, tail_style:str|None=None) -> None:
 
 	# this function should never touch the BG color
