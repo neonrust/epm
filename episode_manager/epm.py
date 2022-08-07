@@ -267,7 +267,7 @@ def eat_option(command:str|None, option:str, args:list[str], options:dict, unkno
 
 
 def cmd_unseen(ctx:context, width:int) -> str | None:
-	refresh_series(ctx, width)
+	# refresh_series(ctx, width)
 
 	# TODO: print header/columns
 
@@ -329,6 +329,9 @@ def cmd_unseen(ctx:context, width:int) -> str | None:
 
 		series_printed = False
 		def print_series():
+			if is_stale(series):  # we've come upon a series that is stale, do a refresh (of everything)
+				refresh_series(ctx, width)
+
 			if hilite:
 				print(f'\x1b[48;5;234m{_K}', end='')  # TODO: use constant, share with cmd_show
 
@@ -379,7 +382,7 @@ def _unseen_help() -> None:
 setattr(cmd_unseen, 'help', _unseen_help)
 
 def cmd_show(ctx:context, width:int) -> str|None:
-	refresh_series(ctx, width)
+	# refresh_series(ctx, width)
 
 	# TODO: print header/columns
 
@@ -458,6 +461,9 @@ def cmd_show(ctx:context, width:int) -> str|None:
 
 		num_shown += 1
 
+		if is_stale(series):  # we've come upon a series that is stale, do a refresh (of everything)
+			refresh_series(ctx, width)
+
 		# alternate styling odd/even rows
 		hilite = (num_shown % 2) == 0
 		if hilite:
@@ -500,6 +506,7 @@ setattr(cmd_show, 'help', _show_help)
 
 
 def cmd_calendar(ctx:context, width:int) -> str|None:
+	# in this case, there's not a lot to be gained by deferring the refresh
 	refresh_series(ctx, width)
 
 	num_weeks = int(ctx.command_arguments[0]) if ctx.command_arguments else config_int('commands/calendar/num_weeks', 1)
@@ -898,7 +905,7 @@ def _delete_help() -> None:
 setattr(cmd_delete, 'help', _delete_help)
 
 def cmd_mark(ctx:context, width:int, marking:bool=True) -> str | None:
-	refresh_series(ctx, width)
+	# refresh_series(ctx, width)
 
 	if not ctx.command_arguments:
 		return 'Required argument missing: # / <IMDb ID>'
@@ -908,6 +915,9 @@ def cmd_mark(ctx:context, width:int, marking:bool=True) -> str | None:
 	index, series_id, series, err = find_series(ctx.db, find_id)
 	if err is not None or series is None:
 		return err
+
+	if is_stale(series):  # we've come upon a series that is stale, do a refresh (of everything)
+		refresh_series(ctx, width)
 
 	season:None|range|tuple = None
 	episode:None|range|tuple = None
