@@ -1586,7 +1586,7 @@ def refresh_series(ctx:context, width:int, subset:list|None=None, max_age:int|No
 		if forced or stale:
 			# print('stale:', series_id, last_updated)
 
-			last_updated = last_updated or now()
+			last_updated = last_updated or now_datetime()
 			to_refresh[series_id] = last_updated
 
 			if last_updated < earliest_refresh:
@@ -1595,22 +1595,22 @@ def refresh_series(ctx:context, width:int, subset:list|None=None, max_age:int|No
 	if not to_refresh:
 		return 0, 0
 
-	def spread_stamp(a, b):
+	def spread_stamp(a:datetime, b:datetime):
 		# generate a random time stamp between 'a' and 'b'
-		ad = datetime.fromisoformat(a)
-		bd = datetime.fromisoformat(b)
-		diff = (bd - ad).total_seconds()
+		diff = int((b - a).total_seconds())
 		offset = timedelta(seconds=int(random.randrange(diff//2, diff)))  # skewed towards 'b'
-		rnd = ad + offset
-		return rnd.isoformat(' ')
+		rnd = a + offset
+		return rnd
 
 	# remember last update check (regardless whether there actually were any updates)
 	touched = 0
-	now_stamp = now()
 	for series_id in to_refresh:
 		prev_update = get_meta(db[series_id], updated_key)
-		stamp = spread_stamp(prev_update, now_stamp)
-		set_meta(db[series_id], updated_key, stamp)
+		if prev_update:
+			stamp = spread_stamp(datetime.fromisoformat(prev_update), now_datetime())
+		else:
+			stamp = now_datetime()
+		set_meta(db[series_id], updated_key, stamp.isoformat(' '))
 		touched += 1
 
 	def mk_prog(total):
