@@ -1590,11 +1590,12 @@ def refresh_series(ctx:context, width:int, subset:list|None=None, max_age:int|No
 		return 0, 0
 
 	def spread_stamp(a, b):
-		# generate a stamp between 'a' and 'b'
+		# generate a random time stamp between 'a' and 'b'
 		ad = datetime.fromisoformat(a)
 		bd = datetime.fromisoformat(b)
 		diff = (bd - ad).total_seconds()
-		rnd = ad + timedelta(seconds=int(random.random()*diff))
+		offset = timedelta(seconds=int(random.randrange(diff//2, diff)))  # skewed towards 'b'
+		rnd = ad + offset
 		return rnd.isoformat(' ')
 
 	# remember last update check (regardless whether there actually were any updates)
