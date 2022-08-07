@@ -6,7 +6,7 @@ import re
 import time
 from datetime import datetime, date, timedelta
 from tempfile import mkstemp
-from os.path import basename, dirname, expandvars, expanduser, exists as pexists, getsize as psize
+from os.path import basename, dirname, expandvars, expanduser, exists as pexists, getsize as psize, join as pjoin
 from calendar import Calendar, day_name, month_name, MONDAY, SUNDAY
 import textwrap
 import random
@@ -1195,21 +1195,21 @@ default_max_refresh_age = 2  # days
 default_max_hits = 10
 
 default_configuration = {
-		'paths': {
-				'series-db': None,  # defaulted in load_config()
+	'paths': {
+		'series-db': None,  # defaulted in load_config()
+	},
+	'commands': {
+		'default': 'unseen',
+		'calendar': {
+			'num_weeks': 1,
 		},
-		'commands': {
-				'default': 'unseen',
-				'calendar': {
-					'num_weeks': 1,
-				},
-		},
-		'max-age': default_max_refresh_age,
-		'lookup': {
-				'api-key': None,
-				'max-hits': default_max_hits,
-		},
-		'debug': 0,
+	},
+	'max-age': default_max_refresh_age,
+	'lookup': {
+		'api-key': None,
+		'max-hits': default_max_hits,
+	},
+	'debug': 0,
 }
 
 # type alias for type hints (should be recursive, but mypy doesn't support it)
@@ -2504,8 +2504,7 @@ def load_config() -> bool:
 
 	db_file = config_get('paths/series-db')
 	if not db_file or not isinstance(db_file, str):
-		# TODO: $XDG_CONFIG_HOME
-		config_set('paths/series-db', pexpand(f'$HOME/.config/{PRG}/series'))
+		config_set('paths/series-db', pjoin(user_config_home, PRG, 'series'))
 
 	paths = app_config.get('paths', {})
 	if not isinstance(paths, dict):
@@ -2803,8 +2802,8 @@ ignore_changes = (
 	'user_review_count',
 )
 
-# TODO: $XDG_CONFIG_HOME
-app_config_file = pexpand(f'$HOME/.config/{PRG}/config')
+user_config_home = os.getenv('XDG_CONFIG_HOME') or pexpand(pjoin('$HOME', '.config'))
+app_config_file = pjoin(user_config_home, PRG, 'config')
 num_config_backups = 10
 
 DB_VERSION = 2
