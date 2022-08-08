@@ -2690,19 +2690,14 @@ if compressor:
 
 		destination += compressor.get('extension', compressor['binary']) # type: ignore
 
-		tmp_name = mkstemp(dir=dirname(source))[1]
-		shutil.copy(source, tmp_name)
-
 		try:
 			command_line = [compressor['binary']] + compressor['args'] # type: ignore
 
-			infp = open(tmp_name, 'rb')
+			infp = open(source, 'rb')
 			outfp = open(destination, 'wb')
 
 			comp = run(command_line, stdin=infp, stdout=outfp, universal_newlines=False)
 			success = comp.returncode == 0
-
-			os.remove(tmp_name)
 
 			if success:
 				# file compressed into destination, we can safely remove the source(s)
@@ -2710,7 +2705,7 @@ if compressor:
 			else:
 				# compression failed, just fall back to uncomrpessed
 				print(f'[{warning_prefix()}] Compression failed: {source} -> {destination}: {comp.returncode}', file=sys.stderr)
-				mk_uncompressed_backup(source, destinatino)
+				mk_uncompressed_backup(source, destination)
 
 			# copy timestamps from source file
 			os.utime(destination, (file_info.st_atime, file_info.st_mtime))
