@@ -52,7 +52,8 @@ def _update_url_func() -> None:
 	_qurl = mk_url
 
 
-_qurl:Callable[[str, dict], str]|None = None
+def _qurl(endpoint:str, query:dict|None=None) -> str:
+	raise NotImplementedError('_qurl')
 
 def set_api_key(key) -> None:
 	global _api_key
@@ -102,14 +103,14 @@ def search(search:str, type:str='series', year:int|None=None, page:int=1):
 	else:
 		path += '/movie'
 
-	query = {
+	query:dict[str,str] = {
 		'query': search,
 	}
 	if year is not None:
-		query['first_air_date_year'] = year
+		query['first_air_date_year'] = str(year)
 
 	if page >= 1:
-		query['page'] = page
+		query['page'] = str(page)
 
 	url = _qurl(path, query)
 
@@ -173,13 +174,13 @@ def _get_tmdb_id(imdb_id):
 __details:dict = {}
 _missing = object()
 
-def details(title_id:str|list[str], type='series'):
+def details(title_id:str|list[str]|Iterable, type='series'):
 
 	if not _api_key:
 		raise NoAPIKey()
 
 	if isinstance(title_id, Iterable) and not isinstance(title_id, str):
-		wrapped_args = map(lambda I: ( (I,), {} ) , title_id)
+		wrapped_args:list = list(map(lambda I: ( (I,), {} ) , title_id))
 		return _parallel_query(details, wrapped_args)
 
 	if title_id.startswith('tt'):
@@ -274,7 +275,7 @@ def details(title_id:str|list[str], type='series'):
 	return data
 
 
-def episodes(series_id:str|list[str], with_details=False, progress:Callable|None=None):
+def episodes(series_id:str|list[str]|Iterable, with_details=False, progress:Callable|None=None):
 
 	if not _api_key:
 		raise NoAPIKey()
@@ -305,9 +306,6 @@ def episodes(series_id:str|list[str], with_details=False, progress:Callable|None
 			'original_name': 'original_title',
 			'original_language': 'language',
 			'origin_country': 'country',
-		})
-		_del_keys(data, ['production_code', 'vote_average', 'vote_count'])
-		_rename_keys(data, {
 			'air_date': 'date',
 			'season_number': 'season',
 			'episode_number': 'episode',
@@ -317,7 +315,16 @@ def episodes(series_id:str|list[str], with_details=False, progress:Callable|None
 			'writer': lambda ep: _job_people(ep.get('crew', []), 'Writer'),
 			'guest_cast': lambda ep: list(map(lambda p: p.get('name') or '', ep.get('guest_stars', [])))
 		})
-		_del_keys(data, ['id', 'still_path', 'crew', 'guest_stars'])
+		_del_keys(data, [
+			'id',
+			'show_id',
+			'still_path',
+			'crew',
+			'guest_stars',
+			'production_code',
+			'vote_average',
+			'vote_count',
+		])
 
 		return data
 
@@ -346,7 +353,7 @@ def episodes(series_id:str|list[str], with_details=False, progress:Callable|None
 	return all_episodes
 
 
-def changes(series_id:str|list[str], after:datetime, ignore:tuple=None, progress:Callable|None=None) -> list:
+def changes(series_id:str|list[str], after:datetime, ignore:tuple|None=None, progress:Callable|None=None) -> list:
 
 	if _qurl is None:
 		return []
@@ -444,7 +451,10 @@ def _set_values(data, new_values):
 				print('_set_values: "%s":' % key, str(e), file=sys.stderr)
 
 
-def _parallel_query(func:Callable, arg_list:list, progress_callback:Callable|None=None):
+def _parallel_query(func:Callable, arg_list:list|map, progress_callback:Callable|None=None):
+
+	completed = 0
+
 	def func_wrap(idx, *args, **kw):
 		t0 = time.time()
 
@@ -452,7 +462,9 @@ def _parallel_query(func:Callable, arg_list:list, progress_callback:Callable|Non
 
 		duration = time.time() - t0
 		if progress_callback:
-			progress_callback(idx, duration, args)
+			nonlocal completed
+			completed += 1
+			progress_callback(completed, idx, duration, args)
 		return res
 
 	with __get_executor() as executor:

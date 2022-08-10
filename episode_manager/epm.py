@@ -1,45 +1,60 @@
 #! /usr/bin/env python3
 # -*- mode: python -*-
-
-import os.path
 import re
 import time
+import atexit
 from datetime import datetime, date, timedelta
-from tempfile import mkstemp
 from os.path import basename, dirname, expandvars, expanduser, exists as pexists, getsize as psize, join as pjoin
 from calendar import Calendar, day_name, month_name, MONDAY, SUNDAY
 import textwrap
 import random
-from subprocess import run
 
 from typing import Callable, Any
-from types import ModuleType as Module
+
+from . import tmdb
+from . import progress
+from .context import context, BadUsageError
+from . import config, utils, db
+from .utils import term_size, warning_prefix, plural
+from .db import meta_get, meta_set, meta_has, meta_del, meta_copy, meta_key, meta_seen_key, meta_archived_key, meta_added_key, meta_updated_key, meta_list_index_key, meta_next_list_index_key
+from .styles import _0, _00, _0B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _L, _S, _u, _EOL
 
 import sys
-# use orjson if available
-orjson:Module|None = None
-try:
-	import orjson as _orjson
-	orjson = _orjson
-except ImportError:
-	orjson = None
+
+PRG = basename(sys.argv[0])
+# TODO: a better way, please
+config.init(PRG)
+utils.init(PRG)
+
 
 # always import std json (useful for debugging sometimes)
 import json
 
-VERSION = '0.10'
-VERSION_DATE = '2022-08-07'
+VERSION = '0.11'
+VERSION_DATE = '2022-08-10'
 
 
 def start():
-	load_config()
+	config.load()
 	# print(orjson.dumps(app_config, option=orjson.OPT_INDENT_2 | orjson.OPT_SORT_KEYS).decode('utf-8'))
+	atexit.register(config.save)
 
-	api_key = config_get('lookup/api-key')
+	api_key = config.get('lookup/api-key')
 	if api_key:
 		tmdb.set_api_key(api_key)
 
-	ctx = context(sys.argv[1: ])
+	ctx = context()
+	# we do this to avoid import cycle
+	ctx.eat_option = eat_option
+	ctx.resolve_cmd = resolve_cmd
+
+	try:
+		ctx.parse_args(sys.argv[1: ])
+
+	except BadUsageError:
+		print_usage()
+
+	ctx.configure_handler(known_commands)
 
 	width, height = term_size()
 
@@ -49,105 +64,7 @@ def start():
 		sys.exit(1)
 
 
-class context:
-	def __init__(self, args:list[str]):
-		self.global_options = {
-			'debug': config_bool('debug', False),
-		}
-		self.command:str|None = None
-		self.command_options:dict = {
-			'max-age': config_int('max-age'),
-		}
-		self.command_arguments:list = []
-		self._parse_args(args)
-
-		if self.command is not None:
-			self.handler:Callable = known_commands[self.command]['handler']
-
-		self.db:dict[str,dict] = {}
-		self.db_meta:dict[str,str|int] = {}
-
-
-	def invoke(self, width:int) -> str|None:
-		if not load_series_db(self):
-			print(f'{_E}ERROR{_00} Could not load series db!', file=sys.stderr)
-			sys.exit(1)
-
-		return self.handler(self, width=width)
-
-
-	def _set_command(self, name:str) -> None:
-		self.command = name
-
-		# insert configured default arguments and options
-		args = config_get('commands/%s/default_arguments' % self.command, [])
-		if args and isinstance(args, list):
-			self.command_arguments = args
-
-		opts = config_get('commands/%s/default_options' % self.command, [])
-		while isinstance(opts, list) and opts:
-			eat_option(self.command, opts.pop(0), opts, self.command_options)
-
-
-	def _add_argument(self, argument:str) -> None:
-		self.command_arguments.append(argument)
-
-
-	def _parse_args(self, args:list) -> None:
-
-		default_command = str(config_get('commands/default', 'unseen'))
-
-		while args:
-			arg = args.pop(0)
-
-			# print('check arg: "%s"' % arg)
-
-			if arg.startswith('-'):
-				if not self.command:
-					if arg in '--help':
-						print_usage()
-
-					# attempt to interpret as a global option
-					# print('  try global opt: "%s"' % arg)
-					if eat_option(None, arg, args, self.global_options, unknown_ok=True):
-						# print('  -> global opt:', arg)
-						continue
-
-					self._set_command(default_command)
-					# print('  -> cmd: %s (default)' % self.command)
-
-				# print('  opt:', arg, '(cmd: %s)' % self.command)
-				eat_option(self.command, arg, args, self.command_options)  # will exit if not correct
-				continue
-
-			if not self.command and not arg.startswith('.'):
-				# print('  try cmd: "%s"' % arg)
-				cmd = resolve_cmd(arg)
-				if cmd:
-					self._set_command(cmd)
-					# print('  -> cmd = %s' % self.command)
-					continue
-
-			if not self.command:
-				if arg.startswith('.'):
-					arg = arg[1: ]
-
-				self._set_command(default_command)
-				# print('  -> cmd = %s (default)' % self.command)
-
-			if self.command:
-				self._add_argument(arg)
-				# print('  -> "%s" [%s]' % (self.command, ' '.join(self.command_arguments)))
-
-			else:
-				raise RuntimeError('Bug: unhandled argument: "%s"' % arg)
-
-
-		if not self.command:
-			self._set_command(default_command)
-
-		if self.command == 'help':
-			print_usage()
+###############################################################################
 
 
 def resolve_cmd(name:str) -> str|None:
@@ -264,8 +181,41 @@ def eat_option(command:str|None, option:str, args:list[str], options:dict, unkno
 		else:
 			raise NotImplementedError('Argument type %s' % arg_type.__name__)
 
-
 	return True
+
+
+def bad_cmd(cmd:str) -> None:
+	print(f'{warning_prefix()} Unknown command: {_E}%s{_00}' % cmd, file=sys.stderr)
+	sys.exit(1)
+
+def bad_opt(command:str|None, option:str) -> None:
+	print(f'{warning_prefix(command)} Unknown option: {option}', file=sys.stderr)
+	sys.exit(1)
+
+def bad_opt_arg(command:str|None, option, arg, arg_type:Callable|None, explain:str|None=None) -> None:
+	print(warning_prefix(command), end='', file=sys.stderr)
+
+	expected = None
+	if arg_type is not None:
+		expected = arg_type.__name__
+
+	if expected is None:
+		print(f' Unexpected argument for {option}: {_b}{arg}{_00}', file=sys.stderr, end='')
+	elif arg is None:
+		print(f' Required argument missing for {option}', file=sys.stderr, end='')
+	else:
+		print(f' Bad option argument for {option}: {_b}{arg}{_00}  %s expected' % expected, file=sys.stderr, end='')
+
+	if explain:
+		print(',', explain, end='', file=sys.stderr)
+	print(file=sys.stderr)
+
+	sys.exit(1)
+
+
+def ambiguous_cmd(name:str, matching:list[str]) -> None:
+	print(f'{warning_prefix()} Ambiguous command: {_E}%s{_00}  matches: %s' % (name, f'{_o},{_00} '.join(sorted(matching))), file=sys.stderr)
+	sys.exit(1)
 
 
 ###############################################################################
@@ -319,7 +269,7 @@ def cmd_unseen(ctx:context, width:int) -> str | None:
 
 	for index, series_id, series, unseen in series_unseen:
 
-		any_episodes_seen = bool(get_meta(series, 'seen', {}))
+		any_episodes_seen = bool(meta_get(series, meta_seen_key, {}))
 
 		if only_started and not any_episodes_seen:
 			continue
@@ -387,6 +337,7 @@ def _unseen_help() -> None:
 
 setattr(cmd_unseen, 'help', _unseen_help)
 
+
 def cmd_show(ctx:context, width:int) -> str|None:
 	# refresh_series(ctx, width)
 
@@ -444,7 +395,7 @@ def cmd_show(ctx:context, width:int) -> str|None:
 
 	for index, series_id in series_list:
 		series = ctx.db[series_id]
-		is_archived = has_meta(series, 'archived')
+		is_archived = meta_has(series, 'archived')
 
 		if is_archived:
 			num_archived += 1
@@ -452,7 +403,7 @@ def cmd_show(ctx:context, width:int) -> str|None:
 			continue
 		if not is_archived and only_archived:
 			continue
-		has_episodes_seen = len(get_meta(series, 'seen', {})) > 0
+		has_episodes_seen = len(meta_get(series, meta_seen_key, {})) > 0
 		if only_started and not has_episodes_seen:
 			continue
 		if only_planned and has_episodes_seen:
@@ -512,13 +463,11 @@ setattr(cmd_show, 'help', _show_help)
 
 
 def cmd_calendar(ctx:context, width:int) -> str|None:
-	# in this case, there's not a lot to be gained by deferring the refresh
-	refresh_series(ctx, width)
 
 	if ctx.command_arguments:
 		num_weeks = int(ctx.command_arguments[0])
 	else:
-		num_weeks = config_int('commands/calendar/num_weeks', 1)
+		num_weeks = config.get_int('commands/calendar/num_weeks', 1)
 
 	cal = Calendar(MONDAY)
 	today:date = date.today()
@@ -527,11 +476,14 @@ def cmd_calendar(ctx:context, width:int) -> str|None:
 	episodes_by_date:dict[date,list] = {}
 
 	# collect episodes over num_weeks*7
-	#   using margin of one extra week, b/c it's simpler
+	#   using margin of one extra week, because it's simpler
 	end_date = today + timedelta(days=(num_weeks + 1)*7)
 	for series_id, series in ctx.db.items():
-		if has_meta(series, 'archived'):
+		if meta_has(series, 'archived'):
 			continue
+
+		if is_stale(series):
+			refresh_series(ctx, width)
 
 		# faster to loop backwards?
 		for ep in series.get('episodes', []):
@@ -609,7 +561,7 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str|None:
 	if not ctx.command_arguments:
 		return 'required argument missing: <title> / <Series ID>'
 
-	max_hits = int(ctx.command_options.get('search:max-hits') or 0) or config_int('lookup/max-hits')
+	max_hits = int(ctx.command_options.get('search:max-hits') or 0) or config.get_int('lookup/max-hits')
 
 	height = term_size()[1]
 	# 'Found...' + divider above overview + divider below overview + "status bar"
@@ -663,7 +615,7 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str|None:
 		if already:
 			print(f'{_f}Already added: %d{_00}' % len(already))
 			for new_series in already:
-				if has_meta(ctx.db[new_series['id']], 'archived'):
+				if meta_has(ctx.db[new_series['id']], 'archived'):
 					arch_tail = f'  \x1b[33m(archived){_00}'
 				else:
 					arch_tail = None
@@ -709,14 +661,13 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str|None:
 	new_series = hits[selected]
 	series_id = new_series['id']
 
-	new_series[meta_key] = {}
-	set_meta(new_series, 'seen', {})
-	set_meta(new_series, 'added', now())
+	meta_set(new_series, 'seen', {})
+	meta_set(new_series, 'added', now())
 
 	# assign 'list index', and advance the global
-	next_list_index = get_meta(ctx, 'next_list_index')
-	set_meta(new_series, 'list_index', next_list_index)
-	set_meta(ctx, 'next_list_index', next_list_index + 1)
+	next_list_index = meta_get(ctx.db, meta_next_list_index_key)
+	meta_set(new_series, meta_list_index_key, next_list_index)
+	meta_set(ctx.db, meta_next_list_index_key, next_list_index + 1)
 
 	new_series.pop('id', None)
 
@@ -727,7 +678,7 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str|None:
 
 	# TODO: offer to mark seasons as seen?
 
-	save_series_db(ctx)
+	db.save(ctx.db)
 
 	print(f'{_b}Series added:{_00}')
 
@@ -905,7 +856,7 @@ def cmd_delete(ctx:context, width:int) -> str | None:
 	# delete it
 
 	del ctx.db[series_id]
-	save_series_db(ctx)
+	db.save(ctx.db)
 
 	print(f'{_b}Series deleted:{_b}')
 	print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width)
@@ -985,7 +936,7 @@ def cmd_mark(ctx:context, width:int, marking:bool=True) -> str | None:
 		except:
 			return f'Bad episode number/range: {episode}'
 
-	seen = get_meta(series, 'seen', {})
+	seen = meta_get(series, meta_seen_key, {})
 
 	episodes = []
 	episodes_runtime = 0
@@ -1014,7 +965,7 @@ def cmd_mark(ctx:context, width:int, marking:bool=True) -> str | None:
 		print('Unmarked ', end='')
 
 	print(f'{_c}{len(episodes)}{_00}', end='')
-	print(f' episode{_plural(episodes)} as seen:  {_00}{_f}{fmt_duration(episodes_runtime)}{_00}')
+	print(f' episode{plural(episodes)} as seen:  {_00}{_f}{fmt_duration(episodes_runtime)}{_00}')
 
 	print_series_title(index, series, width, imdb_id=series.get('imdb_id'))
 
@@ -1023,7 +974,7 @@ def cmd_mark(ctx:context, width:int, marking:bool=True) -> str | None:
 	for ep in episodes:
 		print('  %s' % format_episode_title(None, ep, include_season=True, width=width - 2))
 
-	is_archived = has_meta(series, 'archived')
+	is_archived = meta_has(series, 'archived')
 
 	if marking and series.get('status') in ('ended', 'canceled') and not is_archived:
 		seen, unseen = seen_unseen_episodes(series)
@@ -1039,7 +990,7 @@ def cmd_mark(ctx:context, width:int, marking:bool=True) -> str | None:
 		ctx.command_arguments = [find_id]
 		return cmd_restore(ctx, width)
 
-	save_series_db(ctx)
+	db.save(ctx.db)
 
 	return None
 
@@ -1082,7 +1033,7 @@ def cmd_archive(ctx:context, width:int, archiving:bool=True) -> str | None:
 	if err is not None or series is None:
 		return err
 
-	currently_archived = has_meta(series, 'archived')
+	currently_archived = meta_has(series, 'archived')
 
 
 	if archiving == currently_archived:
@@ -1100,18 +1051,18 @@ def cmd_archive(ctx:context, width:int, archiving:bool=True) -> str | None:
 		if partly_seen:
 			print(' (abandoned)', end='')
 		print(f':{_00}')
-		set_meta(series, 'archived', now())
+		meta_set(series, 'archived', now())
 
 	else:
 		print(f'{_b}Series restored', end='')
 		if partly_seen:
 			print(' (resumed)', end='')
 		print(f':{_00}')
-		del_meta(series, 'archived')
+		meta_del(series, 'archived')
 
 	print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width)
 
-	save_series_db(ctx)
+	db.save(ctx.db)
 
 	return None
 
@@ -1135,9 +1086,9 @@ setattr(cmd_restore, 'help', _restore_help)
 
 def cmd_refresh(ctx:context, width:int) -> str|None:
 
-	max_age = ctx.command_options.get('max-age', default_max_refresh_age)
+	max_age = ctx.command_options.get('max-age', config.get_int('max-age'))
 	if max_age <= 0:
-		max_age = config_int('max-age')
+		max_age = config.get_int('max-age')
 
 	forced = bool(ctx.command_options.get('refresh:force'))
 
@@ -1159,7 +1110,7 @@ def cmd_refresh(ctx:context, width:int) -> str|None:
 		if num_episodes > 0:
 			print(f'{_f}Refreshed %d episodes across %d series [%.1fs].{_00}' % (num_episodes, num_series, time.time() - t0))
 
-		save_series_db(ctx)
+		db.save(ctx.db)
 
 	return None
 
@@ -1190,119 +1141,6 @@ def _help_help() -> None:
 setattr(cmd_help, 'help', _help_help)
 
 
-def get_meta(obj:dict|context, key:str, def_value:Any=None) -> Any:
-	if isinstance(obj, context):
-		return obj.db_meta.get(key, def_value)
-	return obj.get(meta_key, {}).get(key, def_value)
-
-def has_meta(obj:dict|context, key:str) -> bool:
-	return get_meta(obj, key, None) is not None
-
-def set_meta(obj:dict|context, key: str, value) -> None:
-	if isinstance(obj, context):
-		obj.db_meta[key] = value
-	else:
-		obj[meta_key][key] = value
-
-def del_meta(obj:dict|context, key: str) -> None:
-	if isinstance(obj, context):
-		obj.db_meta.pop(key, None)
-	else:
-		obj[meta_key].pop(key, None)
-
-
-PRG = basename(sys.argv[0])
-
-default_max_refresh_age = 2  # days
-default_max_hits = 10
-
-default_configuration = {
-	'paths': {
-		'series-db': None,  # defaulted in load_config()
-	},
-	'commands': {
-		'default': 'unseen',
-		'calendar': {
-			'num_weeks': 1,
-		},
-	},
-	'max-age': default_max_refresh_age,
-	'lookup': {
-		'api-key': None,
-		'max-hits': default_max_hits,
-	},
-	'debug': 0,
-}
-
-# type alias for type hints (should be recursive, but mypy doesn't support it)
-ConfigValue = str|int|float|dict|list
-
-def config_get(path:str, default_value:ConfigValue|None=None, convert=None) -> ConfigValue|None:
-	# path: key/key/key
-	keys = path.split('/')
-
-	scope:dict|list|str|int|float|None = app_config
-	current:list[str] = []
-	for key in keys:
-		# print('cfg: %s + %s' % ('/'.join(current), key))
-		if not isinstance(scope, dict):
-			raise RuntimeError('Invalid path "%s"; not object at "%s", got %s (%s)' % (path, '/'.join(current), scope, type(scope).__name__))
-
-		scope = scope.get(key)
-		if scope is None:
-			break
-
-		current.append(key)
-
-	if scope is None:
-		scope = default_value
-
-	if convert is not None:
-		scope = convert(scope)
-
-	return scope
-
-def config_int(path:str, default_value:int=0) -> int:
-	v = config_get(path, default_value)
-	if isinstance(v, (str, int)):
-		return int(v)
-	return default_value
-
-def config_bool(path:str, default_value:bool=False) -> bool:
-	v = config_get(path, default_value)
-	if isinstance(v, (str, bool)):
-		return bool(v)
-	return default_value
-
-
-def config_set(path:str, value:Any) -> None:
-	keys = path.split('/')
-
-	ValueType = dict[str, Any]|list|str|int|float|None  # mypy doesn't support recursive type hints
-
-	scope:ValueType = app_config
-	if not isinstance(scope, dict): # to shut mypy up
-		return None
-
-	current:list[str] = []
-	while keys:
-		key = keys.pop(0)
-
-		if not keys:  # leaf key
-			scope[key] = value
-			break
-
-		new_scope = scope.get(key)
-		if new_scope is None:  # missing key object
-			scope[key] = {}
-
-		if not isinstance(new_scope, dict): # exists, but is not an object
-			raise RuntimeError('Invalid path "%s"; not object at "%s", got %s (%s)' % (path, '/'.join(current), scope, type(new_scope).__name__))
-
-		scope = new_scope
-		current.append(key)
-
-
 # known commands with aliases
 known_commands:dict[str,dict] = {
 	'search':  { 'alias': ('s', ),      'handler': cmd_search,   'help': 'Search for a series.' },
@@ -1322,7 +1160,7 @@ known_commands:dict[str,dict] = {
 
 
 def _set_debug(value):
-	config_set('debug', bool(value))
+	config.set('debug', bool(value), dirty=False)
 
 def _valid_int(a:int, b:int) -> Callable[[int], bool]:
 	assert(a <= b)
@@ -1338,7 +1176,7 @@ __opt_max_hits = {
 		'name': '-n',
 		'arg': int,
 		'validator': _valid_int(1, 40),
-		'help': 'Limit number of hits [1-40] (default: %d)' % default_max_hits,
+		'help': 'Limit number of hits [1-40] (default: %d)' % config.get_int('max-hits'),
 	}
 }
 
@@ -1370,7 +1208,7 @@ command_options = {
 	},
 	'refresh': {
 		'refresh:force': { 'name': ('-f', '--force'),         'help': 'Refresh whether needed or not' },
-		'max-age':       { 'name': '--max-age',  'arg': int,  'help': 'Refresh older than N days (default: %s)' % default_max_refresh_age },
+		'max-age':       { 'name': '--max-age',  'arg': int,  'help': 'Refresh older than N days (default: %s)' % config.get_int('max-age') },
 	},
 	'add': {
 		**__opt_max_hits,
@@ -1585,21 +1423,18 @@ def episodes_by_key(series:dict, keys:list) -> list:
 
 
 def no_series(db:dict, filtering:bool=False) -> str:
-	num_archived = series_num_archived(db)
-	suffix = f'Use: {_b}%s add <title search...> [<year>]{_00}' % PRG
-	precision = 'matched ' if filtering else ''
-	if num_archived:
-		return 'No series %s[%d archived]. %s' % (precision, num_archived, suffix)
-	else:
-		return 'No series added. %s' % suffix
+
+	if len(db) <= 1:
+		return f'No series added.  Use: {_b}%s add <title search...> [<year>]{_00}' % PRG
+
+	precision = ' matched' if filtering else ''
+	return 'No series%s.' % precision
 
 
 def refresh_series(ctx:context, width:int, subset:list|None=None, max_age:int|None=None) -> tuple[int, int]:
 
-	db = ctx.db
-
-	subset = subset or list(db.keys())
-	max_age = (max_age or config_int('max-age'))*3600*24
+	subset = subset or list(ctx.db.keys())
+	max_age = (max_age or config.get_int('max-age'))*3600*24
 
 	forced = max_age < 0
 
@@ -1608,7 +1443,7 @@ def refresh_series(ctx:context, width:int, subset:list|None=None, max_age:int|No
 	earliest_refresh = now_datetime() + timedelta(days=1)  # in the future: guarantee to be set below
 
 	for series_id in subset:
-		series = db[series_id]
+		series = ctx.db[series_id]
 
 		stale, last_updated = is_stale(series, max_age)
 		if forced or stale:
@@ -1634,22 +1469,22 @@ def refresh_series(ctx:context, width:int, subset:list|None=None, max_age:int|No
 	# remember last update check (regardless whether there actually were any updates)
 	touched = 0
 	for series_id in to_refresh:
-		prev_update = get_meta(db[series_id], updated_key)
+		prev_update = meta_get(ctx.db[series_id], meta_updated_key)
 		if prev_update:
 			stamp = spread_stamp(datetime.fromisoformat(prev_update), now_datetime())
 		else:
 			stamp = now_datetime()
-		set_meta(db[series_id], updated_key, stamp.isoformat(' '))
+		meta_set(ctx.db[series_id], meta_updated_key, stamp.isoformat(' '))
 		touched += 1
 
 	def mk_prog(total):
-		return new_progress(total, width=width - 2, bg_color=rgb('#404040'), bar_color=rgb('#686868'), text_color=rgb('#cccccc'))
+		return progress.new(total, width=width - 2, bg_color=rgb('#404040'), bar_color=rgb('#686868'), text_color=rgb('#cccccc'))
 
 
 	if not forced:
 		prog_bar = mk_prog(len(to_refresh))
 		print(f'\r{_00}{_K}%s{_EOL}' % prog_bar('Checking %d series for updates...' % len(to_refresh)), end='', flush=True)
-		# TODO: show 'spinner' during indeterminate state
+
 		def show_ch_progress(completed:int, *_) -> None:
 			print(f'\r{_K}%s{_EOL}' % prog_bar(completed, text='Checking updates...'), end='', flush=True)
 
@@ -1664,7 +1499,7 @@ def refresh_series(ctx:context, width:int, subset:list|None=None, max_age:int|No
 
 		if not to_refresh:
 			if touched:
-				save_series_db(ctx)
+				db.save(ctx.db)
 				return touched, 0  # only series affected, no episodes
 
 			return 0, 0
@@ -1688,23 +1523,22 @@ def refresh_series(ctx:context, width:int, subset:list|None=None, max_age:int|No
 	for series_id, (details, episodes) in zip(to_refresh_keys, result):
 		series = details
 		series['episodes'] = episodes
-		series[meta_key] = db[series_id].get(meta_key, {})
+		meta_copy(ctx.db[series_id], series)
+		meta_set(series, meta_updated_key, now_time)
 
-		set_meta(series, updated_key, now_time)
-
-		db[series_id] = series
+		ctx.db[series_id] = series
 
 		num_episodes += len(episodes)
 
 
 	if to_refresh:
-		save_series_db(ctx)
+		db.save(ctx.db)
 
 	return len(to_refresh), num_episodes
 
 
 def is_stale(item:dict, max_age_seconds:int=2*3600*24) -> tuple[bool, datetime|None]:
-	updated_stamp = get_meta(item, updated_key)
+	updated_stamp = meta_get(item, meta_updated_key)
 	if not updated_stamp:
 		return True, None
 
@@ -1914,7 +1748,7 @@ def print_series_details(index:int, series:dict, width:int, gray:bool=False) -> 
 		tail = f'    {_o}{_u}%s{_0}' % (imdb_url_tmpl % series["imdb_id"])
 	print_series_title(index, series, width, gray=gray, tail=tail)
 
-	print(f'    {_o}Added:{_0}', get_meta(series, 'added'))
+	print(f'    {_o}Added:{_0}', meta_get(series, meta_added_key))
 	print_archive_status(series)
 
 	overview = textwrap.wrap(series['overview'], width=width, initial_indent=' '*15)
@@ -1958,12 +1792,12 @@ def print_series_details(index:int, series:dict, width:int, gray:bool=False) -> 
 
 
 def print_archive_status(series:dict) -> None:
-	if has_meta(series, 'archived'):
+	if meta_has(series, 'archived'):
 		print(f'{_f}       Archived', end='')
 		seen, unseen = seen_unseen_episodes(series)
 		if seen and unseen:  # some has been seen, but not all
 			print(' / Abandoned', end='')
-		print('  ', get_meta(series, 'archived').split()[0], end='')
+		print('  ', meta_get(series, meta_archived_key).split()[0], end='')
 		print(f'{_0}')
 
 
@@ -1989,182 +1823,25 @@ def fmt_duration(seconds: int|float, roughly: bool=False):
 	parts = []
 
 	if months > 0:
-		parts.append(templ % (months, unit['m'], _plural(months if roughly else 1)))
+		parts.append(templ % (months, unit['m'], plural(months if roughly else 1)))
 	elif weeks > 0:
-		parts.append(templ % (weeks, unit['w'], _plural(weeks if roughly else 1)))
+		parts.append(templ % (weeks, unit['w'], plural(weeks if roughly else 1)))
 
 	if not roughly or (not months and not weeks):
 		if days > 0:
-			parts.append(templ % (days, unit['d'], _plural(days if roughly else 1)))
+			parts.append(templ % (days, unit['d'], plural(days if roughly else 1)))
 
 	if not roughly:
 		if hours > 0:
-			parts.append(templ % (hours, unit['h'], _plural(hours if roughly else 1)))
+			parts.append(templ % (hours, unit['h'], plural(hours if roughly else 1)))
 		if minutes or (hours > 0 or seconds > 0):
-			parts.append(templ % (minutes, unit['min'], _plural(minutes if roughly else 1)))
+			parts.append(templ % (minutes, unit['min'], plural(minutes if roughly else 1)))
 		if seconds:
-			parts.append(templ % (seconds, unit['s'], _plural(seconds if roughly else 1)))
+			parts.append(templ % (seconds, unit['s'], plural(seconds if roughly else 1)))
 
 	return ' '.join(parts)
 
 
-def new_progress(total:int|float, width:int, bar_color:int|str|None=None, bg_color:int|str=4, text_color:str|int|None=None, l_info:Callable|None=None, r_info: Callable|None=None):
-	"""
-	:param total: Total number of items to process (e.g. 100)
-	:param width: Render width
-	:param color: Bar color.
-	:param bg_color: Bar background color, default: blue.
-	:param text_color: Color of text inside bar.
-	:param r_info: Function that returns a formatted string for the right-side info text.
-	:return: Rendered progress bar string.
-	Returns a function that, when called, returns a printable progress bar.
-	This function should be kept self-contained (to make it easier to copy, could arguably be a separate package...)
-	"""
-	#print(f'new_progress: total:{total} width:{width} bg_color:{bg_color} text_color:{text_color} fmt_info:{fmt_info}')
-
-	bar_ch = ('▏', '▎', '▍', '▌', '▋', '▊', '▉')
-
-
-	def _default_linfo(c, t):
-		if not isinstance(c, (int, float)) or t is None:
-			return '  ? '
-		else:
-			percent = int(float(c)/float(t) * 100)
-			return '%3.0f%%' % percent
-
-	if l_info is None:
-		l_info = _default_linfo
-
-	rinfo_w = len(str(total))
-	def _default_rinfo(c, t):
-		if not isinstance(c, (int, float)) or t is None:
-			c = '?'
-			t = '?'
-		return f'{c:>{rinfo_w}}/{t:<{rinfo_w}}'
-
-	if r_info is None:
-		r_info = _default_rinfo
-
-	CLR = '\x1b[K'   # clear to end-of-line
-	INV = '\x1b[7m'  # video inversion
-	RST = '\x1b[m'   # reset all attributes
-	DIM = '\x1b[2m'  # faint/dim color
-	SAVE = '\x1b[s'  # save cursor position
-	LOAD = '\x1b[u'  # restore saved cursor position
-
-
-	bar_0 = ''
-	bar_1 = RST
-	bar_head = f'\x1b[4{bg_color}m'
-
-	if bar_color is not None:
-		bar_0 = f'\x1b[3{bar_color}m'  # will use inversion
-		bar_head = bar_0 + bar_head    # no inversion
-
-	text_0 = bar_0
-	text_1 = bar_0
-
-	if text_color is not None:
-		if bar_color:
-			text_0 = f'\x1b[4{text_color};3{bar_color}m'  # w/ inversion
-		else:
-			text_0 = f'\x1b[4{text_color}m'               # w/ inversion
-
-
-	def _replace_reps(s, find, repl):
-		ptn = re.compile(r'(%s+)' % find)
-
-		def replacer(m):
-			count = len(m.group(1))/len(find)
-			return repl % { 'n': count, 's': m.group(1) }
-
-		return ptn.sub(replacer, s)
-
-	left_margin = 1  # >= 1
-	right_margin = 1 # >= 1
-
-	left_pad = ' '*(left_margin - 1) + '▕'
-	right_pad = '▏' + ' '*(right_margin - 1)
-
-	def gen(curr:int|float|str|None, text=None):
-
-		ltotal:int|float|None = total
-		lwidth = width
-
-		# if 'curr' is a string, show an "indeterminate" progress bar
-		is_indeterminate = isinstance(curr, str)
-
-		if is_indeterminate:
-			text = curr
-			curr = None
-			ltotal = None
-
-		left_info = l_info(curr, ltotal)   # type: ignore
-		right_info = r_info(curr, ltotal)  # type: ignore
-
-		linfo_w = 4 + left_margin  # ' 42% '
-		lwidth -= linfo_w + right_margin + len(right_info)
-
-		if is_indeterminate:
-			bar_w = lwidth
-		else:
-			completed = curr/ltotal # type: ignore
-			bar_w = int(completed*lwidth)  # number of completed segments
-
-		# widths of completed (head) and remaining (tail) segments
-		int_w = int(bar_w)
-		head = bar_ch[int((bar_w % 1)*len(bar_ch))]
-		tail_w = lwidth - int_w - 1
-
-		opt_text = ''
-		if text:
-			text_done = _replace_reps(text[:int(bar_w)], ' ', '\x1b[%(n)dC')
-			text_todo = _replace_reps(text[int(bar_w):], ' ', '\x1b[%(n)dC')
-
-			opt_text = ''
-			if text_done:
-				opt_text += f'{INV}{text_0}{text_done}{text_1}'
-			if text_todo:
-				opt_text += f'{RST}{bar_head}{text_todo}'
-			if opt_text:
-				opt_text += LOAD
-
-		last_bar = ''.join([
-				CLR,
-				# display 'left info'
-				DIM,
-				left_info,
-				bar_0,
-				left_pad,
-				SAVE,
-				# completed bar segments
-				INV,
-				' '*int_w,
-				bar_1,
-				# the "head" segment (single cell, partially completed)
-				bar_head, head,
-				# remaining bar segments
-				(f'%{tail_w}s' % '') if tail_w else '',
-				LOAD,
-				opt_text,          # ends with LOAD if non-empty
-				f'\x1b[{lwidth}C',  # move to right edge
-				bar_0, right_pad,
-				RST,
-				# display 'right info'
-				DIM,
-				right_info,
-				RST,
-		])
-		#print('BAR:', last_bar.replace('\x1b', 'Σ').replace('\r', 'ΣR').replace('Σ', '\x1b[35;1mΣ\x1b[m'))
-		return last_bar
-
-	gen.__name__ = 'progress_bar'
-	gen.__doc__ = '''Return a rendered progress bar at 'curr' (of 'total') progress.'''
-
-	setattr(gen, 'total', total)
-	setattr(gen, 'width', width)
-
-	return gen
 
 
 def strip_ansi(s: str):
@@ -2228,25 +1905,32 @@ def print_seen_status(series:dict, gray: bool=False, summary=True, next=True, la
 
 
 def series_num_archived(db:dict) -> int:
-	return sum(1 if has_meta(series, 'archived') else 0 for series in db.values())
+	return sum(1 if meta_has(series, 'archived') else 0 for series in db.values())
 
 
 def get_series(db:dict, archived:bool|None=None, index=None, match=None) -> list[tuple[int, str]]:
 
-	series_ids = sorted(db, key=lambda sid: (db[sid]['title'].casefold(), db[sid].get('year', '')))
+	# create a predeterminally-sorted series ID list
+	series_ids = sorted(
+		(sid for sid in db if sid != meta_key),
+		key=lambda sid: (db[sid]['title'].casefold(), db[sid].get('year', '')),
+	)
 
 	series_list:list[tuple[int, str]] = []
 
 	find_index = index
 
 	for series_id in series_ids:
+		if series_id == meta_key:
+			continue
+
 		series = db[series_id]
 
-		is_archived = has_meta(series, 'archived')
+		is_archived = meta_has(series, 'archived')
 		if archived is not None and is_archived != archived:
 			continue
 
-		index = get_meta(series, 'list_index')
+		index = meta_get(series, meta_list_index_key)
 
 		# for clarity and consistency, we _skip_ non-matching entries (instead of adding matching ones)
 
@@ -2264,7 +1948,7 @@ def get_series(db:dict, archived:bool|None=None, index=None, match=None) -> list
 
 def seen_unseen_episodes(series:dict, before=None) -> tuple[list,list]:
 	episodes = series.get('episodes', [])
-	seen = get_meta(series, 'seen', {})
+	seen = meta_get(series, meta_seen_key, {})
 
 	seen_eps = []
 	unseen_eps = []
@@ -2284,23 +1968,6 @@ def seen_unseen_episodes(series:dict, before=None) -> tuple[list,list]:
 			unseen_eps.append(ep)
 
 	return seen_eps, unseen_eps
-
-
-_term_size = (0, 0)
-
-def term_size() -> tuple[int, int]:
-	global _term_size
-	if _term_size != (0, 0):
-		return _term_size
-
-	try:
-		stty = run(['stty', 'size'], capture_output=True)
-		stty_size = stty.stdout.decode('utf-8').split()
-		_term_size = (int(stty_size[1]), int(stty_size[0]))
-	except:
-		_term_size = (100, 60)
-
-	return _term_size
 
 
 def option_def(command:str|None, option:str|None=None):
@@ -2381,7 +2048,7 @@ def print_cmd_help_table():
 
 
 def print_usage(exit_code:int=0) -> None:
-	default_command = config_get('commands/default')
+	default_command = config.get('commands/default')
 
 	print(f'{_b}%s{_00} / {_b}Ep{_00}isode {_b}M{_00}anager / (c)2022 André Jonsson' % PRG)
 	print('Version %s (%s) ' % (VERSION, VERSION_DATE))
@@ -2397,12 +2064,12 @@ def print_usage(exit_code:int=0) -> None:
 	print(f'  # = Series listing number, e.g. as listed by the {_b}l{_00}ist command.')
 	print(f'  If an argument does not match a command, it will be used as argument to the default command.')
 	print(f'  Shortest unique prefix of a command is enough, e.g. "ar"  for "archive".')
-	if orjson is not None:
-		print(f'  {_f}Using {_b}orjson{_00}{_f} for faster load/save.')
+	if db.json_serializer() != 'json':
+		print(f'  {_f}Using {_b}{db.json_serializer()}{_00}{_f} for faster load/save.')
 	else:
 		print(f'  {_f}Install \'orjson\' for faster load/save{_00}')
-	if compressor:
-		print(f'  {_f}Using {_b}{compressor["binary"]}{_00}{_f} to compress database backups.')
+	if db.compressor():
+		print(f'  {_f}Using {_b}{db.compressor()}{_00}{_f} to compress database backups.')
 	if not tmdb.ok():
 		print(f'   {_c}NOTE: Need to set TMDb API key (TMDB_API_KEY environment){_00}')
 	sys.exit(exit_code)
@@ -2429,46 +2096,6 @@ def print_cmd_aliases(command:str) -> None:
 			return
 
 
-def warning_prefix(context_name=''):
-	if context_name:
-		return f'{_c}[{_00}{_b}{PRG} {context_name}{_c}]{_00}'
-	return f'{_c}[{_00}{_b}{PRG}{_c}]{_00}'
-
-
-def bad_cmd(cmd:str) -> None:
-	print(f'{warning_prefix()} Unknown command: {_E}%s{_00}' % cmd, file=sys.stderr)
-	sys.exit(1)
-
-def bad_opt(command:str|None, option:str) -> None:
-	print(f'{warning_prefix(command)} Unknown option: {option}', file=sys.stderr)
-	sys.exit(1)
-
-def bad_opt_arg(command:str|None, option, arg, arg_type:Callable|None, explain:str|None=None) -> None:
-	print(warning_prefix(command), end='', file=sys.stderr)
-
-	expected = None
-	if arg_type is not None:
-		expected = arg_type.__name__
-
-	if expected is None:
-		print(f' Unexpected argument for {option}: {_b}{arg}{_00}', file=sys.stderr, end='')
-	elif arg is None:
-		print(f' Required argument missing for {option}', file=sys.stderr, end='')
-	else:
-		print(f' Bad option argument for {option}: {_b}{arg}{_00}  %s expected' % expected, file=sys.stderr, end='')
-
-	if explain:
-		print(',', explain, end='', file=sys.stderr)
-	print(file=sys.stderr)
-
-	sys.exit(1)
-
-
-def ambiguous_cmd(name:str, matching:list[str]) -> None:
-	print(f'{warning_prefix()} Ambiguous command: {_E}%s{_00}  matches: %s' % (name, f'{_o},{_00} '.join(sorted(matching))), file=sys.stderr)
-	sys.exit(1)
-
-
 def now() -> str:
 	return now_datetime().isoformat(' ', timespec='seconds')
 
@@ -2479,329 +2106,6 @@ def now_datetime() -> datetime:
 	if _now_datetime is None:
 		_now_datetime = datetime.now()
 	return _now_datetime
-
-
-app_config = {}
-
-def read_json(filepath) -> dict:
-	if pexists(filepath) and psize(filepath) > 1:
-		if orjson is not None:
-			with open(filepath, 'rb') as fp:
-				return orjson.loads(fp.read())
-		else:
-			with open(filepath, 'r') as fp:
-				return json.load(fp)
-
-	return {}
-
-
-def write_json(filepath, data) -> Exception|None:
-	tmp_name = mkstemp(dir=dirname(filepath))[1]
-	try:
-		if orjson is not None:
-			with open(tmp_name, 'wb') as fpo:
-				fpo.write(orjson.dumps(data, option=orjson.OPT_INDENT_2 | orjson.OPT_SORT_KEYS))
-		else:
-			with open(tmp_name, 'w') as fps:
-				json.dump(data, fps, indent=2, sort_keys=True)
-
-		os.rename(tmp_name, filepath)
-
-	except Exception as e:
-		os.remove(tmp_name)
-		return e
-
-	return None
-
-
-def load_config() -> bool:
-	global app_config
-	app_config = read_json(app_config_file)
-
-	config = {**default_configuration}
-	config.update(app_config)
-	app_config = config
-
-	db_file = config_get('paths/series-db')
-	if not db_file or not isinstance(db_file, str):
-		config_set('paths/series-db', pjoin(user_config_home, PRG, 'series'))
-
-	paths = app_config.get('paths', {})
-	if not isinstance(paths, dict):
-		raise RuntimeError(f'{warning_prefix()} Config key "paths" is not an object')
-
-	for key in paths.keys():
-		paths[key] = pexpand(paths[key])
-
-	return len(app_config) > 0
-
-
-def save_config():
-	err = write_json(app_config_file)
-	if err is not None:
-		print(f'{_E}ERROR{_00} Failed saving configuration: %s' % str(err))
-
-
-
-def load_series_db(ctx:context) -> bool:
-
-	db_file = str(config_get('paths/series-db'))
-
-	t0 = time.time()
-
-	db = {}
-
-	if pexists(db_file) and psize(db_file) > 1:
-		if orjson is not None:
-			with open(db_file, 'rb') as fp:
-				db = orjson.loads(fp.read())
-		else:
-			with open(db_file, 'r') as fp:
-				db = json.load(fp)
-
-	t1 = time.time()
-	if config_bool('debug'):
-		print(f'{_f}[load: %.1fms, version: %d]{_0}' % ((t1 - t0) * 1000, get_meta(db, 'version')))
-
-	modified = migrate_db(db)
-
-	ctx.db = db
-	ctx.db_meta = db.pop(meta_key)
-
-	if modified:
-		save_series_db(ctx)
-
-	return True
-
-
-def migrate_db(db:dict) -> bool:
-
-	modified = False
-
-	# no db meta data, yikes!
-	if meta_key not in db:
-		db[meta_key] = {}
-		modified = True
-
-	db_version = db[meta_key].get('version', 0)
-
-	# 1. migrate legacy series meta data
-	fixed_legacy_meta = 0
-	# 2. fix incorrectly written value to 'archived'
-	fixed_archived = 0
-
-	# remove meta data while migrating
-	meta_data = db.pop(meta_key, None)
-
-	for series_id, series in db.items():
-		if db_version == 0:
-			if meta_key not in series:
-				series[meta_key] = {
-					key: series.pop(key)
-					for key in legacy_meta_keys
-					if key in series
-				}
-				fixed_legacy_meta += 1
-
-			if get_meta(series, 'archived') == True:
-				# fix all "archived" values to be dates (not booleans)
-				seen = get_meta(series, 'seen')
-				last_seen = '0000-00-00 00:00:00'
-				# use datetime from last marked episode
-				for dt in seen.values():
-					if dt > last_seen:
-						last_seen = dt
-
-				set_meta(series, 'archived', last_seen)
-				fixed_archived += 1
-
-	if db_version < 2:
-		# assign 'list_index' ordered by "added" time
-		list_index = 1
-		for series in sorted(db.values(), key=lambda series: get_meta(series, 'added')):
-			set_meta(series, 'list_index', list_index)
-			list_index += 1
-		modified = True
-
-	# restore meta data
-	db[meta_key] = meta_data
-
-	# if no version exists, set to current version
-	if db_version != DB_VERSION:
-		print(f'{_f}Set DB version: %s -> %s{_0}' % (get_meta(db, 'version'), DB_VERSION))
-		set_meta(db, 'version', DB_VERSION)
-		modified = True
-
-	if db_version < 2:
-		set_meta(db, 'next_list_index', list_index)
-		print(f'{_f}Built list indexes for all %d series, next index: %d{_0}' % (len(db), list_index))
-		modified = True
-
-	if fixed_legacy_meta:
-		print(f'{_f}Migrated legacy meta-data of %d series{_0}' % fixed_legacy_meta)
-		modified = True
-
-	if fixed_archived:
-		print(f'{_f}Fixed bad "archived" value of %d series{_0}' % fixed_archived)
-		modified = True
-
-	return modified
-
-
-compressor:dict|None = None
-compressors:list[dict[str,str|list[str]]] = [
-	{
-		'binary': 'zstd',
-		'args': ['-10', '-q', '-T0'],
-		'extension': '.zst',
-	},
-	{
-		'binary': 'lz4',
-		'args': ['-9', '-q'],
-	},
-	{
-		'binary': 'gzip',
-		'args': ['-8', '-q'],
-		'extension': '.gz',
-	},
-	{
-		'binary': 'xz',
-		'args': ['-2', '-q', '-T', '0'],
-	}
-]
-
-import shutil
-for method in compressors:
-	if shutil.which(method['binary']): # type: ignore
-		compressor = method
-		break
-
-# TODO: 'mk_backup' should return a waitable promise (so we can do it in parallel with the serialization)
-
-def mk_uncompressed_backup(source:str, destination:str) -> bool:
-	os.rename(source, destination)
-	return True
-
-if compressor:
-	def mk_backup(source:str, destination:str) -> bool:
-
-		# copy file access & mod timestamps from source
-		file_info = os.stat(source)
-
-		destination += compressor.get('extension', compressor['binary']) # type: ignore
-
-		try:
-			command_line = [compressor['binary']] + compressor['args'] # type: ignore
-
-			infp = open(source, 'rb')
-			outfp = open(destination, 'wb')
-
-			comp = run(command_line, stdin=infp, stdout=outfp, universal_newlines=False)
-			success = comp.returncode == 0
-
-			if success:
-				# file compressed into destination, we can safely remove the source(s)
-				os.remove(source)
-			else:
-				# compression failed, just fall back to uncomrpessed
-				print(f'[{warning_prefix()}] Compression failed: {source} -> {destination}: {comp.returncode}', file=sys.stderr)
-				mk_uncompressed_backup(source, destination)
-
-			# copy timestamps from source file
-			os.utime(destination, (file_info.st_atime, file_info.st_mtime))
-
-		except Exception as e:
-			print(f'{_E}ERROR{_00} Failed compressing database backup: %s' % str(e))
-			os.rename(source, destination)
-			success = False
-
-		return success
-
-else:
-	mk_backup = mk_uncompressed_backup
-
-def save_series_db(ctx:context) -> None:
-
-	# print('SAVE DISABLED')
-	# import inspect
-	# frames = inspect.stack()[1:3]
-	# for fr in frames:
-	# 	fname = basename(fr.filename)
-	# 	print(f' from {_b}{fr.function}{_o}(){_0}  {_f}{fname}{_c}:{_0}{_f}{fr.lineno}{_0}')
-	# return
-
-	db_file = str(config_get('paths/series-db'))
-
-	if not pexists(db_file):
-		os.makedirs(dirname(db_file), exist_ok=True)
-
-	def backup_name(idx) -> str:
-		return '%s.%d' % (db_file, idx)
-
-
-	# write to a temp file and then rename it afterwards
-	tmp_name = mkstemp(dir=dirname(db_file))[1]
-	try:
-		db = ctx.db
-		# put meta data "inline" for saving
-		db[meta_key] = ctx.db_meta
-
-		if orjson is not None:
-			with open(tmp_name, 'wb') as fpo:
-				fpo.write(orjson.dumps(db, option=orjson.OPT_INDENT_2 | orjson.OPT_SORT_KEYS))
-		else:
-			with open(tmp_name, 'w') as fps:
-				json.dump(db, fps, indent=2, sort_keys=True)
-
-		# remove the meta data afterwards
-		db.pop(meta_key, None)
-
-		# rotate backups
-		for idx in range(num_config_backups - 1, 0, -1):
-			if pexists(backup_name(idx)):
-				os.rename(backup_name(idx), backup_name(idx + 1))
-
-		# current file becomes first backup (<name>.1)
-		# TODO: spawn background process to compress to make it appear faster?
-		#   might run into (more) race-conditions of course
-
-		# backup existing(old) db file to 'series.1'
-		mk_backup(db_file, backup_name(1))
-
-		os.rename(tmp_name, db_file)
-
-	except Exception as e:
-		print(f'{_E}ERROR{_00} Failed saving series database: %s' % str(e))
-		os.remove(tmp_name)
-
-
-def _plural(n: int | list | tuple | dict) -> str:
-	if isinstance(n, (list, tuple, dict)):
-		N = len(n)
-	else:
-		N = n
-	return '' if N == 1 else 's'
-
-def pexpand(p):
-	return expanduser(expandvars(p))
-
-
-_00 = '\x1b[m'     # normal (reset all)
-_0 = '\x1b[22;23;24;39m' # normal FG style
-_0B = '\x1b[49m'  # normal BG color
-_b = '\x1b[1m'     # bold
-_f = '\x1b[2m'     # faint
-_i = '\x1b[3m'     # italic
-_fi = '\x1b[2;3m'  # faint & italic
-_u = '\x1b[4m'     # underline
-_g = '\x1b[32;1m'  # good/green
-_c = '\x1b[33;1m'  # command
-_o = '\x1b[34;1m'  # option
-_K = '\x1b[K'      # clear end-of-line
-_E = '\x1b[41;97;1m' # ERROR (white on red)
-_EOL = '\x1b[666C' # move far enough to the right to hit the edge
-_S = '\x1b[s'      # save cursor position
-_L = '\x1b[u'      # load/restore saved cursor position
 
 
 def rgb(*args):
@@ -2820,13 +2124,70 @@ def rgb(*args):
 	return f'8;2;{r};{g};{b}'
 
 
+# https://github.com/sindresorhus/cli-spinners/blob/main/spinners.json
+spinner_frames = [
+	"⢀⠀",
+	"⡀⠀",
+	"⠄⠀",
+	"⢂⠀",
+	"⡂⠀",
+	"⠅⠀",
+	"⢃⠀",
+	"⡃⠀",
+	"⠍⠀",
+	"⢋⠀",
+	"⡋⠀",
+	"⠍⠁",
+	"⢋⠁",
+	"⡋⠁",
+	"⠍⠉",
+	"⠋⠉",
+	"⠋⠉",
+	"⠉⠙",
+	"⠉⠙",
+	"⠉⠩",
+	"⠈⢙",
+	"⠈⡙",
+	"⢈⠩",
+	"⡀⢙",
+	"⠄⡙",
+	"⢂⠩",
+	"⡂⢘",
+	"⠅⡘",
+	"⢃⠨",
+	"⡃⢐",
+	"⠍⡐",
+	"⢋⠠",
+	"⡋⢀",
+	"⠍⡁",
+	"⢋⠁",
+	"⡋⠁",
+	"⠍⠉",
+	"⠋⠉",
+	"⠋⠉",
+	"⠉⠙",
+	"⠉⠙",
+	"⠉⠩",
+	"⠈⢙",
+	"⠈⡙",
+	"⠈⠩",
+	"⠀⢙",
+	"⠀⡙",
+	"⠀⠩",
+	"⠀⢘",
+	"⠀⡘",
+	"⠀⠨",
+	"⠀⢐",
+	"⠀⡐",
+	"⠀⠠",
+	"⠀⢀",
+	"⠀⡀"
+]
+
 imdb_url_tmpl = 'https://www.imdb.com/title/%s'
 
 today_date = date.today()
 
-updated_key = 'updated'
-meta_key = 'epm:meta'
-legacy_meta_keys = ('added', updated_key, 'seen', 'archived')
 ignore_changes = (
 	'images',
 	'videos',
@@ -2836,14 +2197,6 @@ ignore_changes = (
 	'homepage',
 	'user_review_count',
 )
-
-user_config_home = os.getenv('XDG_CONFIG_HOME') or pexpand(pjoin('$HOME', '.config'))
-app_config_file = pjoin(user_config_home, PRG, 'config')
-num_config_backups = 10
-
-DB_VERSION = 2
-
-from episode_manager import tmdb
 
 def main():
 	try:
