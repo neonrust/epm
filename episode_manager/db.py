@@ -22,6 +22,9 @@ def load() -> dict:
 
 	t0 = time.time()
 
+	if not db_file or not pexists(dirname(db_file)):
+		raise RuntimeError('Invalid series db file path: %r' % db_file)
+
 	db = read_json(db_file)
 
 	t1 = time.time()
