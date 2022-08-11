@@ -4,11 +4,11 @@
 
 [tool.poetry]
 name = "episode-manager"
-version = "0.9-1"
+version = "0.11-1"
 description = "Keep track of your episode viewing and schedule."
 readme = "README.md"
 authors = [
-  "André Jonsson <pythonator@gmail.com>"
+  "André Jonsson <episode-manager@0x1.se>"
 ]
 license = "MIT"
 classifiers = [
