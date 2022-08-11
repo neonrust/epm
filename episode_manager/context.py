@@ -7,7 +7,12 @@ class BadUsageError(RuntimeError):
 
 
 class context:
-	def __init__(self):
+	def __init__(self, eo:Callable, rc:Callable):
+		self.debug:bool = False
+
+		self._eat_option = eo
+		self._resolve_cmd = rc
+
 		self.global_options = {
 			'debug': config.get_bool('debug', False),
 		}
@@ -41,7 +46,8 @@ class context:
 		while args:
 			arg = args.pop(0)
 
-			# print('check arg: "%s"' % arg)
+			if self.debug:
+				print('check arg: "%s"' % arg)
 
 			if arg.startswith('-'):
 				if not self.command:
@@ -49,59 +55,64 @@ class context:
 						raise BadUsageError()
 
 					# attempt to interpret as a global option
-					# print('  try global opt: "%s"' % arg)
-					if self.eat_option(None, arg, args, self.global_options, unknown_ok=True):
-						# print('  -> global opt:', arg)
+					if self.debug:
+						print('  try global opt: "%s"' % arg)
+					if self._eat_option(None, arg, args, self.global_options, unknown_ok=True):
+						if self.debug:
+							print('  -> global opt:', arg)
 						continue
 
-					self._set_command(default_command)
-					# print('  -> cmd: %s (default)' % self.command)
+					self.set_command(default_command)
+					if self.debug:
+						print('  -> cmd: %s (default)' % self.command)
 
-				# print('  opt:', arg, '(cmd: %s)' % self.command)
-				self.eat_option(self.command, arg, args, self.command_options)  # will exit if not correct
+				if self.debug:
+					print('  opt:', arg, '(cmd: %s)' % self.command)
+
+				self._eat_option(self.command, arg, args, self.command_options)  # will exit if not correct
 				continue
 
 			if not self.command and not arg.startswith('.'):
-				# print('  try cmd: "%s"' % arg)
-				cmd = self.resolve_cmd(arg)
+				if self.debug:
+					print('  try cmd: "%s"' % arg)
+				cmd = self._resolve_cmd(arg)
 				if cmd:
-					self._set_command(cmd)
-					# print('  -> cmd = %s' % self.command)
+					self.set_command(cmd)
+					if self.debug:
+						print('  -> cmd = %s' % self.command)
 					continue
 
 			if not self.command:
 				if arg.startswith('.'):
 					arg = arg[1: ]
 
-				self._set_command(default_command)
-				# print('  -> cmd = %s (default)' % self.command)
+				self.set_command(default_command)
+				if self.debug:
+					print('  -> cmd = %s (default)' % self.command)
 
 			if self.command:
 				self._add_argument(arg)
-				# print('  -> "%s" [%s]' % (self.command, ' '.join(self.command_arguments)))
+				if self.debug:
+					print('  -> "%s" [%s]' % (self.command, ' '.join(self.command_arguments)))
 
 			else:
 				raise RuntimeError('Bug: unhandled argument: "%s"' % arg)
 
 
 		if not self.command:
-			self._set_command(default_command)
+			self.set_command(default_command)
 
 		if self.command == 'help':
 			raise BadUsageError()
 
 
-	def _set_command(self, name:str) -> None:
+	def set_command(self, name:str, apply_args:bool=True) -> None:
 		self.command = name
 
-		# insert configured default arguments and options
-		args = config.get('commands/%s/default_arguments' % self.command, [])
-		if args and isinstance(args, list):
-			self.command_arguments = args
-
-		opts = config.get('commands/%s/default_options' % self.command, [])
-		while isinstance(opts, list) and opts:
-			self.eat_option(self.command, opts.pop(0), opts, self.command_options)
+		if apply_args:
+			# insert configured arguments
+			args = config.get('commands/%s/arguments' % self.command, [])
+			self.parse_args(args)
 
 
 	def _add_argument(self, argument:str) -> None:
@@ -110,8 +121,5 @@ class context:
 	def _no_command(self, *a, **kw):
 		raise RuntimeError('no command set')
 
-	def resolve_cmd(self, *a, **kw):
-		raise RuntimeError('resolve_cmd not set')
-
-	def eat_option(self, *a, **kw):
-		raise RuntimeError('eat_option not set')
+	def __str__(self) -> str:
+		return '[CTX "%s" %s %s]' % (self.command, self.command_options, self.command_arguments)

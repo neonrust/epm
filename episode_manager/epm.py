@@ -43,10 +43,8 @@ def start():
 	if api_key:
 		tmdb.set_api_key(api_key)
 
-	ctx = context()
-	# we do this to avoid import cycle
-	ctx.eat_option = eat_option
-	ctx.resolve_cmd = resolve_cmd
+	# we set these functions to avoid import cycle
+	ctx = context(eat_option, resolve_cmd)
 
 	try:
 		ctx.parse_args(sys.argv[1: ])
