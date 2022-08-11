@@ -1,6 +1,7 @@
 #! /usr/bin/env python3
 # -*- mode: python -*-
 import re
+import shlex
 import time
 import atexit
 from datetime import datetime, date, timedelta
@@ -15,6 +16,7 @@ from . import tmdb
 from . import progress
 from .context import context, BadUsageError
 from . import config, utils, db
+from .config import  STORE_MEMORY
 from .utils import term_size, warning_prefix, plural
 from .db import meta_get, meta_set, meta_has, meta_del, meta_copy, meta_key, meta_seen_key, meta_archived_key, meta_added_key, meta_updated_key, meta_list_index_key, meta_next_list_index_key
 from .styles import _0, _00, _0B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _L, _S, _u, _EOL
@@ -130,8 +132,8 @@ def eat_option(command:str|None, option:str, args:list[str], options:dict, unkno
 
 	# print('arg type:', arg_type.__name__)
 
-	if not arg_type:
-		if option_arg:
+	if not arg_type:  # no argument expected
+		if option_arg:  # but an argument was supplied
 			bad_opt_arg(command, option, option_arg, None)
 
 		set_func(True)
@@ -150,34 +152,28 @@ def eat_option(command:str|None, option:str, args:list[str], options:dict, unkno
 
 		arg_str = str(option_arg)  # for mypy
 
-		validator = opt_def.get('validator', lambda _: True)
+		validator = opt_def.get('validator', lambda v: v)
+		validator_explain = validator.__doc__ or ''
 
-		if arg_type is str:
-			set_func(arg_str)
-
-		elif arg_type is int:
-			try:
-				i = int(arg_str)
-				if not validator(i):
-					bad_opt_arg(command, option, arg_str, arg_type, validator.__doc__)
-				set_func(i)
-			except ValueError:
-				bad_opt_arg(command, option, arg_str, arg_type)
-
-		elif arg_type is datetime:
+		if arg_type is datetime:
 			try:
 				d = datetime.fromisoformat(arg_str)
-				if not validator(d):
-					bad_opt_arg(command, option, arg_str, arg_type, validator.__doc__)
+				d = validator(d)
+				if d is None:
+					raise ValueError
 				set_func(d)
 			except ValueError:
-				bad_opt_arg(command, option, arg_str, arg_type)
-
-		elif not validator(arg_str):
-			bad_opt_arg(command, option, arg_str, arg_type, validator.__doc__)
+				bad_opt_arg(command, option, arg_str, arg_type, explain=validator_explain)
 
 		else:
-			raise NotImplementedError('Argument type %s' % arg_type.__name__)
+			try:
+				v = arg_type(arg_str)
+				v = validator(v)
+				if v is None:
+					raise ValueError
+				set_func(v)
+			except ValueError:
+				bad_opt_arg(command, option, arg_str, arg_type, explain=validator_explain)
 
 	return True
 
@@ -198,14 +194,18 @@ def bad_opt_arg(command:str|None, option, arg, arg_type:Callable|None, explain:s
 		expected = arg_type.__name__
 
 	if expected is None:
-		print(f' Unexpected argument for {option}: {_b}{arg}{_00}', file=sys.stderr, end='')
+		print(f' Unexpected argument for {_o}{option}{_0}: {_b}{arg}{_00}', file=sys.stderr, end='')
 	elif arg is None:
-		print(f' Required argument missing for {option}', file=sys.stderr, end='')
+		explain = ('; %s' % explain) if explain else ''
+		print(f' Required argument missing for {_o}{option}{_0}{explain}', file=sys.stderr, end='')
 	else:
-		print(f' Bad option argument for {option}: {_b}{arg}{_00}  %s expected' % expected, file=sys.stderr, end='')
+		print(f' Bad option argument for {_o}{option}{_0}: {_b}{arg}{_00}  ', file=sys.stderr, end='')
+		if arg_type is str:
+			print(f'(expected {explain})', file=sys.stderr, end='')
+		else:
+			explain = ('; %s' % explain) if explain else ''
+			print(f'({expected} expected{explain})', file=sys.stderr, end='')
 
-	if explain:
-		print(',', explain, end='', file=sys.stderr)
 	print(file=sys.stderr)
 
 	sys.exit(1)
@@ -1122,7 +1122,26 @@ setattr(cmd_refresh, 'help', _refresh_help)
 
 
 def cmd_config(ctx:context, width:int) -> str|None:
-	return 'Not implemented'
+	default_cmd = ctx.command_options.get('config:default_command')
+	if default_cmd:
+		config.set('commands/default', default_cmd)
+		print(f'Default command set: {_c}{default_cmd}{_0}')
+
+	default_args = ctx.command_options.get('config:default_arguments')
+	if default_args:
+		defctx = context(eat_option, resolve_cmd)
+		cmd = config.get('commands/default')
+		defctx.set_command(cmd, apply_args=False)
+		args_list:list[str] = shlex.split(default_args)
+		# validate arguments
+		defctx.parse_args([*args_list])
+		# if we got here, the arguments are ok
+		config.set('commands/%s/arguments' % cmd, args_list)
+		print(f'Default arguments for {_c}{cmd}{_0} set: {_b}{" ".join(args_list)}{_0}')
+
+
+
+setattr(cmd_config, 'load_db', False)
 
 def _config_help() -> None:
 	print_cmd_usage('config', '<args>')
@@ -1158,14 +1177,20 @@ known_commands:dict[str,dict] = {
 
 
 def _set_debug(value):
-	config.set('debug', bool(value), dirty=False)
+	config.set('debug', bool(value), store=STORE_MEMORY)
 
 def _valid_int(a:int, b:int) -> Callable[[int], bool]:
 	assert(a <= b)
-	def verify(v:int):
-		return v >= a and v <= b
+	def verify(v:int) -> int|None:
+		if v >= a and v <= b:
+			return v
+		return None
 	verify.__doc__ = 'between %d and %d' % (a, b)
 	return verify
+
+def _valid_cmd(name:str) -> str|None:
+	'valid command name'
+	return resolve_cmd(name, fail_ok=True)
 
 # TODO: merge with 'known_commands' ?  (at least for the command-specific options)
 
@@ -1213,7 +1238,11 @@ command_options = {
 	},
 	'search': {
 		**__opt_max_hits,
-	}
+	},
+	'config': {
+		'config:default_command': { 'name': '--default', 'arg': str, 'validator': _valid_cmd, 'help': 'Set command to run by default' },
+		'config:default_arguments': { 'name': '--default-args', 'arg': str, 'help': 'Set arguments for the default command' },
+	},
 }
 
 
