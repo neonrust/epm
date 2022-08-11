@@ -28,10 +28,6 @@ PRG = basename(sys.argv[0])
 config.init(PRG)
 utils.init(PRG)
 
-
-# always import std json (useful for debugging sometimes)
-import json
-
 VERSION = '0.11'
 VERSION_DATE = '2022-08-10'
 
