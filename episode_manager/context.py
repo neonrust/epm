@@ -26,7 +26,9 @@ class context:
 		self.db:dict[str,dict] = {}
 
 	def invoke(self, width:int) -> str|None:
-		self.db = db.load()
+		load_db = getattr(self.handler, 'load_db', True)
+		if load_db:
+			self.db = db.load()
 
 		return self.handler(self, width=width)
 
