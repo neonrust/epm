@@ -65,7 +65,7 @@ def start():
 ###############################################################################
 
 
-def resolve_cmd(name:str) -> str|None:
+def resolve_cmd(name:str, fail_ok=False) -> str|None:
 	matching = []
 
 	for primary in known_commands:
@@ -83,7 +83,7 @@ def resolve_cmd(name:str) -> str|None:
 	if len(matching) == 1:
 		return matching[0]
 
-	if len(matching) > 1:
+	if len(matching) > 1 and not fail_ok:
 		ambiguous_cmd(name, matching)
 
 	return None
