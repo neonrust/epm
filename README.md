@@ -40,12 +40,14 @@ Requires Python 3.9, because type hints are used (the lower-case variants).
 
 ## File locations
 
-All series and their states is stored in:
+The configuration, series "database" and their states is stored in:
 
     ~/.config/epm/
 	
 Mainly the file `series` but also numbered backups of it.
 If this is important to you, it's recommended to backup this directory.
+
+Run-time configuration is stored in the file `config`.
 
 ## TMDb API key
 
@@ -53,7 +55,10 @@ Key is read from the environment:
 
     TMDB_API_KEY
 
-(it will soon also be configurable)
+Or set it in the configuration:
+
+    epm config --api-key <your key>
+
 
 ## Examples
 
