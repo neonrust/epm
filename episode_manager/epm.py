@@ -1119,12 +1119,12 @@ setattr(cmd_refresh, 'help', _refresh_help)
 
 def cmd_config(ctx:context, width:int) -> str|None:
 	default_cmd = ctx.command_options.get('config:default_command')
-	if default_cmd:
+	if default_cmd is not None:
 		config.set('commands/default', default_cmd)
 		print(f'Default command set: {_c}{default_cmd}{_0}')
 
 	default_args = ctx.command_options.get('config:default_arguments')
-	if default_args:
+	if default_args is not None:
 		defctx = context(eat_option, resolve_cmd)
 		cmd = config.get('commands/default')
 		defctx.set_command(cmd, apply_args=False)

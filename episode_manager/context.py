@@ -17,10 +17,11 @@ class context:
 			'debug': config.get_bool('debug', False),
 		}
 		self.command:str|None = None
-		self.command_options:dict = {
-			'max-age': config.get_int('max-age'),
-		}
+		self.command_options:dict = {}
 		self.command_arguments:list = []
+
+		self.default_command_options:dict = {}
+		self.default_command_arguments:list = []
 
 		self.handler:Callable = self._no_command
 		self.db:dict[str,dict] = {}
@@ -29,6 +30,14 @@ class context:
 		load_db = getattr(self.handler, 'load_db', True)
 		if load_db:
 			self.db = db.load()
+
+		if self.debug:
+			print('ARGS:', self.command_arguments)
+			print('OPTS:', self.command_options)
+
+		if not self.command_arguments and not self.command_options:
+			self.command_arguments = [*self.default_command_arguments]
+			self.command_options = {**self.default_command_options}
 
 		return self.handler(self, width=width)
 
@@ -41,9 +50,16 @@ class context:
 		return False
 
 
-	def parse_args(self, args:list) -> None:
+	def parse_args(self, args:list, default=False) -> None:
 
 		default_command = str(config.get('commands/default', 'unseen'))
+
+		command_options = self.command_options
+		if default:
+			command_options = self.default_command_options
+		command_arguments = self.command_arguments
+		if default:
+			command_arguments =self.default_command_arguments
 
 		while args:
 			arg = args.pop(0)
@@ -71,7 +87,7 @@ class context:
 				if self.debug:
 					print('  opt:', arg, '(cmd: %s)' % self.command)
 
-				self._eat_option(self.command, arg, args, self.command_options)  # will exit if not correct
+				self._eat_option(self.command, arg, args, command_options)  # will exit if not correct
 				continue
 
 			if not self.command and not arg.startswith('.'):
@@ -93,9 +109,9 @@ class context:
 					print('  -> cmd = %s (default)' % self.command)
 
 			if self.command:
-				self._add_argument(arg)
+				command_arguments.append(arg)
 				if self.debug:
-					print('  -> "%s" [%s]' % (self.command, ' '.join(self.command_arguments)))
+					print('  -> "%s" [%s]' % (self.command, ' '.join(command_arguments)))
 
 			else:
 				raise RuntimeError('Bug: unhandled argument: "%s"' % arg)
@@ -114,11 +130,9 @@ class context:
 		if apply_args:
 			# insert configured arguments
 			args = config.get('commands/%s/arguments' % self.command, [])
-			self.parse_args(args)
+			# arguments added here will be ignored if arguments were specified on the command-line
+			self.parse_args(args, default=True)
 
-
-	def _add_argument(self, argument:str) -> None:
-		self.command_arguments.append(argument)
 
 	def _no_command(self, *a, **kw):
 		raise RuntimeError('no command set')
