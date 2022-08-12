@@ -1135,6 +1135,13 @@ def cmd_config(ctx:context, width:int) -> str|None:
 		config.set('commands/%s/arguments' % cmd, args_list)
 		print(f'Default arguments for {_c}{cmd}{_0} set: {_b}{" ".join(args_list)}{_0}')
 
+	api_key = ctx.command_options.get('config:api-key')
+	if api_key is not None:
+		# TODO: "encrypt" ?
+		config.set('lookup/api-key', api_key)
+		print(f'API key set.')
+
+
 
 
 setattr(cmd_config, 'load_db', False)
@@ -1238,6 +1245,7 @@ command_options = {
 	'config': {
 		'config:default_command': { 'name': '--default', 'arg': str, 'validator': _valid_cmd, 'help': 'Set command to run by default' },
 		'config:default_arguments': { 'name': '--default-args', 'arg': str, 'help': 'Set arguments for the default command' },
+		'config:api-key':           { 'name': '--api-key', 'arg': str, 'help': 'Set API key for backend (TMDb)' },
 	},
 }
 
