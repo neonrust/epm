@@ -2232,10 +2232,19 @@ ignore_changes = (
 def main():
 	try:
 		start()
+
 	except tmdb.NoAPIKey:
-		print('No TMDb API key.', file=sys.stderr)
+		print(f'\r{_00}{_K}{_E}ERROR{_00} No TMDb API key.', file=sys.stderr)
 		print(tmdb.api_key_help)
+		print('OR: epm config --api-key <key>')
 		sys.exit(0)
+
+	except tmdb.APIAuthError:
+		print(f'\r{_00}{_K}{_E}ERROR{_00} TMDb API key is not valid.', file=sys.stderr)
+		print(tmdb.api_key_help)
+		print('OR: epm config --api-key <key>')
+		sys.exit(1)
+
 	except KeyboardInterrupt:
 		print('** User beak', file=sys.stderr)
 		sys.exit(1)

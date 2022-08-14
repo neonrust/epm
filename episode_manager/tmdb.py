@@ -12,7 +12,6 @@ import builtins
 from collections.abc import Iterable
 from typing import Callable, Any
 
-# TODO: API version 4 ?
 _base_url_tmpl = 'https://api.themoviedb.org/3/%%(path)s?api_key=%s'
 _base_url:str|None = None
 _api_key = os.getenv('TMDB_API_KEY', '')
@@ -22,6 +21,8 @@ api_key_help = 'Set "TMDB_API_KEY" environment variable for your account.'
 class NoAPIKey(RuntimeError):
 	pass
 
+class APIAuthError(RuntimeError):
+	pass
 
 __parallel_requests = 16
 
@@ -78,6 +79,9 @@ def _query(url) -> dict[str, Any]|None:
 	except (ReadTimeout, ConnectTimeout) as to:
 		# print('\x1b[41;97;1mquery: TIMEOUT %s\x1b[m' % url)
 		return None
+
+	if resp.status_code == HTTPStatus.UNAUTHORIZED:
+		raise APIAuthError()
 
 	if resp.status_code != HTTPStatus.OK:
 		return None
