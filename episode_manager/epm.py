@@ -228,15 +228,12 @@ def cmd_unseen(ctx:context, width:int) -> str | None:
 		return 'Can\'t specify "started" and "planned" at the same time (try "list" command)'
 
 	find_idx, match = find_idx_or_match(ctx.command_arguments)
-	# series_list = db.get_series(ctx.db, archived=False, index=find_idx, match=match)
+
 	find_state = State.ACTIVE
 	if only_started:
 		find_state = State.STARTED
 	elif only_planned:
 		find_state = State.PLANNED
-
-	#if find_idx is not None:
-	#	db.find_single_series(ctx.db, find_idx)
 
 	series_list = db.indexed_series(ctx.db, state=find_state, index=find_idx, match=match)
 
@@ -253,6 +250,13 @@ def cmd_unseen(ctx:context, width:int) -> str | None:
 	series_unseen = []
 	for index, series_id in series_list:
 		series = ctx.db[series_id]
+
+		stale, _ = is_stale(series)
+		if stale:
+			# we've come upon a series that is stale, do a refresh (of
+			subset = [sid for _, sid in series_list]
+			refresh_series(ctx.db, width, subset=subset)
+
 		_, unseen = seen_unseen_episodes(series)
 		if unseen:
 			series_unseen.append((index, series_id, series, unseen))
@@ -287,11 +291,6 @@ def cmd_unseen(ctx:context, width:int) -> str | None:
 
 		series_printed = False
 		def print_series():
-			stale, _ = is_stale(series)
-			if stale:
-				# we've come upon a series that is stale, do a refresh (of everything)
-				refresh_series(ctx.db, width)
-
 			if hilite:
 				print(f'\x1b[48;5;234m{_K}', end='')  # TODO: use constant, share with cmd_show
 
@@ -379,11 +378,11 @@ def cmd_show(ctx:context, width:int) -> str|None:
 	series_list = db.indexed_series(ctx.db, index=find_idx, match=match)
 
 	print(f'Listing ', end='')
-	if only_started: print('started ', end='')
-	elif only_planned: print('planned ', end='')
-	elif only_archived: print('archived ', end='')
-	elif only_abandoned: print('abandoned ', end='')
-	else: print('non-archived ', end='')
+	if only_started: print(f'{_u}started{_0} ', end='')
+	elif only_planned: print(f'{_u}planned{_0} ', end='')
+	elif only_archived: print(f'{_u}archived{_0} ', end='')
+	elif only_abandoned: print(f'{_u}abandoned{_0} ', end='')
+	else: print(f'{_u}non-archived{_0} ', end='')
 	print('series', end='')
 	if match: print(', matching: %s' % match.styled_description, end='')
 	print(f'{_0}.')
@@ -423,7 +422,8 @@ def cmd_show(ctx:context, width:int) -> str|None:
 		stale, _ = is_stale(series)
 		if stale:
 			# we've come upon a series that is stale, do a refresh (of everything)
-			refresh_series(ctx.db, width)
+			subset = [sid for _, sid in series_list]
+			refresh_series(ctx.db, width, subset=subset)
 
 		# alternate styling odd/even rows
 		hilite = (num_shown % 2) == 0
@@ -892,7 +892,7 @@ def cmd_mark(ctx:context, width:int, marking:bool=True) -> str | None:
 	stale, _ = is_stale(series)
 	if stale:
 		# we've come upon a series that is stale, do a refresh (of everything)
-		refresh_series(ctx.db, width)
+		refresh_series(ctx.db, width, subset=[series_id])
 
 	season:None|range|tuple = None
 	episode:None|range|tuple = None
@@ -1551,14 +1551,14 @@ def refresh_series(db:dict, width:int, subset:list|None=None, max_age:int|None=N
 	return len(to_refresh), num_episodes
 
 
-def is_stale(item:dict, max_age_seconds:int=2*3600*24) -> tuple[bool, datetime|None]:
-	updated_stamp = meta_get(item, meta_updated_key)
+def is_stale(series:dict, max_age_seconds:int= 2 * 3600 * 24) -> tuple[bool, datetime | None]:
+	updated_stamp = meta_get(series, meta_updated_key)
 	if not updated_stamp:
 		return True, None
 
 	updated = datetime.fromisoformat(updated_stamp)
 	age_seconds = (now_datetime() - updated).total_seconds()
-
+	# print('%s updated:' % series['title'], updated, 'age:', age_seconds, max_age_seconds)
 	return age_seconds > max_age_seconds, updated
 
 
