@@ -1762,13 +1762,13 @@ def print_series_details(index:int, series:dict, width:int, gray:bool=False) -> 
 		tail = f'    {_o}{_u}%s{_0}' % (imdb_url_tmpl % series["imdb_id"])
 	print_series_title(index, series, width, gray=gray, tail=tail)
 
-	print(f'    {_o}Added:{_0}', meta_get(series, meta_added_key))
 	print_archive_status(series)
 
 	overview = textwrap.wrap(series['overview'], width=width, initial_indent=' '*15)
-	print(f'    {_o}Overview:{_0} ', end='')
+	print(f'    {_o}Overview:{_0} {_i}', end='')
 	overview[0] = overview[0][15:]
 	print('\n'.join(overview))
+	print(_0, end='')
 
 	# collect top-N writers and directors, and guest cast
 	from collections import Counter
@@ -1803,6 +1803,8 @@ def print_series_details(index:int, series:dict, width:int, gray:bool=False) -> 
 	print(f'  {_f}/{_0}  {_o}Episodes: {_0}', len(episodes))
 	for season in range(1, num_seasons + 1):
 		print(f'     {_c}{"s%d" % season:>3}{_0}', '%3d' % len(list(filter(lambda ep: ep.get('season') == season, episodes))), 'episodes')
+
+	print(f'    {_o}Added:{_0}', meta_get(series, meta_added_key))
 
 
 def print_archive_status(series:dict) -> None:
