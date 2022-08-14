@@ -15,10 +15,10 @@ from typing import Callable, Any
 from . import tmdb
 from . import progress
 from .context import context, BadUsageError
-from . import config, utils, db
+from . import config, utils, db, db as m_db
 from .config import  STORE_MEMORY
 from .utils import term_size, warning_prefix, plural
-from .db import meta_get, meta_set, meta_has, meta_del, meta_copy, meta_key, meta_seen_key, meta_archived_key, meta_added_key, meta_updated_key, meta_list_index_key, meta_next_list_index_key
+from .db import State, meta_get, meta_set, meta_has, meta_del, meta_copy, meta_key, meta_seen_key, meta_archived_key, meta_added_key, meta_updated_key, meta_list_index_key, meta_next_list_index_key
 from .styles import _0, _00, _0B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _L, _S, _u, _EOL
 
 import sys
@@ -217,24 +217,32 @@ def ambiguous_cmd(name:str, matching:list[str]) -> None:
 
 
 def cmd_unseen(ctx:context, width:int) -> str | None:
-	# refresh_series(ctx, width)
-
 	# TODO: print header/columns
 
 	also_future = 'unseen:future' in ctx.command_options
 	only_started = 'unseen:started' in ctx.command_options
 	only_planned = 'unseen:planned' in ctx.command_options
-	all_unseen = 'unseen:all_episodes' in ctx.command_options
+	all_unseen = 'unseen:all-episodes' in ctx.command_options
 
 	if only_started and only_planned:
 		return 'Can\'t specify "started" and "planned" at the same time (try "list" command)'
 
 	find_idx, match = find_idx_or_match(ctx.command_arguments)
-	series_list = get_series(ctx.db, archived=False, index=find_idx, match=match)
+	# series_list = db.get_series(ctx.db, archived=False, index=find_idx, match=match)
+	find_state = State.ACTIVE
+	if only_started:
+		find_state = State.STARTED
+	elif only_planned:
+		find_state = State.PLANNED
+
+	#if find_idx is not None:
+	#	db.find_single_series(ctx.db, find_idx)
+
+	series_list = db.indexed_series(ctx.db, state=find_state, index=find_idx, match=match)
 
 	print(f'Listing {_0}', end='')
-	if only_started: print('started ', end='')
-	elif only_planned: print('planned ', end='')
+	if only_started: print(f'{_u}started{_0} ', end='')
+	elif only_planned: print(f'{_u}planned{_0} ', end='')
 	print(f'series with unseen episodes', end='')
 	if match: print(', matching: %s' % match.styled_description, end='')
 	print(f'{_0}.')
@@ -279,8 +287,10 @@ def cmd_unseen(ctx:context, width:int) -> str | None:
 
 		series_printed = False
 		def print_series():
-			if is_stale(series):  # we've come upon a series that is stale, do a refresh (of everything)
-				refresh_series(ctx, width)
+			stale, _ = is_stale(series)
+			if stale:
+				# we've come upon a series that is stale, do a refresh (of everything)
+				refresh_series(ctx.db, width)
 
 			if hilite:
 				print(f'\x1b[48;5;234m{_K}', end='')  # TODO: use constant, share with cmd_show
@@ -333,8 +343,6 @@ setattr(cmd_unseen, 'help', _unseen_help)
 
 
 def cmd_show(ctx:context, width:int) -> str|None:
-	# refresh_series(ctx, width)
-
 	# TODO: print header/columns
 
 	list_all = 'show:all' in ctx.command_options
@@ -342,8 +350,8 @@ def cmd_show(ctx:context, width:int) -> str|None:
 	only_started = 'show:started' in ctx.command_options
 	only_planned = 'show:planned' in ctx.command_options
 	only_abandoned = 'show:abandoned' in ctx.command_options
-	all_unseen = 'show:all_episodes' in ctx.command_options
-	seen_episodes = 'show:seen_episodes' in ctx.command_options
+	all_unseen = 'show:all-episodes' in ctx.command_options
+	seen_episodes = 'show:seen-episodes' in ctx.command_options
 	show_details = 'show:details' in ctx.command_options
 
 	if [only_started, only_planned, only_archived, only_abandoned].count(True) > 1:
@@ -368,7 +376,7 @@ def cmd_show(ctx:context, width:int) -> str|None:
 			return 'Bad year filter: %s (use: <start year>[-<end year>])' % filter_year
 
 	find_idx, match = find_idx_or_match(ctx.command_arguments, director=filter_director, writer=filter_writer, cast=filter_cast, year=filter_year)
-	series_list = get_series(ctx.db, index=find_idx, match=match)
+	series_list = db.indexed_series(ctx.db, index=find_idx, match=match)
 
 	print(f'Listing ', end='')
 	if only_started: print('started ', end='')
@@ -412,8 +420,10 @@ def cmd_show(ctx:context, width:int) -> str|None:
 
 		num_shown += 1
 
-		if is_stale(series):  # we've come upon a series that is stale, do a refresh (of everything)
-			refresh_series(ctx, width)
+		stale, _ = is_stale(series)
+		if stale:
+			# we've come upon a series that is stale, do a refresh (of everything)
+			refresh_series(ctx.db, width)
 
 		# alternate styling odd/even rows
 		hilite = (num_shown % 2) == 0
@@ -476,8 +486,9 @@ def cmd_calendar(ctx:context, width:int) -> str|None:
 		if meta_has(series, 'archived'):
 			continue
 
-		if is_stale(series):
-			refresh_series(ctx, width)
+		stale, _ = is_stale(series)
+		if stale:
+			refresh_series(ctx.db, width)
 
 		# faster to loop backwards?
 		for ep in series.get('episodes', []):
@@ -507,12 +518,13 @@ def cmd_calendar(ctx:context, width:int) -> str|None:
 	prev_month = start_date.month
 	first = True  # to avoid printing week label the first loop
 
+	# TODO: is there's nothing for a whole week, print just "nothing" (i.e. not each day)
+
 	# until we've printed enough days, and always end at a full week
 	while days_todo > 0 or wday_idx != SUNDAY:
 		# print('print starting from:', start_date, days_todo)
-		month_days = cal.itermonthdates(start_date.year, start_date.month)
 
-		for mdate in month_days:
+		for mdate in cal.itermonthdates(start_date.year, start_date.month):
 			wday_idx = (wday_idx + 1) % 7
 			if mdate < today:
 				continue
@@ -538,12 +550,11 @@ def cmd_calendar(ctx:context, width:int) -> str|None:
 				break
 
 		start_date = (today + timedelta(days=31)).replace(day=1)
-		month_days = cal.itermonthdates(start_date.year, start_date.month)
 
 	return None
 
 def _calendar_help():
-	print_cmd_usage('calendar', '[<full weeks>]')
+	print_cmd_usage('calendar', '[<num weeks>]')
 
 setattr(cmd_calendar, 'help', _calendar_help)
 
@@ -668,7 +679,7 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str|None:
 	ctx.db[series_id] = new_series
 
 
-	refresh_series(ctx, width, subset=[series_id], max_age=-1)
+	refresh_series(ctx.db, width, subset=[series_id], max_age=-1)
 
 	# TODO: offer to mark seasons as seen?
 
@@ -678,7 +689,7 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str|None:
 
 	# need to loop to figure out its list index
 	imdb_id = ctx.db[series_id].get('imdb_id')
-	index = find_list_index(ctx.db, series_id)
+	index = meta_get(ctx.db[series_id], meta_list_index_key)
 	print_series_title(index, new_series, imdb_id=imdb_id, width=width)
 
 	return None
@@ -817,9 +828,11 @@ def cmd_delete(ctx:context, width:int) -> str | None:
 	if not ctx.command_arguments:
 		return 'Required argument missing: # / <IMDb ID>'
 
-	index, series_id, series, err = find_series(ctx.db, ctx.command_arguments.pop(0))
-	if err is not None or series is None or series_id is None:
+	index, series_id, err = db.find_single_series(ctx.db, ctx.command_arguments.pop(0))
+	if series_id is None or err is not None:
 		return err
+
+	series = ctx.db[series_id]
 
 	print(f'{_b}Deleting series:{_00}')
 	print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width)
@@ -864,19 +877,22 @@ def _delete_help() -> None:
 setattr(cmd_delete, 'help', _delete_help)
 
 def cmd_mark(ctx:context, width:int, marking:bool=True) -> str | None:
-	# refresh_series(ctx, width)
 
 	if not ctx.command_arguments:
 		return 'Required argument missing: # / <IMDb ID>'
 
 	find_id = ctx.command_arguments.pop(0)
 
-	index, series_id, series, err = find_series(ctx.db, find_id)
-	if err is not None or series is None:
+	index, series_id, err = db.find_single_series(ctx.db, find_id)
+	if series_id is not None or err is not None:
 		return err
 
-	if is_stale(series):  # we've come upon a series that is stale, do a refresh (of everything)
-		refresh_series(ctx, width)
+	series = ctx.db[series_id]
+
+	stale, _ = is_stale(series)
+	if stale:
+		# we've come upon a series that is stale, do a refresh (of everything)
+		refresh_series(ctx.db, width)
 
 	season:None|range|tuple = None
 	episode:None|range|tuple = None
@@ -1023,9 +1039,11 @@ def cmd_archive(ctx:context, width:int, archiving:bool=True) -> str | None:
 
 	find_id = ctx.command_arguments.pop(0)
 
-	index, series_id, series, err = find_series(ctx.db, find_id)
-	if err is not None or series is None:
+	index, series_id, err = db.find_single_series(ctx.db, find_id)
+	if series_id is not None or err is not None:
 		return err
+
+	series = ctx.db[series_id]
 
 	currently_archived = meta_has(series, 'archived')
 
@@ -1087,16 +1105,16 @@ def cmd_refresh(ctx:context, width:int) -> str|None:
 	forced = bool(ctx.command_options.get('refresh:force'))
 
 	find_idx, match = find_idx_or_match(ctx.command_arguments)
-	series_list = get_series(ctx.db, archived=False, index=find_idx, match=match)
+	series_list = db.indexed_series(ctx.db, archived=False, index=find_idx, match=match)
+
+	if not series_list:
+		return 'Nothing matched: %s' % (match.pattern if match else find_idx)
 
 	subset = [series_id for index, series_id in series_list]
 
-	if not subset:
-		return 'Nothing matched: %s' % (match.pattern if match else find_idx)
-
 	t0 = time.time()
 
-	num_series, num_episodes = refresh_series(ctx, width, subset=subset, max_age=max_age if not forced else -1)
+	num_series, num_episodes = refresh_series(ctx.db, width, subset=subset, max_age=max_age if not forced else -1)
 	if not num_episodes:
 		return 'Nothing to update (max age: %d days)' % (max_age/(3600*24))
 
@@ -1118,12 +1136,12 @@ setattr(cmd_refresh, 'help', _refresh_help)
 
 
 def cmd_config(ctx:context, width:int) -> str|None:
-	default_cmd = ctx.command_options.get('config:default_command')
+	default_cmd = ctx.command_options.get('config:default-command')
 	if default_cmd is not None:
 		config.set('commands/default', default_cmd)
 		print(f'Default command set: {_c}{default_cmd}{_0}')
 
-	default_args = ctx.command_options.get('config:default_arguments')
+	default_args = ctx.command_options.get('config:default-arguments')
 	if default_args is not None:
 		defctx = context(eat_option, resolve_cmd)
 		cmd = config.get('commands/default')
@@ -1133,7 +1151,7 @@ def cmd_config(ctx:context, width:int) -> str|None:
 		defctx.parse_args([*args_list])
 		# if we got here, the arguments are ok
 		config.set('commands/%s/arguments' % cmd, args_list)
-		print(f'Default arguments for {_c}{cmd}{_0} set: {_b}{" ".join(args_list)}{_0}')
+		print(f'Default arguments for {_c}{cmd}{_0} set: {_b}{" ".join(args_list or [f"{_f}<none>{_0}"])}{_0}')
 
 	api_key = ctx.command_options.get('config:api-key')
 	if api_key is not None:
@@ -1215,8 +1233,8 @@ command_options = {
 		'show:archived':      { 'name': ('-A', '--archived'),    'help': 'List only archived series' },
 		'show:started':       { 'name': ('-s', '--started'),     'help': 'List only series with seen episodes' },
 		'show:planned':       { 'name': ('-p', '--planned'),     'help': 'List only series without seen episodes' },
-		'show:all_episodes':  { 'name': ('-e', '--episodes'),    'help': 'Show all unseen episodes (not only first)' },
-		'show:seen_episodes': { 'name': ('-S', '--seen'),        'help': 'Show seen episodes' },
+		'show:all-episodes':  { 'name': ('-e', '--episodes'),    'help': 'Show all unseen episodes (not only first)' },
+		'show:seen-episodes': { 'name': ('-S', '--seen'),        'help': 'Show seen episodes' },
 		'show:abandoned':     { 'name': '--abandoned',           'help': 'List only abandoned series' },
 		'show:details':       { 'name': ('-I', '--details'),     'help': 'Show more details' },
 		'show:director':      { 'name': '--director', 'arg': str, 'help': 'Filter by director, substring match' },
@@ -1226,11 +1244,9 @@ command_options = {
 	},
 	'unseen': {
 		'unseen:future':         { 'name': ('-f', '--future'),        'help': 'Show also future/unreleased episodes' },
-		#'unseen:not_future':     { 'name': ('+f', '--not-future'),    'help': 'Don\'t show future/unreleased episodes' },
 		'unseen:started':        { 'name': ('-s', '--started'),       'help': 'List only series with seen episodes' },
 		'unseen:planned':        { 'name': ('-p', '--planned'),       'help': 'List only series without seen episodes' },
-		'unseen:all_episodes':   { 'name': ('-e', '--episodes'),      'help': 'Show all unseen episodes (not only first)' },
-		#'unseen:1st_episodes':   { 'name': ('+e', '--first-episode'), 'help': 'Show only first unseen episodes' },
+		'unseen:all-episodes':   { 'name': ('-e', '--episodes'),      'help': 'Show all unseen episodes (not only first)' },
 	},
 	'refresh': {
 		'refresh:force': { 'name': ('-f', '--force'),         'help': 'Refresh whether needed or not' },
@@ -1243,46 +1259,12 @@ command_options = {
 		**__opt_max_hits,
 	},
 	'config': {
-		'config:default_command': { 'name': '--default', 'arg': str, 'validator': _valid_cmd, 'help': 'Set command to run by default' },
-		'config:default_arguments': { 'name': '--default-args', 'arg': str, 'help': 'Set arguments for the default command' },
+		'config:default-command':   { 'name': '--default', 'arg': str, 'validator': _valid_cmd, 'help': 'Set command to run by default' },
+		'config:default-arguments': { 'name': '--default-args', 'arg': str, 'help': 'Set arguments for the default command' },
 		'config:api-key':           { 'name': '--api-key', 'arg': str, 'help': 'Set API key for backend (TMDb)' },
 	},
 }
 
-
-def find_series(db:dict, find_id:str) -> tuple[int | None, str | None, dict | None, str | None]:
-	nothing_found = None, None, None, f'Series not found: {find_id}'
-
-	# if it starts with 'tt' (and rest numerical), search by IMDb ID
-	# else search listing index (as dictated by get_series())
-
-	if not find_id:
-		return nothing_found
-
-	try:
-		find_index = int(find_id)
-	except:
-		find_index = None
-		if find_id[0] == 'tt':
-			find_id = find_id[1:]
-		else:
-			return nothing_found
-
-	for index, series_id in get_series(db):
-		series = db[series_id]
-		if find_index is not None and find_index == index:
-			return index, series_id, series, None
-		elif series.get('imdb_id') == find_id:
-			return index, series_id, series, None
-
-	return nothing_found
-
-
-def find_list_index(db, series_id):
-	for index, sid in get_series(db):
-		if sid == series_id:
-			return index
-	return None
 
 
 def is_released(target, fallback=True):
@@ -1333,7 +1315,7 @@ def print_episodes(series:dict, episodes:list[dict], width:int, pre_print:Callab
 	return keys
 
 
-def find_idx_or_match(args, director:re.Pattern|None=None, writer:re.Pattern|None=None, cast:re.Pattern|None=None, year:list[int]|None=None):
+def find_idx_or_match(args, director:re.Pattern|None=None, writer:re.Pattern|None=None, cast:re.Pattern|None=None, year:list[int]|None=None) -> tuple[int:None, Callable|None]:
 
 	# print('FILTER title/idx:', (_c + ' '.join(args) + _0fg) if args else 'NONE')
 	# print('        director:', (_c + director.pattern + _0fg) if director else 'NONE')
@@ -1350,7 +1332,7 @@ def find_idx_or_match(args, director:re.Pattern|None=None, writer:re.Pattern|Non
 			raise ValueError()
 
 		find_id = int(args[0])
-		# wr're looking tor aa single entry, by ID: other arguments are irrelevant
+		# we're looking tor aa single entry, by ID: other arguments are irrelevant
 		return find_id, None
 
 	except ValueError:
@@ -1462,50 +1444,51 @@ def no_series(db:dict, filtering:bool=False) -> str:
 	return 'No series%s.' % precision
 
 
-def refresh_series(ctx:context, width:int, subset:list|None=None, max_age:int|None=None) -> tuple[int, int]:
-
-	subset = subset or list(ctx.db.keys())
+def refresh_series(db:dict, width:int, subset:list|None=None, max_age:int|None=None) -> tuple[int, int]:
+	subset = subset or list(db.keys())
 	max_age = (max_age or config.get_int('max-age'))*3600*24
 
 	forced = max_age < 0
 
-	to_refresh = {}
+	def last_updated(series:dict) -> tuple[str, datetime]:
+		updated = meta_get(series, meta_updated_key)
+		if updated:
+			return datetime.fromisoformat(updated)
+		return series['id'], now_datetime()
 
-	earliest_refresh = now_datetime() + timedelta(days=1)  # in the future: guarantee to be set below
+	if forced:
+		to_refresh = { sid: last_updated(db[sid]) for sid in subset }
+	else:
+		def stale_check(series:dict) -> bool:
+			stale, _ = is_stale(series, max_age)
+			return stale
 
-	for series_id in subset:
-		series = ctx.db[series_id]
-
-		stale, last_updated = is_stale(series, max_age)
-		if forced or stale:
-			# print('stale:', series_id, last_updated)
-
-			if last_updated is None:
-				last_updated = now_datetime()
-			to_refresh[series_id] = last_updated
-
-			if last_updated < earliest_refresh:
-				earliest_refresh = last_updated
+		to_refresh = dict(m_db.filter_map(db, filter=stale_check, map=last_updated))
 
 	if not to_refresh:
 		return 0, 0
 
+	earliest_refresh = min(to_refresh.values())
+
 	def spread_stamp(a:datetime, b:datetime):
 		# generate a random time stamp between 'a' and 'b'
 		diff = int((b - a).total_seconds())
-		offset = timedelta(seconds=int(random.randrange(diff//2, diff)))  # skewed towards 'b'
+		if diff//2 == diff:
+			offset = timedelta(seconds=diff)
+		else:
+			offset = timedelta(seconds=int(random.randrange(diff//2, diff)))  # skewed towards 'b'
 		rnd = a + offset
 		return rnd
 
 	# remember last update check (regardless whether there actually were any updates)
 	touched = 0
 	for series_id in to_refresh:
-		prev_update = meta_get(ctx.db[series_id], meta_updated_key)
+		prev_update = meta_get(db[series_id], meta_updated_key)
 		if prev_update:
 			stamp = spread_stamp(datetime.fromisoformat(prev_update), now_datetime())
 		else:
 			stamp = now_datetime()
-		meta_set(ctx.db[series_id], meta_updated_key, stamp.isoformat(' '))
+		meta_set(db[series_id], meta_updated_key, stamp.isoformat(' '))
 		touched += 1
 
 	def mk_prog(total):
@@ -1530,7 +1513,7 @@ def refresh_series(ctx:context, width:int, subset:list|None=None, max_age:int|No
 
 		if not to_refresh:
 			if touched:
-				db.save(ctx.db)
+				m_db.save(db)
 				return touched, 0  # only series affected, no episodes
 
 			return 0, 0
@@ -1554,16 +1537,16 @@ def refresh_series(ctx:context, width:int, subset:list|None=None, max_age:int|No
 	for series_id, (details, episodes) in zip(to_refresh_keys, result):
 		series = details
 		series['episodes'] = episodes
-		meta_copy(ctx.db[series_id], series)
+		meta_copy(db[series_id], series)
 		meta_set(series, meta_updated_key, now_time)
 
-		ctx.db[series_id] = series
+		db[series_id] = series
 
 		num_episodes += len(episodes)
 
 
 	if to_refresh:
-		db.save(ctx.db)
+		m_db.save(db)
 
 	return len(to_refresh), num_episodes
 
@@ -1934,47 +1917,6 @@ def print_seen_status(series:dict, gray: bool=False, summary=True, next=True, la
 				print(_f, end='')
 			print(f'{header}{s}')
 
-
-def series_num_archived(db:dict) -> int:
-	return sum(1 if meta_has(series, 'archived') else 0 for series in db.values())
-
-
-def get_series(db:dict, archived:bool|None=None, index=None, match=None) -> list[tuple[int, str]]:
-
-	# create a predeterminally-sorted series ID list
-	series_ids = sorted(
-		(sid for sid in db if sid != meta_key),
-		key=lambda sid: (db[sid]['title'].casefold(), db[sid].get('year', '')),
-	)
-
-	series_list:list[tuple[int, str]] = []
-
-	find_index = index
-
-	for series_id in series_ids:
-		if series_id == meta_key:
-			continue
-
-		series = db[series_id]
-
-		is_archived = meta_has(series, 'archived')
-		if archived is not None and is_archived != archived:
-			continue
-
-		index = meta_get(series, meta_list_index_key)
-
-		# for clarity and consistency, we _skip_ non-matching entries (instead of adding matching ones)
-
-		if find_index is not None:
-			if find_index != index:
-				continue
-
-		elif match and not match(series):
-			continue
-
-		series_list.append( (index, series_id) )
-
-	return series_list
 
 
 def seen_unseen_episodes(series:dict, before=None) -> tuple[list,list]:

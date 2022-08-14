@@ -4,12 +4,13 @@ import os
 from os.path import dirname, exists as pexists
 from subprocess import run
 from tempfile import mkstemp
+import enum
 
 from . import config
 from .utils import read_json, write_json, warning_prefix, json_serializer
 from .styles import _0, _00, _0B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _L, _S, _u, _EOL
 
-from typing import Any
+from typing import Any, Callable, TypeVar, Generator
 
 DB_VERSION = 2
 
@@ -249,6 +250,125 @@ def meta_del(obj:dict, key: str) -> None:
 
 def meta_copy(source:dict, destination:dict) -> None:
 	destination[meta_key] = source.get(meta_key, {})
+
+
+class State(enum.IntFlag):
+	PLANNED   = 0x01  # added but nothing seen (yet)
+	STARTED   = 0x02  # some episodes seen
+	COMPLETED = 0x04  # all episodes seen and manually restored
+	ARCHIVED  = 0x08  # all episodes seen (automatically archived)
+	ABANDONED = 0x10  # manually archived when not all episodes seen
+
+	ACTIVE    = 0x01 | 0x02
+
+
+T = TypeVar('T')
+def filter_map(db:dict, sort_key:Callable[[Any],Any]|None=None, filter:Callable[[dict],bool]|None=None, map:Callable[[dict],T]|None=None) -> Generator[T,None,None]:
+
+	if filter is None:
+		filter = lambda _: True
+	if map is None:
+		map = lambda v: v
+
+	db_iter = (series for sid, series in db.items() if sid != meta_key)
+	if sort_key:
+		db_iter = sorted(db_iter, key=sort_key)
+
+	return (
+		map(series)
+		for series in db_iter
+		if series['id'] != meta_key and filter(series)
+	)
+
+
+def _sortkey_title_and_year(series:dict) -> tuple[str,list[int]]:
+	return series['title'].casefold(), series.get('year', [])
+
+def indexed_series(db:dict, archived: bool | None=None, index=None, match=None, state: State | None=None) -> list[tuple[int, str]]:
+	"""Return a list with a predictable sorting, optionally filtered."""
+
+	def flt(series:dict) -> bool:
+		passed:bool = True
+		if passed and index is not None:
+			passed = meta_get(series, meta_list_index_key) == index
+		if passed and match is not None:
+			passed = match(series)
+		if passed and state is not None:
+			passed = (series_state(series) & state) > 0
+		return passed
+
+	def index_series(series:dict) -> tuple[int, dict]:
+		return meta_get(series, meta_list_index_key), series['id']
+
+	return list(filter_map(db, sort_key=_sortkey_title_and_year, filter=flt, map=index_series))
+
+
+def find_single_series(db:dict, idx_or_id:str) -> tuple[int|None, str|None, str|None]:
+	nothing_found = None, None, f'Series not found: {idx_or_id}'
+
+	if not idx_or_id:
+		return nothing_found
+
+	find_index:int|None = None
+	imdb_id:str|None = None
+
+	# int -> list index
+	# "tt[0-9]+" -> IMDb ID
+	try:
+		find_index = int(idx_or_id)
+	except:
+		if idx_or_id[:2] == 'tt':
+			imdb_id = idx_or_id
+		else:
+			return nothing_found
+
+	def flt(series:dict) -> bool:
+		passed = True
+
+		if passed and find_index is not None:
+			passed = meta_get(series, meta_list_index_key) == index
+
+		if passed and imdb_id is not None:
+			passed = series.get('imdb_id') == imdb_id
+
+		return passed
+
+	def index_sid(series:dict) -> tuple[int, str]:
+		return meta_get(series, meta_list_index_key), series['id']
+
+	found = list(filter_map(db, filter=flt, map=index_sid))
+
+	if found:
+		return found
+
+	return nothing_found
+
+
+def series_state(series:dict) -> State:
+	is_archived = meta_has(series, meta_archived_key)
+	is_ended = series.get('state') in ('ended', 'canceled')
+
+	num_episodes = len(series.get('episodes', []))
+	num_seen = len(meta_get(series, meta_seen_key, {}))
+	num_unseen = num_episodes - num_seen
+
+	if is_archived:
+		if num_seen and num_unseen:  # partially seen
+			return State.ABANDONED
+
+		return State.ARCHIVED
+
+	elif num_seen:
+		if not num_unseen and is_ended:
+			return State.COMPLETED
+
+		return State.STARTED
+
+	return State.PLANNED
+
+
+def series_num_archived(db:dict) -> int:
+	return sum(1 if meta_has(series, 'archived') else 0 for series in db.values())
 
 
 meta_key = 'epm:meta'
