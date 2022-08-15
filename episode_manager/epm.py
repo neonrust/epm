@@ -1483,10 +1483,11 @@ def refresh_series(db:dict, width:int, subset:list|None=None, max_age:int|None=N
 	forced = max_age < 0
 
 	def last_updated(series:dict) -> tuple[str, datetime]:
+		series_id = series['id']
 		updated = meta_get(series, meta_updated_key)
 		if updated:
-			return datetime.fromisoformat(updated)
-		return series['id'], now_datetime()
+			return series_id, datetime.fromisoformat(updated)
+		return series_id, now_datetime()
 
 	if forced:
 		to_refresh = { sid: last_updated(db[sid]) for sid in subset }
@@ -1589,7 +1590,7 @@ def is_stale(series:dict, max_age_seconds:int= 2 * 3600 * 24) -> tuple[bool, dat
 		return True, None
 
 	updated = datetime.fromisoformat(updated_stamp)
-	age_seconds = (now_datetime() - updated).total_seconds()
+	age_seconds = int((now_datetime() - updated).total_seconds())
 	# print('%s updated:' % series['title'], updated, 'age:', age_seconds, max_age_seconds)
 	return age_seconds > max_age_seconds, updated
 
