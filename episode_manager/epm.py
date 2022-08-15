@@ -84,6 +84,9 @@ def resolve_cmd(name:str, fail_ok=False) -> str|None:
 	if len(matching) > 1 and not fail_ok:
 		ambiguous_cmd(name, matching)
 
+	if not fail_ok:
+		bad_cmd(name)
+
 	return None
 
 
