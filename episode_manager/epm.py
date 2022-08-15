@@ -1139,13 +1139,39 @@ setattr(cmd_refresh, 'help', _refresh_help)
 
 
 def cmd_config(ctx:context, width:int) -> str|None:
+
+	command:str|None = None
+	if ctx.command_arguments:
+		command = ctx.command_arguments.pop(0)
+		command = resolve_cmd(command)
+
+	if command and not ctx.command_options:
+		return f'{warning_prefix(ctx.command)} and...?'
+
+	cmd_args = ctx.command_options.get('config:command-args')
+	if cmd_args is not None:
+		if not command:
+			return f'{warning_prefix(ctx.command)} "args" only possible for subcommand.'
+		defctx = context(eat_option, resolve_cmd)
+		defctx.set_command(command, apply_args=False)
+		args_list:list[str] = shlex.split(cmd_args)
+		# validate arguments
+		defctx.parse_args([*args_list])
+		config.set('commands/%s/arguments' % command, args_list)
+		print(f'Arguments for {_c}{command}{_0} set: {_b}{" ".join(args_list or [f"{_f}<none>{_0}"])}{_0}')
+
 	default_cmd = ctx.command_options.get('config:default-command')
 	if default_cmd is not None:
+		if command:
+			return f'{warning_prefix(ctx.command)} bad option default command for "{command}".'
+
 		config.set('commands/default', default_cmd)
 		print(f'Default command set: {_c}{default_cmd}{_0}')
 
 	default_args = ctx.command_options.get('config:default-arguments')
 	if default_args is not None:
+		if command:
+			return f'{warning_prefix(ctx.command)} bad option default args for "{command}".'
 		defctx = context(eat_option, resolve_cmd)
 		cmd = config.get('commands/default')
 		defctx.set_command(cmd, apply_args=False)
@@ -1158,6 +1184,8 @@ def cmd_config(ctx:context, width:int) -> str|None:
 
 	api_key = ctx.command_options.get('config:api-key')
 	if api_key is not None:
+		if command:
+			return f'{warning_prefix(ctx.command)} bad option api-key for "{command}".'
 		# TODO: "encrypt" ?
 		config.set('lookup/api-key', api_key)
 		print(f'API key set.')
@@ -1168,7 +1196,7 @@ def cmd_config(ctx:context, width:int) -> str|None:
 setattr(cmd_config, 'load_db', False)
 
 def _config_help() -> None:
-	print_cmd_usage('config', '<args>')
+	print_cmd_usage('config', '[<command>] <options>')
 
 setattr(cmd_config, 'help', _config_help)
 
@@ -1262,6 +1290,7 @@ command_options = {
 		**__opt_max_hits,
 	},
 	'config': {
+		'config:command-args':      { 'name': '--args', 'arg': str,    'help': 'Set default arguments for <command>' },
 		'config:default-command':   { 'name': '--default', 'arg': str, 'validator': _valid_cmd, 'help': 'Set command to run by default' },
 		'config:default-arguments': { 'name': '--default-args', 'arg': str, 'help': 'Set arguments for the default command' },
 		'config:api-key':           { 'name': '--api-key', 'arg': str, 'help': 'Set API key for backend (TMDb)' },
