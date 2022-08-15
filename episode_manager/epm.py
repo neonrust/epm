@@ -2222,6 +2222,9 @@ def main():
 		print('OR: epm config --api-key <key>')
 		sys.exit(1)
 
+	except utils.FatalJSONError:
+		sys.exit(1)
+
 	except KeyboardInterrupt:
 		print('** User beak', file=sys.stderr)
 		sys.exit(1)

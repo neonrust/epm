@@ -3,6 +3,7 @@ from os.path import basename, dirname, expandvars, expanduser, exists as pexists
 import os
 from subprocess import run
 from tempfile import mkstemp
+import sys
 
 from typing import Any
 from types import ModuleType as Module
@@ -20,6 +21,9 @@ except ImportError:
 import json
 
 PRG = ''
+
+class FatalJSONError(ValueError):
+	pass
 
 def init(prg):
 	global PRG
@@ -40,14 +44,44 @@ def warning_prefix(context_name:str|None=None) -> str:
 
 def read_json(filepath:str) -> dict:
 	if pexists(filepath) and psize(filepath) > 1:
-		if orjson is not None:
-			with open(filepath, 'rb') as fp:
-				return orjson.loads(fp.read())
-		else:
-			with open(filepath, 'r') as fp:
-				return json.load(fp)
+		try:
+			if orjson is not None:
+				with open(filepath, 'rb') as fp:
+					return orjson.loads(fp.read())
+			else:
+				with open(filepath, 'r') as fp:
+					return json.load(fp)
+
+		except json.JSONDecodeError as jde:
+			_dump_decode_error(jde, filepath)
+			raise FatalJSONError(jde)
 
 	return {}
+
+
+def _dump_decode_error(err, filepath:str) -> None:
+	if hasattr(err, 'lineno') and hasattr(err, 'colno'):
+		line_num = 0
+		print(f'{_E}ERROR{_00} Failed to read JSON ({filepath}:{err.lineno}:{err.colno}): {err.msg}', file=sys.stderr)
+		with open(filepath) as fp:
+			for line in fp:
+				line_num += 1
+				if line_num in (err.lineno - 1, err.lineno + 1):
+					print(f'   {line}', end='')
+				elif line_num == err.lineno:
+					N = err.colno - 1
+					line = line.rstrip()
+					# print('N:', N, 'len:', len(line))
+					left = line[:N - 1]
+					# print(f'left>{left}<')
+					bad_part = line[N - 1]
+					rest = line[N - 1:]
+					right = rest[1:] if rest else ''
+					print(f'{_f}>>{_0} {left}{_E}{bad_part}{_00}{right} {_f}<<{_0}', file=sys.stderr)
+					#print(f'{_b}{"^":>{err.colno + 3}}{_0}', file=sys.stderr)
+
+				if line_num == err.lineno + 1:
+					break
 
 
 def write_json(filepath:str, data:Any) -> Exception|None:
