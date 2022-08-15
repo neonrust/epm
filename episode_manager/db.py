@@ -326,7 +326,7 @@ def find_single_series(db:dict, idx_or_id:str) -> tuple[int|None, str|None, str|
 		passed = True
 
 		if passed and find_index is not None:
-			passed = meta_get(series, meta_list_index_key) == index
+			passed = meta_get(series, meta_list_index_key) == find_index
 
 		if passed and imdb_id is not None:
 			passed = series.get('imdb_id') == imdb_id
@@ -339,7 +339,7 @@ def find_single_series(db:dict, idx_or_id:str) -> tuple[int|None, str|None, str|
 	found = list(filter_map(db, filter=flt, map=index_sid))
 
 	if found:
-		return found
+		return *found[0], None
 
 	return nothing_found
 

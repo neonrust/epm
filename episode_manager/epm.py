@@ -884,7 +884,7 @@ def cmd_mark(ctx:context, width:int, marking:bool=True) -> str | None:
 	find_id = ctx.command_arguments.pop(0)
 
 	index, series_id, err = db.find_single_series(ctx.db, find_id)
-	if series_id is not None or err is not None:
+	if series_id is None or err is not None:
 		return err
 
 	series = ctx.db[series_id]
@@ -991,13 +991,13 @@ def cmd_mark(ctx:context, width:int, marking:bool=True) -> str | None:
 		if not unseen:
 			print()
 			print(f'{_c}Last episode marked of %s series.{_0}' % series['status'])
-			ctx.command_arguments = [find_id]
+			ctx.command_arguments = [index]
 			return cmd_archive(ctx, width)
 
 	elif not marking and is_archived:
 		print()
 		print(f'{_c}Unmarked episode of archived series.{_0}')
-		ctx.command_arguments = [find_id]
+		ctx.command_arguments = [index]
 		return cmd_restore(ctx, width)
 
 	db.save(ctx.db)
@@ -1040,7 +1040,7 @@ def cmd_archive(ctx:context, width:int, archiving:bool=True) -> str | None:
 	find_id = ctx.command_arguments.pop(0)
 
 	index, series_id, err = db.find_single_series(ctx.db, find_id)
-	if series_id is not None or err is not None:
+	if series_id is None or err is not None:
 		return err
 
 	series = ctx.db[series_id]
