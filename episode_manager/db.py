@@ -17,6 +17,7 @@ DB_VERSION = 2
 def code_version() -> int:
 	return DB_VERSION
 
+
 def load() -> dict:
 
 	db_file = str(config.get('paths/series-db'))
@@ -31,7 +32,7 @@ def load() -> dict:
 	t1 = time.time()
 	if config.get_bool('debug'):
 		ms = (t1 - t0)*1000
-		print(f'{_f}[db: %d entries in %.1fms; v%d]{_0}' % (len(db) - 1, ms, meta_get(db, meta_version_key)))
+		print(f'{_f}[db: %d entries in %.1fms; v%d]{_0}' % (len(db) - 1, ms, meta_get(db, meta_version_key)), file=sys.stderr)
 
 	modified = _migrate(db)
 
@@ -284,7 +285,7 @@ def filter_map(db:dict, sort_key:Callable[[Any],Any]|None=None, filter:Callable[
 def _sortkey_title_and_year(series:dict) -> tuple[str,list[int]]:
 	return series['title'].casefold(), series.get('year', [])
 
-def indexed_series(db:dict, archived: bool | None=None, index=None, match=None, state: State | None=None) -> list[tuple[int, str]]:
+def indexed_series(db:dict, archived: bool|None=None, index=None, match=None, state: State | None=None) -> list[tuple[int, str]]:
 	"""Return a list with a predictable sorting, optionally filtered."""
 
 	def flt(series:dict) -> bool:
