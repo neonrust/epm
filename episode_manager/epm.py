@@ -219,122 +219,10 @@ def ambiguous_cmd(name:str, matching:list[str]) -> None:
 ###############################################################################
 
 
-def cmd_unseen(ctx:context, width:int) -> str | None:
-	# TODO: print header/columns
-
-	also_future = 'unseen:future' in ctx.command_options
-	only_started = 'unseen:started' in ctx.command_options
-	only_planned = 'unseen:planned' in ctx.command_options
-	all_unseen = 'unseen:all-episodes' in ctx.command_options
-
-	if only_started and only_planned:
-		return 'Can\'t specify "started" and "planned" at the same time (try "list" command)'
-
-	find_idx, match = find_idx_or_match(ctx.command_arguments)
-
-	find_state = State.ACTIVE
-	if only_started:
-		find_state = State.STARTED
-	elif only_planned:
-		find_state = State.PLANNED
-
-	series_list = db.indexed_series(ctx.db, state=find_state, index=find_idx, match=match)
-
-	print(f'Listing {_0}', end='')
-	if only_started: print(f'{_u}started{_0} ', end='')
-	elif only_planned: print(f'{_u}planned{_0} ', end='')
-	print(f'series with unseen episodes', end='')
-	if match: print(', matching: %s' % match.styled_description, end='')
-	print(f'{_0}.')
-
-	if not series_list:
-		return no_series(ctx.db)
-
-	series_unseen = []
-	for index, series_id in series_list:
-		series = ctx.db[series_id]
-
-		stale, _ = is_stale(series)
-		if stale:
-			# we've come upon a series that is stale, do a refresh (of
-			subset = [sid for _, sid in series_list]
-			refresh_series(ctx.db, width, subset=subset)
-
-		_, unseen = seen_unseen_episodes(series)
-		if unseen:
-			series_unseen.append((index, series_id, series, unseen))
-
-	if not series_unseen:
-		if match:
-			return 'Nothing matched: %s (or everything already seen)' % match.pattern
-		return 'Everything has been seen, better add some series!'
-
-
-	# TODO: optionally sort series by "earliest" episode in summary mode
-
-	num_shown = 0
-	total_episodes = 0
-	total_duration = 0
-
-	for index, series_id, series, unseen in series_unseen:
-
-		any_episodes_seen = bool(meta_get(series, meta_seen_key, {}))
-
-		if only_started and not any_episodes_seen:
-			continue
-		if only_planned and any_episodes_seen:
-			continue
-
-		# alternate styling odd/even rows
-		hilite = (num_shown % 2) == 0
-
-		tail = None
-		if not all_unseen:
-			tail = f' %3d unseen' % len(unseen)
-
-		series_printed = False
-		def print_series():
-			if hilite:
-				print(f'\x1b[48;5;234m{_K}', end='')  # TODO: use constant, share with cmd_show
-
-			print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width, tail=tail, tail_style=_f)
-			nonlocal series_printed
-			series_printed = True
-
-		if all_unseen:
-			_, unseen = seen_unseen_episodes(series)
-			printed_keys = print_episodes(series, unseen, width=width, pre_print=print_series, also_future=also_future)
-			if printed_keys:
-				num_shown += 1
-
-			total_episodes += len(printed_keys)
-			total_duration += sum(ep.get('runtime') or 0 for ep in episodes_by_key(series, printed_keys))
-
-		else:
-			# print first unseen episode
-			if not (also_future or is_released(unseen[0])):
-				continue
-
-			print_series()
-			print_seen_status(series, summary=False, last=False, next=True, width=width)
-
-			num_shown += 1
-			total_episodes += 1
-			total_duration += unseen[0].get('runtime') or 0
-
-		if hilite:
-			print(f'{_00}{_K}', end='')
-
-	# this is wildly incorrect!
-	#print(f'{_b}\x1b[48;2;20;50;20m%d series{_0}' % num_shown)
-	print(f'{_b}\x1b[48;2;20;50;20m{_K}\rSeries: {num_shown}', end='')
-	if all_unseen:
-		print(f' {_fi} Episodes: \x1b[1m{total_episodes}{_0}', end='')
-		if total_duration:
-			print(f'  {_f}{fmt_duration(total_duration*60)}{_0}', end='')
-	print()
-
-	return None
+def cmd_unseen(ctx:context, width:int) -> str|None:
+	ctx.command_options['with-unseen'] = True
+	ctx.command_options['next-episode'] = True
+	return cmd_show(ctx, width)
 
 def _unseen_help() -> None:
 	print_cmd_usage('unseen', '<options> <search...>')
@@ -347,22 +235,37 @@ setattr(cmd_unseen, 'help', _unseen_help)
 def cmd_show(ctx:context, width:int) -> str|None:
 	# TODO: print header/columns
 
-	list_all = 'show:all' in ctx.command_options
-	only_archived = 'show:archived' in ctx.command_options
-	only_started = 'show:started' in ctx.command_options
-	only_planned = 'show:planned' in ctx.command_options
-	only_abandoned = 'show:abandoned' in ctx.command_options
-	all_unseen = 'show:all-episodes' in ctx.command_options
-	seen_episodes = 'show:seen-episodes' in ctx.command_options
-	show_details = 'show:details' in ctx.command_options
+	list_all = 'all' in ctx.command_options
+	only_archived = 'archived' in ctx.command_options
+	only_started = 'started' in ctx.command_options
+	only_planned = 'planned' in ctx.command_options
+	only_abandoned = 'abandoned' in ctx.command_options
+	with_unseen_eps = 'with-unseen' in ctx.command_options
+	all_unseen_eps = 'all-episodes' in ctx.command_options
+	future_eps = 'future-episodes' in ctx.command_options
+	seen_eps = 'seen-episodes' in ctx.command_options
+	show_next = 'next-episode' in ctx.command_options
+	show_details = 'details' in ctx.command_options
 
 	if [only_started, only_planned, only_archived, only_abandoned].count(True) > 1:
 		return 'Specify only one of "started", "planned", "archived" and "abandoned"'
 
-	filter_director = ctx.command_options.get('show:director')
-	filter_writer = ctx.command_options.get('show:writer')
-	filter_cast = ctx.command_options.get('show:cast')
-	filter_year = ctx.command_options.get('show:year')
+	find_state = State.ACTIVE
+	if list_all:
+		find_state = None
+	elif only_started:
+		find_state = State.STARTED
+	elif only_planned:
+		find_state = State.PLANNED
+	elif only_archived:
+		find_state = State.ARCHIVED
+	elif only_abandoned:
+		find_state = State.ABANDONED
+
+	filter_director = ctx.command_options.get('director')
+	filter_writer = ctx.command_options.get('writer')
+	filter_cast = ctx.command_options.get('cast')
+	filter_year = ctx.command_options.get('year')
 
 	# NOTE: in the future, might support RE directly from the user
 	if filter_director:
@@ -378,7 +281,7 @@ def cmd_show(ctx:context, width:int) -> str|None:
 			return 'Bad year filter: %s (use: <start year>[-<end year>])' % filter_year
 
 	find_idx, match = find_idx_or_match(ctx.command_arguments, director=filter_director, writer=filter_writer, cast=filter_cast, year=filter_year)
-	series_list = db.indexed_series(ctx.db, index=find_idx, match=match)
+	series_list = db.indexed_series(ctx.db, state=find_state, index=find_idx, match=match)
 
 	print(f'Listing ', end='')
 	if only_started: print(f'{_u}started{_0} ', end='')
@@ -401,24 +304,10 @@ def cmd_show(ctx:context, width:int) -> str|None:
 		series = ctx.db[series_id]
 		is_archived = meta_has(series, 'archived')
 
-		if is_archived:
-			num_archived += 1
-		if is_archived and not (list_all or only_archived or only_abandoned):
-			continue
-		if not is_archived and only_archived:
-			continue
-		has_episodes_seen = len(meta_get(series, meta_seen_key, {})) > 0
-		if only_started and not has_episodes_seen:
-			continue
-		if only_planned and has_episodes_seen:
-			continue
-		if only_abandoned and not is_archived:
-			continue
-
 		seen, unseen = seen_unseen_episodes(series)
-		if only_abandoned:
-			if len(unseen) == 0:
-				continue
+
+		if with_unseen_eps and not unseen:
+			continue
 
 		num_shown += 1
 
@@ -431,7 +320,7 @@ def cmd_show(ctx:context, width:int) -> str|None:
 		# alternate styling odd/even rows
 		hilite = (num_shown % 2) == 0
 		if hilite:
-			print(f'\x1b[48;5;234m{_K}\r', end='') # TODO: use constant, share with cmd_unseen
+			print(f'\x1b[48;5;234m{_K}\r', end='')
 
 		if show_details:
 			print_series_details(index, series,width=width, gray=is_archived and not only_archived)
@@ -442,13 +331,14 @@ def cmd_show(ctx:context, width:int) -> str|None:
 			print_archive_status(series)
 
 		# don't print "next" if we're printing all unseen episodes anyway
-		print_seen_status(series, gray=is_archived and not only_archived, next=not all_unseen, width=width)
+		grayed = is_archived and not only_archived
+		print_seen_status(series, summary=not show_next, last=not show_next, next=show_next or not all_unseen_eps, width=width, gray=grayed)
 
-		if seen_episodes:
+		if seen_eps:
 			print_episodes(series, seen, width=width)
 
-		if all_unseen:
-			print_episodes(series, unseen, width=width)
+		if all_unseen_eps:
+			print_episodes(series, unseen, width=width, also_future=future_eps)
 
 		if hilite:
 			print(f'{_00}{_K}', end='')
@@ -569,7 +459,7 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str|None:
 	if not ctx.command_arguments:
 		return 'required argument missing: <title> / <Series ID>'
 
-	max_hits = int(ctx.command_options.get('search:max-hits') or 0) or config.get_int('lookup/max-hits')
+	max_hits = int(ctx.command_options.get('max-hits') or 0) or config.get_int('lookup/max-hits')
 
 	height = term_size()[1]
 	# 'Found...' + divider above overview + divider below overview + "status bar"
@@ -1105,7 +995,7 @@ def cmd_refresh(ctx:context, width:int) -> str|None:
 	if max_age <= 0:
 		max_age = config.get_int('max-age')
 
-	forced = bool(ctx.command_options.get('refresh:force'))
+	forced = bool(ctx.command_options.get('force'))
 
 	find_idx, match = find_idx_or_match(ctx.command_arguments)
 	series_list = db.indexed_series(ctx.db, archived=False, index=find_idx, match=match)
@@ -1148,7 +1038,7 @@ def cmd_config(ctx:context, width:int) -> str|None:
 	if command and not ctx.command_options:
 		return f'{warning_prefix(ctx.command)} and...?'
 
-	cmd_args = ctx.command_options.get('config:command-args')
+	cmd_args = ctx.command_options.get('command-args')
 	if cmd_args is not None:
 		if not command:
 			return f'{warning_prefix(ctx.command)} "args" only possible for subcommand.'
@@ -1160,7 +1050,7 @@ def cmd_config(ctx:context, width:int) -> str|None:
 		config.set('commands/%s/arguments' % command, args_list)
 		print(f'Arguments for {_c}{command}{_0} set: {_b}{" ".join(args_list or [f"{_f}<none>{_0}"])}{_0}')
 
-	default_cmd = ctx.command_options.get('config:default-command')
+	default_cmd = ctx.command_options.get('default-command')
 	if default_cmd is not None:
 		if command:
 			return f'{warning_prefix(ctx.command)} bad option default command for "{command}".'
@@ -1168,7 +1058,7 @@ def cmd_config(ctx:context, width:int) -> str|None:
 		config.set('commands/default', default_cmd)
 		print(f'Default command set: {_c}{default_cmd}{_0}')
 
-	default_args = ctx.command_options.get('config:default-arguments')
+	default_args = ctx.command_options.get('default-arguments')
 	if default_args is not None:
 		if command:
 			return f'{warning_prefix(ctx.command)} bad option default args for "{command}".'
@@ -1182,7 +1072,7 @@ def cmd_config(ctx:context, width:int) -> str|None:
 		config.set('commands/%s/arguments' % cmd, args_list)
 		print(f'Default arguments for {_c}{cmd}{_0} set: {_b}{" ".join(args_list or [f"{_f}<none>{_0}"])}{_0}')
 
-	api_key = ctx.command_options.get('config:api-key')
+	api_key = ctx.command_options.get('api-key')
 	if api_key is not None:
 		if command:
 			return f'{warning_prefix(ctx.command)} bad option api-key for "{command}".'
@@ -1211,20 +1101,72 @@ setattr(cmd_help, 'help', _help_help)
 
 
 # known commands with aliases
-known_commands:dict[str,dict] = {
-	'search':  { 'alias': ('s', ),      'handler': cmd_search,   'help': 'Search for a series.' },
- 	'add':     { 'alias': ('a', ),      'handler': cmd_add,      'help': 'Search for a series and (optionally) add it.' },
- 	'delete':  { 'alias': (),           'handler': cmd_delete,   'help': 'Completely remove a series - permanently!' },
- 	'show':    { 'alias': ('list', 'ls'), 'handler': cmd_show,   'help': 'Show/list series.'},
-	'calendar': { 'alias': (),          'handler': cmd_calendar, 'help': 'Show episode releases by date.' },
-	'unseen':  { 'alias': ('u', 'us'),  'handler': cmd_unseen,   'help': 'Show unseen episodes of series.' },
-	'mark':    { 'alias': ('m', ),      'handler': cmd_mark,     'help': 'Mark a series, season or specific episode as seen.' },
-	'unmark':  { 'alias': ('M', 'um'),  'handler': cmd_unmark,   'help': 'Unmark a series/season/episode - reverse of mark command.' },
-	'archive': { 'alias': ('A', ),      'handler': cmd_archive,  'help': 'Archving series - hides from normal list command.' },
-	'restore': { 'alias': ('R', ),      'handler': cmd_restore,  'help': 'Restore series - reverse of archive command.' },
-	'refresh': { 'alias': ('r', ),      'handler': cmd_refresh,  'help': 'Refresh episode data of all non-archived series.' },
-	'config':  { 'alias': (),           'handler': cmd_config,   'help': 'Configure.' },
-	'help':    { 'alias': (),           'handler': cmd_help,     'help': 'Shows this help page.' },
+known_commands:dict[str,dict[str,tuple|Callable|str]] = {
+	'search':  {
+		'alias': ('s', ),
+		'handler': cmd_search,
+		'help': 'Search for a series.',
+	},
+ 	'add': {
+	    'alias': ('a', ),
+	    'handler': cmd_add,
+	    'help': 'Search for a series and (optionally) add it.',
+    },
+ 	'delete': {   # shorthand for a destructive operation seems reckless
+	    'alias': (),
+	    'handler': cmd_delete,
+	    'help': 'Remove a series from %s - permanently!' % PRG,
+    },
+ 	'show': {
+	    'alias': ('list', 'ls'),
+	    'handler': cmd_show,
+	    'help': 'Show/list series with optional details.',
+    },
+	'calendar': {
+		'alias': (),
+		'handler': cmd_calendar,
+		'help': 'Show episode releases by date.',
+	},
+	'unseen': {
+		'alias': ('u', 'us'),
+		'handler': cmd_unseen,
+		'help': 'Show unseen episodes of series.',
+	},
+	'mark': {
+		'alias': ('m', ),
+		'handler': cmd_mark,
+		'help': 'Mark as seen, a series, season or episode(s).',
+	},
+	'unmark': {
+		'alias': ('M', 'um'),
+		'handler': cmd_unmark,
+		'help': 'Unmark a series/season/episode - reverse of `mark`.',
+	},
+	'archive': {
+		'alias': ('A', ),
+		'handler': cmd_archive,
+		'help': 'Archving series - hides from default `list` and not refreshed.',
+	},
+	'restore': {
+		'alias': ('R', ),
+		'handler': cmd_restore,
+		'help': 'Restore an archived series - reverse of `archive`.',
+	},
+	'refresh': {
+		'alias': ('r', ),
+		'handler': cmd_refresh,
+		'help': 'Refresh information of non-archived series (all or subset).',
+	},
+	'config': {
+		'alias': (),
+		'handler': cmd_config,
+		'help': 'Configure aspects of %s, e.g. defaults.' % PRG,
+	},
+	'help': {
+		'alias': (),
+		'handler': cmd_help,
+		'help': 'Shows this help page.',
+	},
 }
 
 
@@ -1247,7 +1189,7 @@ def _valid_cmd(name:str) -> str|None:
 # TODO: merge with 'known_commands' ?  (at least for the command-specific options)
 
 __opt_max_hits = {
-	'search:max-hits': {
+	'max-hits': {
 		'name': '-n',
 		'arg': int,
 		'validator': _valid_int(1, 40),
@@ -1257,31 +1199,37 @@ __opt_max_hits = {
 
 command_options = {
 	None: { # i.e. global options
-		'debug': { 'name': ('--debug',),  'help': 'Enable debug mode', 'func': _set_debug },
+		'debug':           { 'name': '--debug', 'help': 'Enable debug mode', 'func': _set_debug, 'hidden': True },
 	},
 	'show': {
-		'show:all':           { 'name': ('-a', '--all'),         'help': 'List also archived series' },
-		'show:archived':      { 'name': ('-A', '--archived'),    'help': 'List only archived series' },
-		'show:started':       { 'name': ('-s', '--started'),     'help': 'List only series with seen episodes' },
-		'show:planned':       { 'name': ('-p', '--planned'),     'help': 'List only series without seen episodes' },
-		'show:all-episodes':  { 'name': ('-e', '--episodes'),    'help': 'Show all unseen episodes (not only first)' },
-		'show:seen-episodes': { 'name': ('-S', '--seen'),        'help': 'Show seen episodes' },
-		'show:abandoned':     { 'name': '--abandoned',           'help': 'List only abandoned series' },
-		'show:details':       { 'name': ('-I', '--details'),     'help': 'Show more details' },
-		'show:director':      { 'name': '--director', 'arg': str, 'help': 'Filter by director, substring match' },
-		'show:writer':        { 'name': '--writer',  'arg': str, 'help': 'Filter by writer, substring match' },
-		'show:cast':          { 'name': '--cast',    'arg': str, 'help': 'Filter by cast, substring match' },
-		'show:year':          { 'name': '--year',    'arg': str, 'help': 'Filter by year, <start>[-<end>]' },
+		'all':             { 'name': ('-a', '--all'),         'help': 'List also archived series' },
+		'archived':        { 'name': ('-A', '--archived'),    'help': 'List only archived series' },
+		'started':         { 'name': ('-s', '--started'),     'help': 'List only series with seen episodes' },
+		'planned':         { 'name': ('-p', '--planned'),     'help': 'List only series without seen episodes' },
+		'abandoned':       { 'name': '--abandoned',           'help': 'List only abandoned series' },
+
+		'all-episodes':    { 'name': ('-e', '--episodes'),    'help': 'Show all unseen (released) episodes (not just 1st)' },
+		'future-episodes': { 'name': ('-f', '--future'),      'help': '-e also shows future/unreleased episodes' },
+		'seen-episodes':   { 'name': ('-S', '--seen'),        'help': 'Show seen episodes' },
+		'with-unseen':     { 'name': ('-u', '--unseen'),      'help': 'List only series with unseen episodes' },
+		'next-episode':    { 'name': ('-N', '--next'),        'help': 'Show only next episode, no summary' },
+
+		'details':         { 'name': ('-I', '--details'),     'help': 'Show more details' },
+
+		'director':        { 'name': '--director', 'arg': str, 'help': 'Filter by director, substring match' },
+		'writer':          { 'name': '--writer',  'arg': str, 'help': 'Filter by writer, substring match' },
+		'cast':            { 'name': '--cast',    'arg': str, 'help': 'Filter by cast, substring match' },
+		'year':            { 'name': '--year',    'arg': str, 'help': 'Filter by year, <start>[-<end>]' },
 	},
 	'unseen': {
-		'unseen:future':         { 'name': ('-f', '--future'),        'help': 'Show also future/unreleased episodes' },
-		'unseen:started':        { 'name': ('-s', '--started'),       'help': 'List only series with seen episodes' },
-		'unseen:planned':        { 'name': ('-p', '--planned'),       'help': 'List only series without seen episodes' },
-		'unseen:all-episodes':   { 'name': ('-e', '--episodes'),      'help': 'Show all unseen episodes (not only first)' },
+		'started':         { 'name': ('-s', '--started'),       'help': 'List only series with seen episodes' },
+		'planned':         { 'name': ('-p', '--planned'),       'help': 'List only series without seen episodes' },
+		'all-episodes':    { 'name': ('-e', '--episodes'),      'help': 'Show all unseen episodes (not only first)' },
+		'future-episodes': { 'name': ('-f', '--future'),        'help': '-e also shows future/unreleased episodes' },
 	},
 	'refresh': {
-		'refresh:force': { 'name': ('-f', '--force'),         'help': 'Refresh whether needed or not' },
-		'max-age':       { 'name': '--max-age',  'arg': int,  'help': 'Refresh older than N days (default: %s)' % config.get_int('max-age') },
+		'force':           { 'name': ('-f', '--force'),         'help': 'Refresh whether needed or not' },
+		'max-age':         { 'name': '--max-age',  'arg': int,  'help': 'Refresh older than N days (default: %s)' % config.get_int('max-age') },
 	},
 	'add': {
 		**__opt_max_hits,
@@ -1290,10 +1238,10 @@ command_options = {
 		**__opt_max_hits,
 	},
 	'config': {
-		'config:command-args':      { 'name': '--args', 'arg': str,    'help': 'Set default arguments for <command>' },
-		'config:default-command':   { 'name': '--default', 'arg': str, 'validator': _valid_cmd, 'help': 'Set command to run by default' },
-		'config:default-arguments': { 'name': '--default-args', 'arg': str, 'help': 'Set arguments for the default command' },
-		'config:api-key':           { 'name': '--api-key', 'arg': str, 'help': 'Set API key for backend (TMDb)' },
+		'command-args':      { 'name': '--args', 'arg': str,    'help': 'Set default arguments for <command>' },
+		'default-command':   { 'name': '--default', 'arg': str, 'validator': _valid_cmd, 'help': 'Set command to run by default' },
+		'default-arguments': { 'name': '--default-args', 'arg': str, 'help': 'Set arguments for the default command' },
+		'api-key':           { 'name': '--api-key', 'arg': str, 'help': 'Set API key for backend (TMDb)' },
 	},
 }
 
@@ -2005,6 +1953,13 @@ def print_cmd_option_help(command:str) -> None:
 	options = option_def(command)
 	if options:
 		print(f'{_b}Options:{_00}')
+
+		options = {
+			name: opts
+			for name, opts in options.items()
+			if opts.get('hidden') != True
+		}
+
 		for opt in options.values():
 			option = opt.get('name')
 			if type(option) is tuple:
