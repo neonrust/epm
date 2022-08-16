@@ -302,7 +302,7 @@ def cmd_show(ctx:context, width:int) -> str|None:
 
 	for index, series_id in series_list:
 		series = ctx.db[series_id]
-		is_archived = meta_has(series, 'archived')
+		is_archived = meta_has(series, meta_archived_key)
 
 		seen, unseen = seen_unseen_episodes(series)
 
@@ -376,7 +376,7 @@ def cmd_calendar(ctx:context, width:int) -> str|None:
 	#   using margin of one extra week, because it's simpler
 	end_date = today + timedelta(days=(num_weeks + 1)*7)
 	for series_id, series in ctx.db.items():
-		if meta_has(series, 'archived'):
+		if meta_has(series, meta_archived_key):
 			continue
 
 		stale, _ = is_stale(series)
@@ -513,7 +513,7 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str|None:
 		if already:
 			print(f'{_f}Already added: %d{_00}' % len(already))
 			for new_series in already:
-				if meta_has(ctx.db[new_series['id']], 'archived'):
+				if meta_has(ctx.db[new_series['id']], meta_archived_key):
 					arch_tail = f'  \x1b[33m(archived){_00}'
 				else:
 					arch_tail = None
@@ -559,8 +559,8 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str|None:
 	new_series = hits[selected]
 	series_id = new_series['id']
 
-	meta_set(new_series, 'seen', {})
-	meta_set(new_series, 'added', now())
+	meta_set(new_series, meta_seen_key, {})
+	meta_set(new_series, meta_added_key, now())
 
 	# assign 'list index', and advance the global
 	next_list_index = meta_get(ctx.db, meta_next_list_index_key)
@@ -877,7 +877,7 @@ def cmd_mark(ctx:context, width:int, marking:bool=True) -> str | None:
 	for ep in episodes:
 		print('  %s' % format_episode_title(None, ep, include_season=True, width=width - 2))
 
-	is_archived = meta_has(series, 'archived')
+	is_archived = meta_has(series, meta_archived_key)
 
 	if marking and series.get('status') in ('ended', 'canceled') and not is_archived:
 		seen, unseen = seen_unseen_episodes(series)
@@ -938,7 +938,7 @@ def cmd_archive(ctx:context, width:int, archiving:bool=True) -> str | None:
 
 	series = ctx.db[series_id]
 
-	currently_archived = meta_has(series, 'archived')
+	currently_archived = meta_has(series, meta_archived_key)
 
 
 	if archiving == currently_archived:
@@ -956,14 +956,14 @@ def cmd_archive(ctx:context, width:int, archiving:bool=True) -> str | None:
 		if partly_seen:
 			print(' (abandoned)', end='')
 		print(f':{_00}')
-		meta_set(series, 'archived', now())
+		meta_set(series, meta_archived_key, now())
 
 	else:
 		print(f'{_b}Series restored', end='')
 		if partly_seen:
 			print(' (resumed)', end='')
 		print(f':{_00}')
-		meta_del(series, 'archived')
+		meta_del(series, meta_archived_key)
 
 	print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width)
 
@@ -1789,7 +1789,7 @@ def print_series_details(index:int, series:dict, width:int, gray:bool=False) -> 
 
 
 def print_archive_status(series:dict) -> None:
-	if meta_has(series, 'archived'):
+	if meta_has(series, meta_archived_key):
 		print(f'{_f}       Archived', end='')
 		seen, unseen = seen_unseen_episodes(series)
 		if seen and unseen:  # some has been seen, but not all

@@ -98,7 +98,7 @@ def _migrate(db:dict) -> bool:
 		modified = True
 
 	if db_version < 2:
-		meta_set(db, 'next_list_index', list_index)
+		meta_set(db, meta_next_list_index_key, list_index)
 		print(f'{_f}Built list indexes for all %d series, next index: %d{_0}' % (len(db) - 1, list_index))
 		modified = True
 
@@ -369,7 +369,7 @@ def series_state(series:dict) -> State:
 
 
 def series_num_archived(db:dict) -> int:
-	return sum(1 if meta_has(series, 'archived') else 0 for series in db.values())
+	return sum(1 if meta_has(series, meta_archived_key) else 0 for series in db.values())
 
 
 meta_key = 'epm:meta'
