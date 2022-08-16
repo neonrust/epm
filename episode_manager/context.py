@@ -27,13 +27,16 @@ class context:
 		self.db:dict[str,dict] = {}
 
 	def invoke(self, width:int) -> str|None:
+		if config.get('debug'):
+			self.debug = True
+
 		load_db = getattr(self.handler, 'load_db', True)
 		if load_db:
 			self.db = db.load()
 
 		if self.debug:
-			print('ARGS:', self.command_arguments)
-			print('OPTS:', self.command_options)
+			print('[ctx] ARGS:', self.command_arguments)
+			print('[ctx] OPTS:', self.command_options)
 
 		if not self.command_arguments and not self.command_options:
 			self.command_arguments = [*self.default_command_arguments]
