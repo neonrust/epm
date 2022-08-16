@@ -1030,6 +1030,10 @@ setattr(cmd_refresh, 'help', _refresh_help)
 
 def cmd_config(ctx:context, width:int) -> str|None:
 
+	if not ctx.command_options and not ctx.command_arguments:
+		config.print_current()
+		return
+
 	command:str|None = None
 	if ctx.command_arguments:
 		command = ctx.command_arguments.pop(0)

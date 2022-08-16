@@ -103,6 +103,14 @@ def write_json(filepath:str, data:Any) -> Exception|None:
 	return None
 
 
+def print_json(o:dict) -> None:
+	if orjson is not None:
+		s = orjson.dumps(o, option=orjson.OPT_INDENT_2 | orjson.OPT_SORT_KEYS)
+	else:
+		s = json.dumps(o,indent=2, sort_keys=True)
+	print(s.decode('utf-8'))
+
+
 _term_size = (0, 0)
 
 def term_size() -> tuple[int, int]:

@@ -2,7 +2,7 @@ import os
 from os.path import basename, dirname, expandvars, expanduser, exists as pexists, getsize as psize, join as pjoin
 from typing import Any
 
-from .utils import read_json, write_json, warning_prefix, pexpand
+from .utils import read_json, write_json, print_json, warning_prefix, pexpand
 
 
 default_max_refresh_age = 2  # days
@@ -92,6 +92,11 @@ def save():
 		print(f'{_E}ERROR{_00} Failed saving configuration: %s' % str(err))
 
 	_app_config_dirty = False
+
+
+def print_current():
+	print_json(_app_config)
+
 
 # type alias for type hints (should be recursive, but mypy doesn't support it)
 ConfigValue = str|int|float|dict|list
