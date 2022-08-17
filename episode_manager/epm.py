@@ -315,7 +315,9 @@ def cmd_show(ctx:context, width:int) -> str|None:
 		if stale:
 			# we've come upon a series that is stale, do a refresh (of everything)
 			subset = [sid for _, sid in series_list]
-			refresh_series(ctx.db, width, subset=subset)
+			modified = refresh_series(ctx.db, width, subset=subset)
+			if max(modified) > 0:
+				ctx.save()
 
 		# alternate styling odd/even rows
 		hilite = (num_shown % 2) == 0
@@ -381,7 +383,9 @@ def cmd_calendar(ctx:context, width:int) -> str|None:
 
 		stale, _ = is_stale(series)
 		if stale:
-			refresh_series(ctx.db, width)
+			modified = refresh_series(ctx.db, width)
+			if max(modified) > 0:
+				ctx.save()
 
 		# faster to loop backwards?
 		for ep in series.get('episodes', []):
@@ -572,11 +576,13 @@ def cmd_add(ctx:context, width:int, add:bool=True) -> str|None:
 	ctx.db[series_id] = new_series
 
 
-	refresh_series(ctx.db, width, subset=[series_id], max_age=-1)
+	modified = refresh_series(ctx.db, width, subset=[series_id], max_age=-1)
+	if max(modified) > 0:
+		ctx.save()
 
 	# TODO: offer to mark seasons as seen?
 
-	db.save(ctx.db)
+	ctx.save()
 
 	print(f'{_b}Series added:{_00}')
 
@@ -756,7 +762,7 @@ def cmd_delete(ctx:context, width:int) -> str | None:
 	# delete it
 
 	del ctx.db[series_id]
-	db.save(ctx.db)
+	ctx.save()
 
 	print(f'{_b}Series deleted:{_b}')
 	print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width)
@@ -785,7 +791,9 @@ def cmd_mark(ctx:context, width:int, marking:bool=True) -> str | None:
 	stale, _ = is_stale(series)
 	if stale:
 		# we've come upon a series that is stale, do a refresh (of everything)
-		refresh_series(ctx.db, width, subset=[series_id])
+		modified = refresh_series(ctx.db, width, subset=[series_id])
+		if max(modified) > 0:
+			ctx.save()
 
 	season:None|range|tuple = None
 	episode:None|range|tuple = None
@@ -893,7 +901,7 @@ def cmd_mark(ctx:context, width:int, marking:bool=True) -> str | None:
 		ctx.command_arguments = [index]
 		return cmd_restore(ctx, width)
 
-	db.save(ctx.db)
+	ctx.save()
 
 	return None
 
@@ -967,7 +975,7 @@ def cmd_archive(ctx:context, width:int, archiving:bool=True) -> str | None:
 
 	print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width)
 
-	db.save(ctx.db)
+	ctx.save()
 
 	return None
 
@@ -1015,7 +1023,7 @@ def cmd_refresh(ctx:context, width:int) -> str|None:
 		if num_episodes > 0:
 			print(f'{_f}Refreshed %d episodes across %d series [%.1fs].{_00}' % (num_episodes, num_series, time.time() - t0))
 
-		db.save(ctx.db)
+		ctx.save()
 
 	return None
 
@@ -1498,7 +1506,6 @@ def refresh_series(db:dict, width:int, subset:list|None=None, max_age:int|None=N
 
 		if not to_refresh:
 			if touched:
-				m_db.save(db)
 				return touched, 0  # only series affected, no episodes
 
 			return 0, 0
@@ -1529,9 +1536,6 @@ def refresh_series(db:dict, width:int, subset:list|None=None, max_age:int|None=N
 
 		num_episodes += len(episodes)
 
-
-	if to_refresh:
-		m_db.save(db)
 
 	return len(to_refresh), num_episodes
 

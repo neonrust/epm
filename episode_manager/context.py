@@ -32,7 +32,7 @@ class context:
 
 		load_db = getattr(self.handler, 'load_db', True)
 		if load_db:
-			self.db = db.load()
+			self.load()
 
 		if self.debug:
 			print('[ctx] ARGS:', self.command_arguments)
@@ -135,6 +135,14 @@ class context:
 			args = config.get('commands/%s/arguments' % self.command, [])
 			# arguments added here will be ignored if arguments were specified on the command-line
 			self.parse_args(args, default=True)
+
+
+	def load(self) -> None:
+		self.db = db.load()
+
+
+	def save(self) -> None:
+		db.save(self.db)
 
 
 	def _no_command(self, *a, **kw):
