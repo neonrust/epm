@@ -1006,7 +1006,7 @@ def cmd_refresh(ctx:context, width:int) -> str|None:
 	forced = bool(ctx.command_options.get('force'))
 
 	find_idx, match = find_idx_or_match(ctx.command_arguments)
-	series_list = db.indexed_series(ctx.db, archived=False, index=find_idx, match=match)
+	series_list = db.indexed_series(ctx.db, state=State.ACTIVE, index=find_idx, match=match)
 
 	if not series_list:
 		return 'Nothing matched: %s' % (match.pattern if match else find_idx)
