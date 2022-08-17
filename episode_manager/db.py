@@ -22,17 +22,16 @@ def load() -> dict:
 
 	db_file = str(config.get('paths/series-db'))
 
-	t0 = time.time()
-
 	if not db_file or not pexists(dirname(db_file)):
 		raise RuntimeError('Invalid series db file path: %r' % db_file)
 
+	t0 = time.time()
 	db = read_json(db_file)
-
 	t1 = time.time()
+
 	if config.get_bool('debug'):
 		ms = (t1 - t0)*1000
-		print(f'{_f}[db: %d entries in %.1fms; v%d]{_0}' % (len(db) - 1, ms, meta_get(db, meta_version_key)), file=sys.stderr)
+		print(f'{_f}[db: read %d entries in %.1fms; v%d]{_0}' % (len(db) - 1, ms, meta_get(db, meta_version_key)), file=sys.stderr)
 
 	modified = _migrate(db)
 
@@ -209,7 +208,10 @@ def save(db:dict) -> None:
 
 	# write to a temp file and then rename it afterwards
 	tmp_name = mkstemp(dir=dirname(db_file))[1]
+	t0 = time.time()
 	err = write_json(tmp_name, db)
+	t1 = time.time()
+
 	if err is None:
 		# rotate backups
 		for idx in range(config.get_int('num-backups')):
@@ -221,9 +223,16 @@ def save(db:dict) -> None:
 		#   might run into (more) race-conditions of course
 
 		# backup existing(old) db file to 'series.1'
+		t2 = time.time()
 		mk_backup(db_file, backup_name(1))
+		t3 = time.time()
 
 		os.rename(tmp_name, db_file)
+
+		if config.get_bool('debug'):
+			ms = (t1 - t0)*1000
+			ms2 = (t3 - t2)*1000
+			print(f'{_f}[db: wrote %d entries in %.1fms (%.1fms); v%d]{_0}' % (len(db) - 1, ms, ms2, meta_get(db, meta_version_key)), file=sys.stderr)
 
 	else:
 		print(f'{_E}ERROR{_00} Failed saving series database: %s' % str(err))
