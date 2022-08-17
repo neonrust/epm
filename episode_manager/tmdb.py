@@ -24,6 +24,9 @@ class NoAPIKey(RuntimeError):
 class APIAuthError(RuntimeError):
 	pass
 
+class NetworkError(RuntimeError):
+	pass
+
 __parallel_requests = 16
 
 def set_parallel(num) -> None:
@@ -477,10 +480,14 @@ def _parallel_query(func:Callable, arg_list:list|map, progress_callback:Callable
 			for idx, (args, kw) in enumerate(arg_list)
 		]
 
-	return [
-		p.result()
-		for p in promises
-	]
+	try:
+		return [
+			p.result()
+			for p in promises
+		]
+	except requests.exceptions.ConnectionError as ce:
+		raise NetworkError(str(ce))
+
 
 
 def _self_test(args):

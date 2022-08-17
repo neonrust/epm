@@ -2181,6 +2181,11 @@ def main():
 		print('OR: epm config --api-key <key>')
 		sys.exit(1)
 
+	except tmdb.NetworkError as ne:
+		print(f'\r{_00}{_K}{_E}ERROR{_00} TMDb API network error: {ne}')
+		print('Please check internet connection and try again later.')
+		sys.exit(1)
+
 	except utils.FatalJSONError:
 		sys.exit(1)
 
