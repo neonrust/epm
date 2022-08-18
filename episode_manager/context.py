@@ -27,7 +27,7 @@ class context:
 		self.db:dict[str,dict] = {}
 
 	def invoke(self, width:int) -> str|None:
-		if config.get('debug'):
+		if self.global_options.get('debug'):
 			self.debug = True
 
 		load_db = getattr(self.handler, 'load_db', True)
