@@ -356,7 +356,7 @@ def find_single_series(db:dict, idx_or_id:str) -> tuple[int|None, str|None, str|
 
 def series_state(series:dict) -> State:
 	is_archived = meta_has(series, meta_archived_key)
-	is_ended = series.get('state') in ('ended', 'canceled')
+	is_ended = series.get('status') in ('ended', 'canceled')
 
 	num_episodes = len(series.get('episodes', []))
 	num_seen = len(meta_get(series, meta_seen_key, {}))
