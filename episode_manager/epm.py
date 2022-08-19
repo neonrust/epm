@@ -14,7 +14,7 @@ from typing import Callable, Any
 
 from . import tmdb
 from . import progress
-from .context import context, BadUsageError
+from .context import Context, BadUsageError
 from . import config, utils, db, db as m_db
 from .config import  STORE_MEMORY
 from .utils import term_size, warning_prefix, plural
@@ -42,7 +42,7 @@ def start():
 		tmdb.set_api_key(api_key)
 
 	# we set these functions to avoid import cycle
-	ctx = context(eat_option, resolve_cmd)
+	ctx = Context(eat_option, resolve_cmd)
 
 	try:
 		ctx.parse_args(sys.argv[1: ])
@@ -219,7 +219,7 @@ def ambiguous_cmd(name:str, matching:list[str]) -> None:
 ###############################################################################
 
 
-def cmd_unseen(ctx:context, width:int) -> str|None:
+def cmd_unseen(ctx:Context, width:int) -> str | None:
 	ctx.command_options['with-unseen'] = True
 	ctx.command_options['next-episode'] = True
 	return cmd_show(ctx, width)
@@ -232,7 +232,7 @@ def _unseen_help() -> None:
 setattr(cmd_unseen, 'help', _unseen_help)
 
 
-def cmd_show(ctx:context, width:int) -> str|None:
+def cmd_show(ctx:Context, width:int) -> str | None:
 	# TODO: print header/columns
 
 	list_all = 'all' in ctx.command_options
@@ -361,7 +361,7 @@ def _show_help() -> None:
 setattr(cmd_show, 'help', _show_help)
 
 
-def cmd_calendar(ctx:context, width:int) -> str|None:
+def cmd_calendar(ctx:Context, width:int) -> str | None:
 
 	if ctx.command_arguments:
 		num_weeks = int(ctx.command_arguments[0])
@@ -459,7 +459,7 @@ setattr(cmd_calendar, 'help', _calendar_help)
 
 year_ptn = re.compile(r'^(\d{4})|\((\d{4})\)$')  # 1968 or (1968)
 
-def cmd_add(ctx:context, width:int, add:bool=True) -> str|None:
+def cmd_add(ctx:Context, width:int, add:bool=True) -> str | None:
 	if not ctx.command_arguments:
 		return 'required argument missing: <title> / <Series ID>'
 
@@ -714,7 +714,7 @@ def _add_help() -> None:
 setattr(cmd_add, 'help', _add_help)
 
 
-def cmd_search(ctx:context, width:int) -> str | None:
+def cmd_search(ctx:Context, width:int) -> str | None:
 	return cmd_add(ctx, width, add=False)
 
 def _search_help() -> None:
@@ -723,7 +723,7 @@ def _search_help() -> None:
 setattr(cmd_search, 'help', _search_help)
 
 
-def cmd_delete(ctx:context, width:int) -> str | None:
+def cmd_delete(ctx:Context, width:int) -> str | None:
 	if not ctx.command_arguments:
 		return 'Required argument missing: # / <IMDb ID>'
 
@@ -775,7 +775,7 @@ def _delete_help() -> None:
 
 setattr(cmd_delete, 'help', _delete_help)
 
-def cmd_mark(ctx:context, width:int, marking:bool=True) -> str | None:
+def cmd_mark(ctx:Context, width:int, marking:bool=True) -> str | None:
 
 	if not ctx.command_arguments:
 		return 'Required argument missing: # / <IMDb ID>'
@@ -934,7 +934,7 @@ def _unmark_help() -> None:
 setattr(cmd_unmark, 'help', _unmark_help)
 
 
-def cmd_archive(ctx:context, width:int, archiving:bool=True) -> str | None:
+def cmd_archive(ctx:Context, width:int, archiving:bool=True) -> str | None:
 	if not ctx.command_arguments:
 		return 'Required argument missing: # / <IMDb ID>'
 
@@ -997,7 +997,7 @@ def _restore_help() -> None:
 setattr(cmd_restore, 'help', _restore_help)
 
 
-def cmd_refresh(ctx:context, width:int) -> str|None:
+def cmd_refresh(ctx:Context, width:int) -> str | None:
 
 	max_age = ctx.command_options.get('max-age', config.get_int('max-age'))
 	if max_age <= 0:
@@ -1036,7 +1036,7 @@ def _refresh_help() -> None:
 setattr(cmd_refresh, 'help', _refresh_help)
 
 
-def cmd_config(ctx:context, width:int) -> str|None:
+def cmd_config(ctx:Context, width:int) -> str | None:
 
 	if not ctx.command_options and not ctx.command_arguments:
 		config.print_current()
@@ -1054,7 +1054,7 @@ def cmd_config(ctx:context, width:int) -> str|None:
 	if cmd_args is not None:
 		if not command:
 			return f'{warning_prefix(ctx.command)} "args" only possible for subcommand.'
-		defctx = context(eat_option, resolve_cmd)
+		defctx = Context(eat_option, resolve_cmd)
 		defctx.set_command(command, apply_args=False)
 		args_list:list[str] = shlex.split(cmd_args)
 		# validate arguments
@@ -1074,7 +1074,7 @@ def cmd_config(ctx:context, width:int) -> str|None:
 	if default_args is not None:
 		if command:
 			return f'{warning_prefix(ctx.command)} bad option default args for "{command}".'
-		defctx = context(eat_option, resolve_cmd)
+		defctx = Context(eat_option, resolve_cmd)
 		cmd = config.get('commands/default')
 		defctx.set_command(cmd, apply_args=False)
 		args_list:list[str] = shlex.split(default_args)

@@ -6,7 +6,7 @@ class BadUsageError(RuntimeError):
 	pass
 
 
-class context:
+class Context:
 	def __init__(self, eo:Callable, rc:Callable):
 		self.debug:bool = False
 
