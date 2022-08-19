@@ -1048,7 +1048,7 @@ def cmd_config(ctx:Context, width:int) -> str | None:
 		command = resolve_cmd(command)
 
 	if command and not ctx.command_options:
-		return f'{warning_prefix(ctx.command)} and...?'
+		return f'and...?'
 
 	cmd_args = ctx.command_options.get('command-args')
 	if cmd_args is not None:
@@ -1065,7 +1065,7 @@ def cmd_config(ctx:Context, width:int) -> str | None:
 	default_cmd = ctx.command_options.get('default-command')
 	if default_cmd is not None:
 		if command:
-			return f'{warning_prefix(ctx.command)} bad option default command for "{command}".'
+			return f'{warning_prefix(ctx.command)} bad option "default command" for "{command}".'
 
 		config.set('commands/default', default_cmd)
 		print(f'Default command set: {_c}{default_cmd}{_0}')
@@ -1073,7 +1073,7 @@ def cmd_config(ctx:Context, width:int) -> str | None:
 	default_args = ctx.command_options.get('default-arguments')
 	if default_args is not None:
 		if command:
-			return f'{warning_prefix(ctx.command)} bad option default args for "{command}".'
+			return f'{warning_prefix(ctx.command)} bad option "default args" for "{command}".'
 		defctx = Context(eat_option, resolve_cmd)
 		cmd = config.get('commands/default')
 		defctx.set_command(cmd, apply_args=False)
@@ -1087,7 +1087,7 @@ def cmd_config(ctx:Context, width:int) -> str | None:
 	api_key = ctx.command_options.get('api-key')
 	if api_key is not None:
 		if command:
-			return f'{warning_prefix(ctx.command)} bad option api-key for "{command}".'
+			return f'{warning_prefix(ctx.command)} bad option "api key" for "{command}".'
 		# TODO: "encrypt" ?
 		config.set('lookup/api-key', api_key)
 		print(f'API key set.')
