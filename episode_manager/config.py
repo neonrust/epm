@@ -194,3 +194,39 @@ def set(path:str, value:Any, store:Store|None=Store.Persistent) -> None:
 	if store == Store.Persistent:
 		global _app_config_dirty
 		_app_config_dirty = True
+
+
+if __name__ == '__main__':
+	load()
+
+	def dump_stores():
+		print('\x1b[33;1mMEMORY\x1b[m')
+		print_json(_memory_config)
+		print('\x1b[33;1mAPP\x1b[m')
+		print_json(_app_config)
+		print('\x1b[33;1mDEFAULTS\x1b[m')
+		print_json(_configuration_defaults)
+
+	dump_stores()
+
+	paths = [
+		'lookup/max-hits',
+		'debug',
+		'commands/default',
+		'max-age',
+		'paths/series-db',
+	]
+	print('='*40)
+	for path in paths:
+		value = get(path)
+		print(f'\x1b[34;1m{path:<20}\x1b[m = \x1b[97;1m{value}\x1b[m')
+
+	set('max-age', 33, store=Store.Memory)
+	set('commands/default', 'unseen2', store=Store.Persistent)
+
+	dump_stores()
+
+	print('='*40)
+	for path in paths:
+		value = get(path)
+		print(f'\x1b[34;1m{path:<20}\x1b[m = \x1b[97;1m{value}\x1b[m')
