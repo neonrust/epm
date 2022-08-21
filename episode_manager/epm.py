@@ -505,11 +505,10 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> str | None:
 				args.pop()
 
 	search = ' '.join(args)
-
-	print(f'{_f}- Searching "%s"' % search, end='')
+	print(f'{_f}- Searching "{search}"', end='')
 	if year:
-		print(' (%d)' % year, end='')
-	print(f' ...{_00}', end='', flush=True)
+		print(f' ({year})', end='')
+	print(f' ... (max {max_hits} hits){_00}', end='', flush=True)
 
 	hits:list[dict] = []
 	page = 1
