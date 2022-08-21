@@ -18,11 +18,11 @@ def code_version() -> int:
 	return DB_VERSION
 
 
-def load() -> dict:
+def load(file_path:str|None=None) -> dict:
 
-	db_file = str(config.get('paths/series-db'))
+	db_file = file_path or str(config.get('paths/series-db'))
 
-	if not db_file or not pexists(dirname(db_file)):
+	if not db_file or not isinstance(db_file, str) or len(db_file) < 2:
 		raise RuntimeError('Invalid series db file path: %r' % db_file)
 
 	t0 = time.time()
