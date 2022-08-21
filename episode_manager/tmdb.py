@@ -373,14 +373,15 @@ def changes(series_id:str|list[str], after:datetime, ignore:tuple|None=None, pro
 	after_str = after.date().isoformat()
 
 	data = _query(_qurl('tv/%s/changes' % series_id, {'start_date': after_str, 'end_date': now}))
+	# TOOD: get all pages
 
-	# remove change entries that was requested to ignore
-	if data and data.get('changes') and isinstance(ignore, (tuple, list)):
-		def non_ignored(entry):
-			return entry.get('key') not in ignore
-		data['changes'] = list(filter(non_ignored, data['changes']))
+	change_list = (data or {}).get('changes', [])
 
-	return (data or {}).get('changes', [])
+	# remove entries that was requested to ignore
+	if change_list and isinstance(ignore, (tuple, list)):
+		change_list = list(filter(lambda chg: chg.get('key') not in ignore, change_list))
+
+	return change_list
 
 
 def _job_people(people, job):
