@@ -262,12 +262,17 @@ def cmd_show(ctx:Context, width:int) -> str | None:
 	elif only_abandoned:
 		find_state = State.ABANDONED
 
-	filter_director = ctx.command_options.get('director')
-	filter_writer = ctx.command_options.get('writer')
-	filter_cast = ctx.command_options.get('cast')
-	filter_year = ctx.command_options.get('year')
+	filter_country = ctx.option('country')
+	filter_director = ctx.option('director')
+	filter_writer = ctx.option('writer')
+	filter_cast = ctx.option('cast')
+	filter_year = ctx.option('year')
 
 	# NOTE: in the future, might support RE directly from the user
+	if filter_country:
+		# "us,se" -> "US|SE"
+		filter_country = filter_country.upper().replace(',', '|')
+		filter_country = re.compile(filter_country)
 	if filter_director:
 		filter_director = _substr_re(filter_director)
 	if filter_writer:
@@ -280,7 +285,7 @@ def cmd_show(ctx:Context, width:int) -> str | None:
 		except:
 			return 'Bad year filter: %s (use: <start year>[-<end year>])' % filter_year
 
-	find_idx, match = find_idx_or_match(ctx.command_arguments, director=filter_director, writer=filter_writer, cast=filter_cast, year=filter_year)
+	find_idx, match = find_idx_or_match(ctx.command_arguments, country=filter_country, director=filter_director, writer=filter_writer, cast=filter_cast, year=filter_year)
 	series_list = db.indexed_series(ctx.db, state=find_state, index=find_idx, match=match)
 
 	print(f'Listing ', end='')
@@ -1229,6 +1234,7 @@ command_options = {
 		'writer':          { 'name': '--writer',  'arg': str, 'help': 'Filter by writer, substring match' },
 		'cast':            { 'name': '--cast',    'arg': str, 'help': 'Filter by cast, substring match' },
 		'year':            { 'name': '--year',    'arg': str, 'help': 'Filter by year, <start>[-<end>]' },
+		'country':         { 'name': '--country', 'arg': str, 'help': 'Filter by country (two letters; ISO 3166)' },
 	},
 	'unseen': {
 		'started':         { 'name': ('-s', '--started'),       'help': 'List only series with seen episodes' },
@@ -1304,16 +1310,17 @@ def print_episodes(series:dict, episodes:list[dict], width:int, pre_print:Callab
 	return keys
 
 
-def find_idx_or_match(args, director:re.Pattern|None=None, writer:re.Pattern|None=None, cast:re.Pattern|None=None, year:list[int]|None=None) -> tuple[int:None, Callable|None]:
+def find_idx_or_match(args, country:re.Pattern|None=None, director:re.Pattern|None=None, writer:re.Pattern|None=None, cast:re.Pattern|None=None, year:list[int]|None=None) -> tuple[int:None, Callable|None]:
 
 	# print('FILTER title/idx:', (_c + ' '.join(args) + _0fg) if args else 'NONE')
+	# print('          country:', (_c + country.pattern + _0fg) if country else 'NONE')
 	# print('        director:', (_c + director.pattern + _0fg) if director else 'NONE')
 	# print('          writer:', (_c + writer.pattern + _0fg) if writer else 'NONE')
 	# print('            cast:', (_c + cast.pattern + _0fg) if cast else 'NONE')
 	# print('            year:', (_c + '-'.join(year) + _0fg) if year else 'NONE')
 
 
-	if not args and director is None and writer is None and cast is None and year is None:
+	if not args and country is None and director is None and writer is None and cast is None and year is None:
 		return None, None
 
 	try:
@@ -1330,6 +1337,7 @@ def find_idx_or_match(args, director:re.Pattern|None=None, writer:re.Pattern|Non
 			title = re.compile('.*?'.join(re.escape(a) for a in ' '.join(args).split()), re.IGNORECASE)
 
 		# print('FILTER     title:', (_c + title.pattern + _0fg) if title else 'NONE')
+		# print('         country:', (_c + country.pattern + _0fg) if country else 'NONE')
 		# print('        director:', (_c + director.pattern + _0fg) if director else 'NONE')
 		# print('          writer:', (_c + writer.pattern + _0fg) if writer else 'NONE')
 		# print('            cast:', (_c + cast.pattern + _0fg) if cast else 'NONE')
@@ -1341,6 +1349,8 @@ def find_idx_or_match(args, director:re.Pattern|None=None, writer:re.Pattern|Non
 			ok = True
 			if title:
 				ok = title.search(series['title']) is not None
+			if ok and country:
+				ok = country.search(series.get('country', '')) is not None
 			if ok and director:
 				ok = _match_names(series, 'director', director)
 			if ok and writer:
@@ -1359,6 +1369,7 @@ def find_idx_or_match(args, director:re.Pattern|None=None, writer:re.Pattern|Non
 
 		filter_parts = {
 			'title': title.pattern if title else None,
+			'country': country.pattern if country else None,
 			'director': director.pattern if director else None,
 			'writer': writer.pattern if writer else None,
 			'cast': cast.pattern if cast else None,
