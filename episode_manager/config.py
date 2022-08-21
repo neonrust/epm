@@ -93,6 +93,10 @@ def save() -> bool:
 	_app_config_dirty = False
 	return True
 
+def forget_all(store:Store):
+	_config_stores[store].clear()
+	if store == Store.Persistent:
+		_app_config_dirty = True
 
 def print_current():
 	print_json(_app_config)
