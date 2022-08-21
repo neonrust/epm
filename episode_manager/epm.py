@@ -18,7 +18,7 @@ from .context import Context, BadUsageError
 from . import config, utils, db, db as m_db
 from .config import  Store
 from .utils import term_size, warning_prefix, plural
-from .db import State, meta_get, meta_set, meta_has, meta_del, meta_copy, meta_seen_key, meta_archived_key, meta_added_key, meta_updated_key, meta_update_history_key, meta_list_index_key, meta_next_list_index_key, series_state
+from .db import State, meta_get, meta_set, meta_has, meta_del, meta_copy, meta_key, meta_seen_key, meta_archived_key, meta_added_key, meta_updated_key, meta_update_history_key, meta_list_index_key, meta_next_list_index_key, series_state
 from .styles import _0, _00, _0B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _L, _S, _u, _EOL
 
 import sys
