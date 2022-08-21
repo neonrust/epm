@@ -36,3 +36,4 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 epm = "episode_manager.epm:main"
+test = 'test:run'
