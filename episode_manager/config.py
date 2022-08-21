@@ -20,14 +20,11 @@ def init(prg):
 	app_config_file = pjoin(user_config_home, PRG, 'config')
 
 
-ValueType = str|int|float|list[Any]|dict[str, Any]|None  # "Any" b/c mypy doesn't support recursive type hints
+ValueType = str|int|float|list[Any]|dict[str, Any]  # "Any" b/c mypy doesn't support recursive type hints
 
 _configuration_defaults:dict[str, ValueType] = {
-	'paths': {
-		#'series-db': N  # defaulted in load()
-	},
 	'commands': {
-		#'default': 'unseen',
+		'default': 'unseen',
 		'calendar': {
 			'num_weeks': 1,
 		},
@@ -35,7 +32,6 @@ _configuration_defaults:dict[str, ValueType] = {
 	'max-age': default_max_refresh_age,
 	'num-backups': 10,
 	'lookup': {
-		#'api-key': None,
 		'max-hits': default_max_hits,
 	},
 	'debug': 0,
@@ -45,15 +41,16 @@ _app_config:dict[str, ValueType] = {}
 _app_config_dirty = False  # if True, it needs to be saved to disk
 _memory_config:dict[str, ValueType] = {}  # only used at runtime, not persisted
 
-STORE_PERSISTENT = 'persistent'
-STORE_MEMORY     = 'memory'
-STORE_DEFAULTS   = 'defaults'
+class Store(enum.IntEnum):
+	Persistent = 1
+	Memory = 2
+	Defaults = 3
 
 _config_stores = {
 	None: _app_config,
-	STORE_PERSISTENT: _app_config,
-	STORE_MEMORY:     _memory_config,
-	STORE_DEFAULTS:   _configuration_defaults,
+	Store.Persistent: _app_config,
+	Store.Memory:     _memory_config,
+	Store.Defaults:   _configuration_defaults,
 }
 
 
@@ -67,7 +64,7 @@ def load() -> bool:
 	db_file = get('paths/series-db')
 	if not db_file or not isinstance(db_file, str):
 		db_file = pjoin(user_config_home, PRG, 'series')
-		set('paths/series-db', db_file, store=STORE_MEMORY)
+		set('paths/series-db', db_file, store=Store.Memory)
 
 	paths = _app_config.get('paths', {})
 	if not isinstance(paths, dict):
@@ -98,32 +95,39 @@ def print_current():
 	print_json(_app_config)
 
 
-# type alias for type hints (should be recursive, but mypy doesn't support it)
-ConfigValue = str|int|float|dict|list
-
-def get(path:str, default_value:ConfigValue|None=None, convert=None) -> ConfigValue|None:
-	# path: key/key/key
+def get(path:str, default_value:ValueType|None=None, convert=None) -> ValueType|None:
+	# path: key/key/...
 	keys = path.split('/')
 	if not keys:
 		raise RuntimeError('Empty key path')
 
-	config:dict|list|str|int|float|None = _configuration_defaults | _app_config | _memory_config
-	scope = config
+	# from high to low priority
+	configs:list[ValueType] = [_memory_config, _app_config, _configuration_defaults]
+	scope:list[ValueType] = configs
 
 	current:list[str] = []
 	for key in keys:
 		# print('cfg: %s + %s' % ('/'.join(current), key))
-		if not isinstance(scope, dict):
+		# remove non-dict entries
+		scope = [sc for sc in scope if isinstance(sc, dict)]
+		if not scope:
 			raise RuntimeError('Invalid path "%s"; not object at "%s", got %s (%s)' % (path, '/'.join(current), scope, type(scope).__name__))
 
-		scope = scope.get(key)
-		if scope is None:
-			break
+		# print('scope:', scope)
+		for n in range(len(scope)):
+			scope[n] = scope[n].get(key)
+		# remove scopes where the branch doesn't exist
+		scope = [sc for sc in scope if sc is not None]
+		if not scope:
+			break  # not found anywhere!
 
 		current.append(key)
 
-	if scope is None:
+	if not scope:
 		scope = default_value
+	else:
+		# use first value (higher prio)
+		scope = scope[0]
 
 	if convert is not None:
 		scope = convert(scope)
@@ -145,15 +149,13 @@ def get_bool(path:str, default_value:bool=False) -> bool:
 	return default_value
 
 
-Store = str
-
-def set(path:str, value:Any, store:Store=STORE_PERSISTENT) -> None:
+def set(path:str, value:Any, store:Store|None=Store.Persistent) -> None:
 	# path: key/key/key
 	keys = path.split('/')
 	if not keys:
 		raise RuntimeError('Empty key path')
 
-	store = store or STORE_MEMORY
+	store = store or Store.Memory
 	config:ValueType = _config_stores.get(store)
 	if store and config is None:
 		raise RuntimeError('invalid config store "%s" (one of %s)' % (store, ', '.join(_config_stores.keys())))
@@ -176,12 +178,17 @@ def set(path:str, value:Any, store:Store=STORE_PERSISTENT) -> None:
 			scope[key] = new_scope
 
 		if not isinstance(new_scope, dict): # exists, but is not an object
-			raise RuntimeError('Invalid path "%s"; not object at "%s", got %s (%s)' % (path, '/'.join(current), scope, type(new_scope).__name__))
+			raise RuntimeError('Invalid path "%s"; not object at "%s", got %s (%s)' % (
+				path,
+				'/'.join(current),
+				scope,
+				type(new_scope).__name__,
+			))
 
 		scope = new_scope
 		current.append(key)
 
 
-	if store == STORE_PERSISTENT:
+	if store == Store.Persistent:
 		global _app_config_dirty
 		_app_config_dirty = True
