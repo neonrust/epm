@@ -368,20 +368,29 @@ setattr(cmd_show, 'help', _show_help)
 
 def cmd_calendar(ctx:Context, width:int) -> str | None:
 
+	cal = Calendar(MONDAY)
+	begin_date:date = date.today()
+	num_weeks = 2
+
 	if ctx.command_arguments:
-		num_weeks = int(ctx.command_arguments[0])
+		arg = ctx.command_arguments.pop(0)
+		try:
+			num_weeks = int(arg)
+		except ValueError:
+			try:
+				begin_date = date.fromisoformat(arg)
+			except ValueError:
+				return f'Unknown argument: {arg}'
 	else:
 		num_weeks = config.get_int('commands/calendar/num_weeks', 1)
 
-	cal = Calendar(MONDAY)
-	today:date = date.today()
-	start_date = today
+	start_date:date = begin_date
 
 	episodes_by_date:dict[date,list] = {}
 
 	# collect episodes over num_weeks*7
 	#   using margin of one extra week, because it's simpler
-	end_date = today + timedelta(days=(num_weeks + 1)*7)
+	end_date = start_date + timedelta(days=(num_weeks + 1)*7)
 	for series_id, series in ctx.db.items():
 		if meta_has(series, meta_archived_key):
 			continue
@@ -399,7 +408,7 @@ def cmd_calendar(ctx:Context, width:int) -> str | None:
 				continue
 
 			ep_date = date.fromisoformat(ep_date_str)
-			if ep_date >= today and ep_date < end_date:
+			if ep_date >= begin_date and ep_date < end_date:
 				if ep_date not in episodes_by_date:
 					episodes_by_date[ep_date] = []
 				episodes_by_date[ep_date].append( (series, ep) )
@@ -428,7 +437,7 @@ def cmd_calendar(ctx:Context, width:int) -> str | None:
 
 		for mdate in cal.itermonthdates(start_date.year, start_date.month):
 			wday_idx = (wday_idx + 1) % 7
-			if mdate < today:
+			if mdate < begin_date:
 				continue
 
 			days_todo -= 1
@@ -451,12 +460,13 @@ def cmd_calendar(ctx:Context, width:int) -> str | None:
 			if days_todo <= 0 and wday_idx == SUNDAY:
 				break
 
-		start_date = (today + timedelta(days=31)).replace(day=1)
+		start_date += timedelta(days=31)
+		start_date = start_date.replace(day=1)
 
 	return None
 
 def _calendar_help():
-	print_cmd_usage('calendar', '[<num weeks>]')
+	print_cmd_usage('calendar', '[<num weeks> | <start date>]')
 
 setattr(cmd_calendar, 'help', _calendar_help)
 
