@@ -862,10 +862,14 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> str | None:
 		except:
 			return f'Bad episode number/range: {episode}'
 
-	seen = meta_get(series, meta_seen_key, {})
+	state_before = series_state(series)
 
-	episodes = []
+	seen_state = meta_get(series, meta_seen_key, {})
+	num_marked_before = len(seen_state)
+
+	touched_episodes = []
 	episodes_runtime = 0
+	now_time = now()
 
 	for ep in series.get('episodes', []):
 		if (season is None or ep['season'] in season) and (episode is None or ep['episode'] in episode):
@@ -880,7 +884,7 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> str | None:
 			episodes_runtime += ep.get('runtime') or 0
 
 
-	if not episodes:
+	if not touched_episodes:
 		print(f'{_c}No episodes %smarked{_00}' % ('' if marking else 'un'))
 		return None
 
@@ -889,31 +893,36 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> str | None:
 	else:
 		print('Unmarked ', end='')
 
-	print(f'{_c}{len(episodes)}{_00}', end='')
-	print(f' episode{plural(episodes)} as seen:  {_00}{_f}{fmt_duration(episodes_runtime)}{_00}')
+	print(f'{_c}{len(touched_episodes)}{_00}', end='')
+	print(f' episode{plural(touched_episodes)} as seen:  {_00}{_f}{format_duration(episodes_runtime)}{_00}')
 
 	print_series_title(index, series, width, imdb_id=series.get('imdb_id'))
 
-	# TODO: print series title first and then just the episode titles
-
-	for ep in episodes:
+	for ep in touched_episodes:
 		print('  %s' % format_episode_title(None, ep, include_season=True, width=width - 2))
 
 	is_archived = meta_has(series, meta_archived_key)
 
+	state_after = series_state(series)  # will not cover the auto-archive/restore below
+
+	if marking and num_marked_before == 0 and len(series['episodes']) > len(touched_episodes):
+		print(f'{_c}First episode{plural(len(touched_episodes))} marked:{_0} {format_state_change(state_before, state_after)}')
+	elif not marking and len(seen_state) == 0:
+		print(f'{_c}No marked episode left:{_0} {format_state_change(state_before, state_after)}')
+
+
 	if marking and series.get('status') in ('ended', 'canceled') and not is_archived:
-		seen, unseen = seen_unseen_episodes(series)
-		if not unseen:
+		if len(seen_state) == len(series['episodes']): # all marked
 			print()
-			print(f'{_c}Last episode marked of %s series.{_0}' % series['status'])
+			print(f'{_c}Last episode marked of an {series["status"]} series:{_0} {format_state_change(state_before, State.ARCHIVED)}')
 			ctx.command_arguments = [index]
-			return cmd_archive(ctx, width)
+			return cmd_archive(ctx, width, print_state_change=False)
 
 	elif not marking and is_archived:
 		print()
-		print(f'{_c}Unmarked episode of archived series.{_0}')
+		print(f'{_c}Unmarked episode of archived series:{_0} {format_state_change(state_before, State.STARTED)}')
 		ctx.command_arguments = [index]
-		return cmd_restore(ctx, width)
+		return cmd_restore(ctx, width, print_state_change=False)
 
 	ctx.save()
 
@@ -948,7 +957,7 @@ def _unmark_help() -> None:
 setattr(cmd_unmark, 'help', _unmark_help)
 
 
-def cmd_archive(ctx:Context, width:int, archiving:bool=True) -> str | None:
+def cmd_archive(ctx:Context, width:int, archiving:bool=True, print_state_change:bool=True) -> str | None:
 	if not ctx.command_arguments:
 		return 'Required argument missing: # / <IMDb ID>'
 
@@ -962,7 +971,6 @@ def cmd_archive(ctx:Context, width:int, archiving:bool=True) -> str | None:
 
 	currently_archived = meta_has(series, meta_archived_key)
 
-
 	if archiving == currently_archived:
 		# TODO: better presentation of title
 		if archiving:
@@ -970,8 +978,10 @@ def cmd_archive(ctx:Context, width:int, archiving:bool=True) -> str | None:
 		else:
 			return 'Not archived: %s' % format_title(series)
 
+	state_before = series_state(series)
 	seen, unseen = seen_unseen_episodes(series)
 	partly_seen = seen and unseen
+
 
 	if archiving:
 		print(f'{_b}Series archived', end='')
@@ -979,6 +989,7 @@ def cmd_archive(ctx:Context, width:int, archiving:bool=True) -> str | None:
 			print(' (abandoned)', end='')
 		print(f':{_00}')
 		meta_set(series, meta_archived_key, now())
+		print(format_state_change(state_before, series_state(series)))
 
 	else:
 		print(f'{_b}Series restored', end='')
@@ -986,6 +997,7 @@ def cmd_archive(ctx:Context, width:int, archiving:bool=True) -> str | None:
 			print(' (resumed)', end='')
 		print(f':{_00}')
 		meta_del(series, meta_archived_key)
+		print(format_state_change(state_before, series_state(series)))
 
 	print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width)
 
@@ -1035,7 +1047,7 @@ def cmd_refresh(ctx:Context, width:int) -> str | None:
 
 	if num_series > 0:  # can be 1 even if num_episodes is zero
 		if num_episodes > 0:
-			print(f'{_f}Refreshed %d episodes across %d series [%.1fs].{_00}' % (num_episodes, num_series, time.time() - t0))
+			print(f'{_f}Refreshed %d episodes across %d series [%.1fs].{_00}' % (num_episodes, num_series, time.time() - t0), file=sys.stderr)
 
 		ctx.save()
 
@@ -1281,6 +1293,10 @@ def is_released(target, fallback=True):
 
 	# already released or will be today
 	return date.fromisoformat(release_date) <= today_date
+
+
+def format_state_change(before:State, after:State):
+	return f'[{_c}{before.name.lower()} ⯈ {after.name.lower()}{_0}]'
 
 
 def format_title(series, width:int|None=None):
@@ -1710,7 +1726,7 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=Fals
 		time_style = _b
 
 		if diff > 24*3600:  # longer than 24 hours
-			ep_time = fmt_duration(diff, roughly=True)
+			ep_time = format_duration(diff, roughly=True)
 			time_style = '\x1b[38;5;244m'
 
 	elif today:
@@ -1834,7 +1850,7 @@ def print_archive_status(series:dict) -> None:
 		print(f'{_0}')
 
 
-def fmt_duration(seconds: int|float, roughly: bool=False):
+def format_duration(seconds: int | float, roughly: bool=False):
 	months = int(seconds//(3600*24*30.4366666))
 	seconds -= months*3600*24*30.4366666
 	weeks = int(seconds//(3600*24*7))
@@ -1898,7 +1914,7 @@ def print_seen_status(series:dict, gray: bool=False, summary=True, next=True, la
 
 		if seen:
 			seen_duration = sum((ep.get('runtime') or 0) for ep in seen)*60
-			s += f'Seen: {len(seen)} {_f}{fmt_duration(seen_duration)}{_0}'
+			s += f'Seen: {len(seen)} {_f}{format_duration(seen_duration)}{_0}'
 			if all_seen:
 				s += f'  {_g}ALL{_0}'
 
@@ -1907,7 +1923,7 @@ def print_seen_status(series:dict, gray: bool=False, summary=True, next=True, la
 
 		if unseen:
 			unseen_duration = sum((ep.get('runtime') or 0) for ep in unseen)*60
-			s += f'Unseen: {len(unseen)} {_f}{fmt_duration(unseen_duration)}{_0}'
+			s += f'Unseen: {len(unseen)} {_f}{format_duration(unseen_duration)}{_0}'
 
 		if seen or unseen:
 			s += _0
