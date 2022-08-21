@@ -553,11 +553,12 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> str | None:
 	hit_details = tmdb.details(hit['id'] for hit in hits)
 	print(f'\r{_K}', end='')
 
+	for idx, hit in enumerate(hits):
+		hit.update(hit_details[idx])
+
 	# print a menu and a prompt to select from it
 
 	def print_menu_entry(idx:int, item:dict[str,Any], current:bool=False):
-		if hit_details[idx]:
-			item.update(hit_details[idx])
 		imdb_id = item.get('imdb_id')
 		tail = None
 		if 'total_episodes' in item:
