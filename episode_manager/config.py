@@ -163,7 +163,7 @@ def set(path:str, value:Any, store:Store|None=Store.Persistent) -> None:
 		raise RuntimeError('Empty key path')
 
 	store = store or Store.Memory
-	config:ValueType = _config_stores.get(store)
+	config:dict = _config_stores.get(store)
 	if store and config is None:
 		raise RuntimeError('invalid config store "%s" (one of %s)' % (store, ', '.join(_config_stores.keys())))
 	if not isinstance(config, dict): # to shut mypy up
