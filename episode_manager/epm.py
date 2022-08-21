@@ -954,9 +954,9 @@ def cmd_archive(ctx:Context, width:int, archiving:bool=True) -> str | None:
 	if archiving == currently_archived:
 		# TODO: better presentation of title
 		if archiving:
-			return 'Already archived: %s' % series['title']
+			return 'Already archived: %s' % format_title(series)
 		else:
-			return 'Not archived: %s' % series['title']
+			return 'Not archived: %s' % format_title(series)
 
 	seen, unseen = seen_unseen_episodes(series)
 	partly_seen = seen and unseen
@@ -1271,6 +1271,24 @@ def is_released(target, fallback=True):
 	return date.fromisoformat(release_date) <= today_date
 
 
+def format_title(series, width:int|None=None):
+
+	title = series['title']
+	if width is not None and len(title) > width: # title is too wide
+		# truncate and add ellipsis
+		title = title[:width - 1] + '…'
+
+	s = f'\x1b[38;5;253m{title}'
+
+	years = series.get("year")
+	if years is not None:
+		s += f'  {_0}\x1b[38;5;245m({years[0]}-{years[1] if len(years) == 2 else ""})'
+
+	s += _0
+
+	return s
+
+
 def print_episodes(series:dict, episodes:list[dict], width:int, pre_print:Callable|None=None, also_future=False) -> list[str]:
 
 	seen, unseen = seen_unseen_episodes(series)
@@ -1570,25 +1588,14 @@ def print_series_title(num:int|None, series:dict, width:int=0, imdb_id:str|None=
 
 	# this function should never touch the BG color
 
-	left = ''  # parts relative to left edge (num, title, years)
-	right = ''  # parts relative to right edge (IMDbID, tail)
+	left = ''    # parts relative to left edge (num, title, years)
+	right = ''   # parts relative to right edge (IMDbID, tail)
+
 	if num is not None:
 		num_w = 5
 		width -= num_w
 
-		left = f'\x1b[3;38;2;200;160;100m{num:>{num_w}}{_0}'
-
-	if 'year' in series:
-		year_a = str(series['year'][0])
-		year_b = series['year'][1] if len(series['year']) > 1 else ''
-		years = '  (%s-%s)' % (year_a, year_b)
-		width -= len(years)
-		years = f'\x1b[38;5;245m{years:<11}{_0}'
-	else:
-		years = ''
-
-	#added = get_meta(infop, 'added').split()[0]  # add date
-	#s = f' {_g}%(added)s{_0fg}  \x1b[38;5;253m%(title)s{_0fg}  \x1b[38;5;245m%(year)-9s{_0fg}' % infop
+		left = f'\x1b[3;38;2;200;160;100m{num:>{num_w}}{_0} '
 
 	r_offset = 0
 
@@ -1604,13 +1611,7 @@ def print_series_title(num:int|None, series:dict, width:int=0, imdb_id:str|None=
 		width -= len(tail)
 		r_offset += len(tail)
 
-	title = series['title']
-	if len(title) > width:
-		# elipt title if too wide
-		width -= 1
-		title = title[:width] + '…'
-
-	left += f' \x1b[38;5;253m{title}{_0}{years}'
+	left += format_title(series, width=width) #f' \x1b[38;5;253m{title}{_0}{years}'
 
 	if gray:
 		# remove all escape sequences and print in faint-ish gray
