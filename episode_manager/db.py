@@ -388,6 +388,7 @@ meta_archived_key = 'archived'
 meta_list_index_key = 'list_index'
 meta_next_list_index_key = 'next_list_index'
 meta_updated_key = 'updated'
+meta_update_history_key = 'update_history'
 meta_version_key = 'version'
 
 

@@ -18,7 +18,7 @@ from .context import Context, BadUsageError
 from . import config, utils, db, db as m_db
 from .config import  Store
 from .utils import term_size, warning_prefix, plural
-from .db import State, meta_get, meta_set, meta_has, meta_del, meta_copy, meta_key, meta_seen_key, meta_archived_key, meta_added_key, meta_updated_key, meta_list_index_key, meta_next_list_index_key
+from .db import State, meta_get, meta_set, meta_has, meta_del, meta_copy, meta_seen_key, meta_archived_key, meta_added_key, meta_updated_key, meta_update_history_key, meta_list_index_key, meta_next_list_index_key, series_state
 from .styles import _0, _00, _0B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _L, _S, _u, _EOL
 
 import sys
@@ -1481,20 +1481,22 @@ def refresh_series(db:dict, width:int, subset:list|None=None, max_age:int|None=N
 		rnd = a + offset
 		return rnd
 
+	now_time = now()
+
 	# remember last update check (regardless whether there actually were any updates)
 	touched = 0
 	for series_id in to_refresh:
 		prev_update = meta_get(db[series_id], meta_updated_key)
 		if prev_update:
-			stamp = spread_stamp(datetime.fromisoformat(prev_update), now_datetime())
+			stamp = spread_stamp(datetime.fromisoformat(prev_update), now_datetime()).isoformat(' ', timespec='seconds')
 		else:
-			stamp = now_datetime()
-		meta_set(db[series_id], meta_updated_key, stamp.isoformat(' '))
+			stamp = now_time
+		meta_set(db[series_id], meta_updated_key, stamp)
 		touched += 1
+
 
 	def mk_prog(total):
 		return progress.new(total, width=width - 2, bg_color=rgb('#404040'), bar_color=rgb('#686868'), text_color=rgb('#cccccc'))
-
 
 	if not forced:
 		prog_bar = mk_prog(len(to_refresh))
@@ -1527,19 +1529,24 @@ def refresh_series(db:dict, width:int, subset:list|None=None, max_age:int|None=N
 
 	to_refresh_keys = list(to_refresh.keys())
 	result = tmdb.episodes(to_refresh_keys, with_details=True, progress=show_up_progress)
-	# 'result' is a list of (details, episodes)-tuples
 
 	print(f'\r{_00}{_K}', end='', flush=True)
 
 	num_episodes = 0
-	now_time = now()
 
 	for series_id, (details, episodes) in zip(to_refresh_keys, result):
 		series = details
 		series['episodes'] = episodes
 		meta_copy(db[series_id], series)
-		meta_set(series, meta_updated_key, now_time)
 
+		# keep a list of last N updates
+		update_history = meta_get(series, meta_update_history_key, [])
+		update_history.append(now_time)
+		if len(update_history) > config.get_int('num-update-history'):
+			update_history.pop(0)
+		meta_set(series, meta_update_history_key, update_history)
+
+		# replace entry in DB
 		db[series_id] = series
 
 		num_episodes += len(episodes)

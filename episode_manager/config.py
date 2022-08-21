@@ -1,3 +1,4 @@
+import enum
 import os
 from os.path import basename, dirname, expandvars, expanduser, exists as pexists, getsize as psize, join as pjoin
 from typing import Any
@@ -31,6 +32,7 @@ _configuration_defaults:dict[str, ValueType] = {
 	},
 	'max-age': default_max_refresh_age,
 	'num-backups': 10,
+	'num-update-history': 5,
 	'lookup': {
 		'max-hits': default_max_hits,
 	},
