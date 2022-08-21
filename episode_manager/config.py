@@ -81,16 +81,17 @@ def load() -> bool:
 	return len(_app_config) > 0
 
 
-def save():
+def save() -> bool:
 	global _app_config_dirty
 	if not _app_config_dirty or not _app_config:
-		return
+		return False
 
 	err = write_json(app_config_file, _app_config)
 	if err is not None:
 		print(f'{_E}ERROR{_00} Failed saving configuration: %s' % str(err))
 
 	_app_config_dirty = False
+	return True
 
 
 def print_current():
