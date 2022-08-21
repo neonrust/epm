@@ -478,7 +478,7 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> str | None:
 	if not ctx.command_arguments:
 		return 'required argument missing: <title> / <Series ID>'
 
-	max_hits = int(ctx.command_options.get('max-hits') or 0) or config.get_int('lookup/max-hits')
+	max_hits = int(ctx.option('max-hits', config.get_int('lookup/max-hits')))
 
 	height = term_size()[1]
 	# 'Found...' + divider above overview + divider below overview + "status bar"
