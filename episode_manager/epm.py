@@ -1445,7 +1445,7 @@ def no_series(db:dict, filtering:bool=False) -> str:
 
 
 def refresh_series(db:dict, width:int, subset:list|None=None, max_age:int|None=None) -> tuple[int, int]:
-	subset = subset or list(db.keys())
+	subset = subset or list(key for key in db.keys() if key != meta_key)
 	max_age = (max_age or config.get_int('max-age'))*3600*24
 
 	forced = max_age < 0
