@@ -28,8 +28,8 @@ PRG = basename(sys.argv[0])
 config.init(PRG)
 utils.init(PRG)
 
-VERSION = '0.11'
-VERSION_DATE = '2022-08-10'
+VERSION = '0.12'
+VERSION_DATE = '2022-08-22'
 
 
 def start():
