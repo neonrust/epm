@@ -1,6 +1,6 @@
 from . import config, db
 
-from typing import Callable
+from typing import Callable, Any
 
 class BadUsageError(RuntimeError):
 	pass
@@ -135,6 +135,13 @@ class Context:
 			args = config.get('commands/%s/arguments' % self.command, [])
 			# arguments added here will be ignored if arguments were specified on the command-line
 			self.parse_args(args, default=True)
+
+
+	def option(self, name:str, default_value:Any|None=None) -> Any:
+		return self.command_options.get(name, default_value)
+
+	def has_option(self, name:str) -> bool:
+		return name in self.command_options
 
 
 	def load(self) -> None:
