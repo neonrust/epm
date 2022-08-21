@@ -572,8 +572,11 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> str | None:
 	if selected == -1:
 		return None
 
+
 	if selected is None:
 		return 'Nothing selected, cancelled'
+
+	# TODO: move actual "add" to a separate function
 
 	new_series = hits[selected]
 	series_id = new_series['id']
@@ -868,15 +871,14 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> str | None:
 		if (season is None or ep['season'] in season) and (episode is None or ep['episode'] in episode):
 			key = _ep_key(ep)
 
-			if marking and key not in seen:
-				seen[key] = now()
-				episodes.append(ep)
-				episodes_runtime += ep.get('runtime') or 0
+			if marking and key not in seen_state:
+				seen_state[key] = now_time
+			elif not marking and key in seen_state:
+				del seen_state[key]
 
-			elif not marking and key in seen:
-				del seen[key]
-				episodes.append(ep)
-				episodes_runtime += ep.get('runtime') or 0
+			touched_episodes.append(ep)
+			episodes_runtime += ep.get('runtime') or 0
+
 
 	if not episodes:
 		print(f'{_c}No episodes %smarked{_00}' % ('' if marking else 'un'))
