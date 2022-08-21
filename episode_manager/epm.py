@@ -571,10 +571,7 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> str | None:
 	meta_set(new_series, meta_list_index_key, next_list_index)
 	meta_set(ctx.db, meta_next_list_index_key, next_list_index + 1)
 
-	new_series.pop('id', None)
-
 	ctx.db[series_id] = new_series
-
 
 	modified = refresh_series(ctx.db, width, subset=[series_id], max_age=-1)
 	if max(modified) > 0:
