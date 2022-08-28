@@ -51,6 +51,8 @@ _config_stores = {
 
 
 def load() -> bool:
+	"""Load persistent confguration from 'app_config_file' (into Store.Persistent)."""
+
 	_app_config.clear()
 
 	config = read_json(app_config_file)
@@ -76,6 +78,8 @@ def load() -> bool:
 
 
 def save() -> bool:
+	"""Save configuration (if dirty)."""
+
 	global _app_config_dirty
 	if not _app_config_dirty or not _app_config:
 		return False
@@ -88,11 +92,14 @@ def save() -> bool:
 	return True
 
 def forget_all(store:Store):
+	"""Clear specified config store."""
+
 	_config_stores[store].clear()
 	if store == Store.Persistent:
 		_app_config_dirty = True
 
 def print_current():
+	"""Debug helper; print current persistent configuration, as JSON."""
 	print_json(_app_config)
 
 
