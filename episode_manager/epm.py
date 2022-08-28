@@ -212,11 +212,15 @@ def ambiguous_cmd(name:str, matching:list[str]) -> None:
 	sys.exit(1)
 
 
+class Error(str):
+	pass
+
+
 ###############################################################################
 ###############################################################################
 
 
-def cmd_unseen(ctx:Context, width:int) -> str | None:
+def cmd_unseen(ctx:Context, width:int) -> Error|None:
 	ctx.command_options['with-unseen'] = True
 	ctx.command_options['next-episode'] = True
 	return cmd_show(ctx, width)
@@ -229,7 +233,7 @@ def _unseen_help() -> None:
 setattr(cmd_unseen, 'help', _unseen_help)
 
 
-def cmd_show(ctx:Context, width:int) -> str | None:
+def cmd_show(ctx:Context, width:int) -> Error|None:
 	# TODO: print header/columns
 
 	list_all = 'all' in ctx.command_options
@@ -363,7 +367,7 @@ def _show_help() -> None:
 setattr(cmd_show, 'help', _show_help)
 
 
-def cmd_calendar(ctx:Context, width:int) -> str | None:
+def cmd_calendar(ctx:Context, width:int) -> Error|None:
 
 	cal = Calendar(MONDAY)
 	begin_date:date = date.today()
@@ -471,7 +475,7 @@ setattr(cmd_calendar, 'help', _calendar_help)
 
 year_ptn = re.compile(r'^(\d{4})|\((\d{4})\)$')  # 1968 or (1968)
 
-def cmd_add(ctx:Context, width:int, add:bool=True) -> str | None:
+def cmd_add(ctx:Context, width:int, add:bool=True) -> Error|None:
 	if not ctx.command_arguments:
 		return 'required argument missing: <title> / <Series ID>'
 
@@ -726,7 +730,7 @@ def _add_help() -> None:
 setattr(cmd_add, 'help', _add_help)
 
 
-def cmd_search(ctx:Context, width:int) -> str | None:
+def cmd_search(ctx:Context, width:int) -> Error|None:
 	return cmd_add(ctx, width, add=False)
 
 def _search_help() -> None:
@@ -735,7 +739,7 @@ def _search_help() -> None:
 setattr(cmd_search, 'help', _search_help)
 
 
-def cmd_delete(ctx:Context, width:int) -> str | None:
+def cmd_delete(ctx:Context, width:int) -> Error|None:
 	if not ctx.command_arguments:
 		return 'Required argument missing: # / <IMDb ID>'
 
@@ -787,7 +791,7 @@ def _delete_help() -> None:
 
 setattr(cmd_delete, 'help', _delete_help)
 
-def cmd_mark(ctx:Context, width:int, marking:bool=True) -> str | None:
+def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 
 	if not ctx.command_arguments:
 		return 'Required argument missing: # / <IMDb ID>'
@@ -938,7 +942,7 @@ def _mark_help() -> None:
 setattr(cmd_mark, 'help', _mark_help)
 
 
-def cmd_unmark(*args, **kwargs):
+def cmd_unmark(*args, **kwargs) -> Error|None:
 	return cmd_mark(*args, **kwargs, marking=False)
 
 def _unmark_help() -> None:
@@ -954,7 +958,7 @@ def _unmark_help() -> None:
 setattr(cmd_unmark, 'help', _unmark_help)
 
 
-def cmd_archive(ctx:Context, width:int, archiving:bool=True, print_state_change:bool=True) -> str | None:
+def cmd_archive(ctx:Context, width:int, archiving:bool=True, print_state_change:bool=True) -> Error|None:
 	if not ctx.command_arguments:
 		return 'Required argument missing: # / <IMDb ID>'
 
@@ -1009,7 +1013,7 @@ def _archive_help() -> None:
 setattr(cmd_archive, 'help', _archive_help)
 
 
-def cmd_restore(*args, **kwargs) -> str|None:
+def cmd_restore(*args, **kwargs) -> Error|None:
 	kwargs['archiving'] = False
 	return cmd_archive(*args, **kwargs)
 
@@ -1020,7 +1024,7 @@ def _restore_help() -> None:
 setattr(cmd_restore, 'help', _restore_help)
 
 
-def cmd_refresh(ctx:Context, width:int) -> str | None:
+def cmd_refresh(ctx:Context, width:int) -> Error|None:
 
 	max_age = ctx.command_options.get('max-age', config.get_int('max-age'))
 	if max_age <= 0:
@@ -1059,7 +1063,7 @@ def _refresh_help() -> None:
 setattr(cmd_refresh, 'help', _refresh_help)
 
 
-def cmd_config(ctx:Context, width:int) -> str | None:
+def cmd_config(ctx:Context, width:int) -> Error|None:
 
 	if not ctx.command_options and not ctx.command_arguments:
 		config.print_current()
@@ -1126,7 +1130,7 @@ def _config_help() -> None:
 setattr(cmd_config, 'help', _config_help)
 
 
-def cmd_help(*args, **kw):
+def cmd_help(*args, **kw) -> Error|None:
 	print_usage()
 
 def _help_help() -> None:
