@@ -37,7 +37,7 @@ def start():
 	# print(orjson.dumps(app_config, option=orjson.OPT_INDENT_2 | orjson.OPT_SORT_KEYS).decode('utf-8'))
 	atexit.register(config.save)
 
-	api_key = config.get('lookup/api-key')
+	api_key = config.get('lookup/api-key') or tmdb.key_from_env()
 	if api_key:
 		tmdb.set_api_key(api_key)
 

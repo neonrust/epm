@@ -14,9 +14,12 @@ from typing import Callable, Any
 
 _base_url_tmpl = 'https://api.themoviedb.org/3/%%(path)s?api_key=%s'
 _base_url:str|None = None
-_api_key = os.getenv('TMDB_API_KEY', '')
+_api_key:str|None = None
 
-api_key_help = 'Set "TMDB_API_KEY" environment variable for your account.'
+env_key_name = 'TMDB_API_KEY'
+
+api_key_help = 'Set "%s" environment variable for your account.' % env_key_name
+
 
 class NoAPIKey(RuntimeError):
 	pass
@@ -59,7 +62,10 @@ def _update_url_func() -> None:
 def _qurl(endpoint:str, query:dict|None=None) -> str:
 	raise NotImplementedError('_qurl')
 
-def set_api_key(key) -> None:
+def key_from_env() -> str|None:
+	return os.getenv(env_key_name)
+
+def set_api_key(key:str) -> None:
 	global _api_key
 	_api_key = key
 
@@ -68,13 +74,10 @@ def set_api_key(key) -> None:
 		_base_url = _base_url_tmpl % _api_key
 		_update_url_func()
 
-if _api_key:
-	set_api_key(_api_key)
-
 def ok() -> bool:
 	return bool(_api_key)
 
-def _query(url) -> dict[str, Any]|None:
+def _query(url:str) -> dict[str, Any]|None:
 	# print('\x1b[2mquery: %s\x1b[m' % url)
 	try:
 		resp = requests.get(url, timeout=10)
