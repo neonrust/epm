@@ -24,9 +24,6 @@ from .styles import _0, _00, _0B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _L, _S, _
 import sys
 
 PRG = basename(sys.argv[0])
-# TODO: a better way, please
-config.init(PRG)
-utils.init(PRG)
 
 VERSION = '0.12'
 VERSION_DATE = '2022-08-22'

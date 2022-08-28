@@ -1,6 +1,7 @@
 import enum
 import os
-from os.path import basename, dirname, expandvars, expanduser, exists as pexists, getsize as psize, join as pjoin
+import sys
+from os.path import basename, join as pjoin
 from typing import Any
 
 from .utils import read_json, write_json, print_json, warning_prefix, pexpand
@@ -13,13 +14,6 @@ user_config_home = os.getenv('XDG_CONFIG_HOME') or pexpand(pjoin('$HOME', '.conf
 
 app_config_file = ''  # set in init()
 PRG = '' # set in init()
-
-def init(prg):
-	global PRG
-	PRG = prg
-	global app_config_file
-	app_config_file = pjoin(user_config_home, PRG, 'config')
-
 
 ValueType = str|int|float|list[Any]|dict[str, Any]  # "Any" b/c mypy doesn't support recursive type hints
 
@@ -199,6 +193,14 @@ def set(path:str, value:Any, store:Store|None=Store.Persistent) -> None:
 	if store == Store.Persistent:
 		global _app_config_dirty
 		_app_config_dirty = True
+
+def _init():
+	global PRG
+	PRG = basename(sys.argv[0])
+	global app_config_file
+	app_config_file = pjoin(user_config_home, PRG, 'config')
+
+_init()
 
 
 if __name__ == '__main__':

@@ -25,11 +25,6 @@ PRG = ''
 class FatalJSONError(ValueError):
 	pass
 
-def init(prg):
-	global PRG
-	PRG = prg
-
-
 def json_serializer() -> str:
 	if orjson is not None:
 		return 'orjson'
@@ -185,3 +180,10 @@ class ListIndex:
 	def __str__(self) -> str:
 		return f'{self._h}{self._l}'
 
+
+
+def _init():
+	global PRG
+	PRG = basename(sys.argv[0])
+
+_init()
