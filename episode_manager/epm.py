@@ -249,7 +249,7 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 	show_details = 'details' in ctx.command_options
 
 	if [only_started, only_planned, only_archived, only_abandoned].count(True) > 1:
-		return 'Specify only one of "started", "planned", "archived" and "abandoned"'
+		return Error('Specify only one of "started", "planned", "archived" and "abandoned"')
 
 	find_state = State.ACTIVE
 	if list_all:
@@ -353,7 +353,7 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 
 	if num_shown == 0:
 		if match:
-			return 'Nothing matched'
+			return Error('Nothing matched')
 
 	print(f'{_00}{_K}', end='')
 	print(f'{_b}\x1b[48;2;20;50;20m{_K}\r%d series {_fi} Total: %d   Archived: %d{_0}' % (num_shown, len(series_list), num_archived))
@@ -381,7 +381,7 @@ def cmd_calendar(ctx:Context, width:int) -> Error|None:
 			try:
 				begin_date = date.fromisoformat(arg)
 			except ValueError:
-				return f'Unknown argument: {arg}'
+				return Error(f'Unknown argument: {arg}')
 	else:
 		num_weeks = config.get_int('commands/calendar/num_weeks', 1)
 
@@ -477,7 +477,7 @@ year_ptn = re.compile(r'^(\d{4})|\((\d{4})\)$')  # 1968 or (1968)
 
 def cmd_add(ctx:Context, width:int, add:bool=True) -> Error|None:
 	if not ctx.command_arguments:
-		return 'required argument missing: <title> / <Series ID>'
+		return Error('required argument missing: <title> / <Series ID>')
 
 	max_hits = int(ctx.option('max-hits', config.get_int('lookup/max-hits')))
 
@@ -488,7 +488,7 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> Error|None:
 	overview_limit = 8
 	term_max_hits = height - menu_padding - overview_limit
 	if term_max_hits < 1:
-		return 'Terminal too small'
+		return Error('Terminal too small')
 
 	if max_hits > term_max_hits:
 		max_hits = term_max_hits
@@ -524,7 +524,7 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> Error|None:
 
 	print(f'\r{_K}', end='')
 	if not hits:
-		return 'Nothing found. Try generalizing your search.'
+		return Error('Nothing found. Try generalizing your search.')
 
 	# exclude ones we already have in our config
 	if add:
@@ -543,7 +543,7 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> Error|None:
 		hits = list(filter(lambda H: H['id'] not in ctx.db, hits))
 
 		if not hits:
-			return 'No new series found. Try generalizing your search.'
+			return Error('No new series found. Try generalizing your search.')
 
 	if len(hits) > max_hits:
 		hits = hits[: max_hits]
@@ -575,7 +575,7 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> Error|None:
 
 
 	if selected is None:
-		return 'Nothing selected, cancelled'
+		return Error('Nothing selected, cancelled')
 
 	# TODO: move actual "add" to a separate function
 
@@ -741,11 +741,11 @@ setattr(cmd_search, 'help', _search_help)
 
 def cmd_delete(ctx:Context, width:int) -> Error|None:
 	if not ctx.command_arguments:
-		return 'Required argument missing: # / <IMDb ID>'
+		return Error('Required argument missing: # / <IMDb ID>')
 
 	index, series_id, err = db.find_single_series(ctx.db, ctx.command_arguments.pop(0))
 	if series_id is None or err is not None:
-		return err
+		return Error(err)
 
 	series = ctx.db[series_id]
 
@@ -769,7 +769,7 @@ def cmd_delete(ctx:Context, width:int) -> Error|None:
 
 	answer = input(f'\x1b[41;37;1m{question}{_00} [No/{"/".join(choices)}] ').lower()
 	if answer not in ('y', 'yes', 'a', full_answer_a):
-		return 'Cancelled'
+		return Error('Cancelled')
 
 	if answer in ('a', full_answer_a):
 		return cmd_archive(ctx, width)  # also checks for abandon
@@ -794,7 +794,7 @@ setattr(cmd_delete, 'help', _delete_help)
 def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 
 	if not ctx.command_arguments:
-		return 'Required argument missing: # / <IMDb ID>'
+		return Error('Required argument missing: # / <IMDb ID>')
 
 	find_id = ctx.command_arguments.pop(0)
 
@@ -849,7 +849,7 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 			else:
 				season = (int(rng[0]), )
 		except ValueError as ve:
-			return f'Bad season number/range: {season}'
+			return Error(f'Bad season number/range: {season}')
 
 	if args:
 		episode_str = args.pop(0)
@@ -861,7 +861,7 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 			else:
 				episode = (int(rng[0]), )
 		except:
-			return f'Bad episode number/range: {episode}'
+			return Error(f'Bad episode number/range: {episode}')
 
 	state_before = series_state(series)
 
@@ -960,13 +960,13 @@ setattr(cmd_unmark, 'help', _unmark_help)
 
 def cmd_archive(ctx:Context, width:int, archiving:bool=True, print_state_change:bool=True) -> Error|None:
 	if not ctx.command_arguments:
-		return 'Required argument missing: # / <IMDb ID>'
+		return Error('Required argument missing: # / <IMDb ID>')
 
 	find_id = ctx.command_arguments.pop(0)
 
 	index, series_id, err = db.find_single_series(ctx.db, find_id)
 	if series_id is None or err is not None:
-		return err
+		return Error(err)
 
 	series = ctx.db[series_id]
 
@@ -975,9 +975,9 @@ def cmd_archive(ctx:Context, width:int, archiving:bool=True, print_state_change:
 	if archiving == currently_archived:
 		# TODO: better presentation of title
 		if archiving:
-			return 'Already archived: %s' % format_title(series)
+			return Error('Already archived: %s' % format_title(series))
 		else:
-			return 'Not archived: %s' % format_title(series)
+			return Error('Not archived: %s' % format_title(series))
 
 	state_before = series_state(series)
 	seen, unseen = seen_unseen_episodes(series)
@@ -1036,7 +1036,7 @@ def cmd_refresh(ctx:Context, width:int) -> Error|None:
 	series_list = db.indexed_series(ctx.db, state=State.ACTIVE, index=find_idx, match=match)
 
 	if not series_list:
-		return 'Nothing matched: %s' % (match.pattern if match else find_idx)
+		return Error('Nothing matched: %s' % (match.pattern if match else find_idx))
 
 	subset = [series_id for index, series_id in series_list]
 
@@ -1044,7 +1044,7 @@ def cmd_refresh(ctx:Context, width:int) -> Error|None:
 
 	num_series, num_episodes = refresh_series(ctx.db, width, subset=subset, max_age=max_age if not forced else -1)
 	if not num_episodes:
-		return 'Nothing to update (max age: %d days)' % (max_age/(3600*24))
+		return Error(f'Nothing to update (max age: {max_age/(3600*24)} days)')
 
 	if num_series > 0:  # can be 1 even if num_episodes is zero
 		if num_episodes > 0:
@@ -1075,12 +1075,12 @@ def cmd_config(ctx:Context, width:int) -> Error|None:
 		command = resolve_cmd(command)
 
 	if command and not ctx.command_options:
-		return f'and...?'
+		return Error(f'and...?')
 
 	cmd_args = ctx.command_options.get('command-args')
 	if cmd_args is not None:
 		if not command:
-			return f'{warning_prefix(ctx.command)} "args" only possible for subcommand.'
+			return Error(f'{warning_prefix(ctx.command)} "args" only possible for subcommand.')
 		defctx = Context(eat_option, resolve_cmd)
 		defctx.set_command(command, apply_args=False)
 		args_list:list[str] = shlex.split(cmd_args)
@@ -1092,7 +1092,7 @@ def cmd_config(ctx:Context, width:int) -> Error|None:
 	default_cmd = ctx.command_options.get('default-command')
 	if default_cmd is not None:
 		if command:
-			return f'{warning_prefix(ctx.command)} bad option "default command" for "{command}".'
+			return (f'{warning_prefix(ctx.command)} bad option "default command" for "{command}".')
 
 		config.set('commands/default', default_cmd)
 		print(f'Default command set: {_c}{default_cmd}{_0}')
@@ -1100,7 +1100,7 @@ def cmd_config(ctx:Context, width:int) -> Error|None:
 	default_args = ctx.command_options.get('default-arguments')
 	if default_args is not None:
 		if command:
-			return f'{warning_prefix(ctx.command)} bad option "default args" for "{command}".'
+			return Error(f'{warning_prefix(ctx.command)} bad option "default args" for "{command}".')
 		defctx = Context(eat_option, resolve_cmd)
 		cmd = config.get('commands/default')
 		defctx.set_command(cmd, apply_args=False)
@@ -1114,7 +1114,7 @@ def cmd_config(ctx:Context, width:int) -> Error|None:
 	api_key = ctx.command_options.get('api-key')
 	if api_key is not None:
 		if command:
-			return f'{warning_prefix(ctx.command)} bad option "api key" for "{command}".'
+			return Error(f'{warning_prefix(ctx.command)} bad option "api key" for "{command}".')
 		# TODO: "encrypt" ?
 		config.set('lookup/api-key', api_key)
 		print(f'API key set.')
@@ -1482,13 +1482,13 @@ def episodes_by_key(series:dict, keys:list) -> list:
 	]
 
 
-def no_series(db:dict, filtering:bool=False) -> str:
+def no_series(db:dict, filtering:bool=False) -> Error:
 
 	if len(db) <= 1:
-		return f'No series added.  Use: {_b}%s add <title search...> [<year>]{_00}' % PRG
+		return Error(f'No series added.  Use: {_b}%s add <title search...> [<year>]{_00}' % PRG)
 
 	precision = ' matched' if filtering else ''
-	return 'No series%s.' % precision
+	return Error('No series%s.' % precision)
 
 
 def refresh_series(db:dict, width:int, subset:list|None=None, max_age:int|None=None) -> tuple[int, int]:
