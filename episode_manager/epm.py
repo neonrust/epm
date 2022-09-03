@@ -17,9 +17,11 @@ from . import progress
 from .context import Context, BadUsageError
 from . import config, utils, db, db as m_db
 from .config import  Store
-from .utils import term_size, warning_prefix, plural
-from .db import State, meta_get, meta_set, meta_has, meta_del, meta_copy, meta_key, meta_seen_key, meta_archived_key, meta_added_key, meta_updated_key, meta_update_history_key, meta_list_index_key, meta_next_list_index_key, series_state
-from .styles import _0, _00, _0B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _L, _S, _u, _EOL
+from .utils import term_size, warning_prefix, plural, clrline, now_datetime, now_stamp
+from .db import State, meta_get, meta_set, meta_has, meta_del, meta_copy, meta_seen_key, meta_archived_key, \
+	meta_added_key, meta_update_check_key, meta_update_history_key, meta_list_index_key, meta_next_list_index_key, \
+	series_state, should_update
+from .styles import _0, _00, _0B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _u, _EOL
 
 import sys
 
@@ -523,7 +525,8 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> Error|None:
 
 		page += 1
 
-	print(f'\r{_K}', end='')
+	clrline()
+
 	if not hits:
 		return Error('Nothing found. Try generalizing your search.')
 
@@ -553,7 +556,8 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> Error|None:
 
 	print(f'{_f}Enriching search hits...{_00}', end='', flush=True)
 	hit_details = tmdb.details(hit['id'] for hit in hits)
-	print(f'\r{_K}', end='')
+
+	clrline()
 
 	for idx, hit in enumerate(hits):
 		hit.update(hit_details[idx])
@@ -1548,7 +1552,9 @@ def refresh_series(db:dict, width:int, subset:list|None=None, max_age:int|None=N
 
 	if not forced:
 		prog_bar = mk_prog(len(to_refresh))
-		print(f'\r{_00}{_K}%s{_EOL}' % prog_bar('Checking %d series for updates...' % len(to_refresh)), end='', flush=True)
+		clrline()
+		# print('get changes:', len(to_refresh), '|', ' '.join(to_refresh))
+		print(f'%s{_EOL}' % prog_bar('Checking %d series for updates...' % len(to_refresh)), end='', flush=True)
 
 		def show_ch_progress(completed:int, *_) -> None:
 			print(f'\r{_K}%s{_EOL}' % prog_bar(completed, text='Checking updates...'), end='', flush=True)
@@ -1569,16 +1575,18 @@ def refresh_series(db:dict, width:int, subset:list|None=None, max_age:int|None=N
 			return 0, 0
 
 	prog_bar = mk_prog(len(to_refresh))
-	print(f'\r{_00}{_K}%s{_EOL}' % prog_bar(f'Refreshing %d series...' % len(to_refresh)), end='', flush=True)
+	clrline()
+	print(f'%s{_EOL}' % prog_bar(f'Refreshing %d series...' % len(to_refresh)), end='', flush=True)
 	# TODO: show 'spinner'
 
 	def show_up_progress(completed:int, *_) -> None:
-		print(f'\r{_00}{_K}%s{_EOL}' % prog_bar(completed, text='Refreshing...'), end='', flush=True)
+		clrline()
+		print(f'%s{_EOL}' % prog_bar(completed, text='Refreshing...'), end='', flush=True)
 
 	to_refresh_keys = list(to_refresh.keys())
 	result = tmdb.episodes(to_refresh_keys, with_details=True, progress=show_up_progress)
 
-	print(f'\r{_00}{_K}', end='', flush=True)
+	clrline()
 
 	num_episodes = 0
 
@@ -2220,19 +2228,22 @@ def main():
 		start()
 
 	except tmdb.NoAPIKey:
-		print(f'\r{_00}{_K}{_E}ERROR{_00} No TMDb API key.', file=sys.stderr)
+		clrline()
+		print(f'{_E}ERROR{_00} No TMDb API key.', file=sys.stderr)
 		print(tmdb.api_key_help)
 		print('OR: epm config --api-key <key>')
 		sys.exit(0)
 
 	except tmdb.APIAuthError:
-		print(f'\r{_00}{_K}{_E}ERROR{_00} TMDb API key is not valid.', file=sys.stderr)
+		clrline()
+		print(f'{_E}ERROR{_00} TMDb API key is not valid.', file=sys.stderr)
 		print(tmdb.api_key_help)
 		print('OR: epm config --api-key <key>')
 		sys.exit(1)
 
 	except tmdb.NetworkError as ne:
-		print(f'\r{_00}{_K}{_E}ERROR{_00} TMDb API network error: {ne}')
+		clrline()
+		print(f'{_E}ERROR{_00} TMDb API network error: {ne}')
 		print('Please check internet connection and try again later.')
 		sys.exit(1)
 

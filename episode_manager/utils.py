@@ -181,6 +181,9 @@ class ListIndex:
 		return f'{self._h}{self._l}'
 
 
+def clrline():
+	print(f'{_00}\r{_K}', end='')
+
 
 def _init():
 	global PRG
