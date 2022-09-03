@@ -5,7 +5,7 @@ import shlex
 import time
 import atexit
 from datetime import datetime, date, timedelta
-from os.path import basename, dirname, expandvars, expanduser, exists as pexists, getsize as psize, join as pjoin
+from os.path import basename
 from calendar import Calendar, day_name, month_name, MONDAY, SUNDAY
 import textwrap
 import random
