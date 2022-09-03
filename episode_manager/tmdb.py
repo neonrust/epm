@@ -250,6 +250,7 @@ def details(title_id:str|list[str]|Iterable, type='series'):
 		'next_episode_to_air',
 		'networks',
 		'type',
+		'id',
 		'tagline',
 		'seasons',
 		'created_by',
@@ -363,13 +364,13 @@ def episodes(series_id:str|list[str]|Iterable, with_details=False, progress:Call
 	return all_episodes
 
 
-def changes(series_id:str|list[str], after:datetime, ignore:tuple|None=None, progress:Callable|None=None) -> list:
+def changes(series_id:str|list[str], after:datetime, include:list|tuple|None=None, progress:Callable|None=None) -> list:
 
 	if _qurl is None:
 		return []
 
 	if isinstance(series_id, Iterable) and not isinstance(series_id, str):
-		wrapped_args = map(lambda sid: ( (sid, after), {'ignore': ignore} ), series_id)
+		wrapped_args = map(lambda sid: ( (sid, after), {'include': include} ), series_id)
 		return _parallel_query(changes, wrapped_args, progress_callback=progress)
 
 	now = datetime.now().date().isoformat()
@@ -380,9 +381,14 @@ def changes(series_id:str|list[str], after:datetime, ignore:tuple|None=None, pro
 
 	change_list = (data or {}).get('changes', [])
 
-	# remove entries that was requested to ignore
-	if change_list and isinstance(ignore, (tuple, list)):
-		change_list = list(filter(lambda chg: chg.get('key') not in ignore, change_list))
+	# if specified, only include requested entries
+	if change_list and include is not None:
+		def accept_included(chg:dict) -> bool:
+			ok = chg.get('key') in include
+			if not ok:
+				print(series_id, '\x1b[2mignored change:', chg.get('key'), '\x1b[m')
+
+		change_list = list(filter(accept_included, change_list))
 
 	return change_list
 
@@ -530,12 +536,12 @@ def _self_test(args):
 	elif op == 'c':
 		print('CHANGES', file=sys.stderr)
 		dt = datetime.now() - timedelta(days=int(next()))
-		info = changes(next(), after=dt, ignore=('images',))
+		info = changes(next(), after=dt)#, include=('overview', 'season'))
 
 	elif op == 'cp':
 		print('CHANGES   PARALLEL', file=sys.stderr)
 		dt = datetime.now() - timedelta(days=int(next()))
-		info = changes(args, after=dt, ignore=('images',))
+		info = changes(args, after=dt, include=('overview', 'season'))
 
 	else:
 		print('_self_test: <op> [args...]', file=sys.stderr)
@@ -546,4 +552,5 @@ def _self_test(args):
 
 
 if __name__ == '__main__':
+	set_api_key(key_from_env())
 	_self_test(sys.argv[1:])
