@@ -1,6 +1,7 @@
 import time
 import sys
 import os
+from datetime import datetime, timedelta
 from os.path import dirname, exists as pexists
 from subprocess import run
 from tempfile import mkstemp
@@ -12,7 +13,7 @@ from .styles import _0, _00, _0B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _L, _S, _
 
 from typing import Any, Callable, TypeVar, Generator
 
-DB_VERSION = 2
+DB_VERSION = 3
 
 def code_version() -> int:
 	return DB_VERSION
@@ -38,7 +39,21 @@ def load(file_path:str|None=None) -> dict:
 	if modified:
 		save(db)
 
+	# test_eligible_update(db)
+
 	return db
+
+
+def test_eligible_update(db):
+	count = 0
+	for sid in all_ids(db):
+		series = db[sid]
+		if series_state(series) & State.ARCHIVED == 0:
+			if should_update(series):
+				count += 1
+
+	print('total stale:', count)
+	sys.exit(42)
 
 
 def _migrate(db:dict) -> bool:
@@ -52,16 +67,14 @@ def _migrate(db:dict) -> bool:
 
 	db_version = db[meta_key].get('version', 0)
 
-	# 1. migrate legacy series meta data
 	fixed_legacy_meta = 0
-	# 2. fix incorrectly written value to 'archived'
 	fixed_archived = 0
+	fixed_update_history = 0
 
-	for series_id, series in db.items():
-		if series_id == meta_key:
-			continue
+	for series_id in all_ids(db):
+		series = db[series_id]
 
-		if db_version == 0:
+		if db_version < 1:
 			if meta_key not in series:
 				series[meta_key] = {
 						key: series.pop(key)
@@ -82,6 +95,20 @@ def _migrate(db:dict) -> bool:
 				meta_set(series, meta_archived_key, last_seen)
 				fixed_archived += 1
 
+		if db_version < 3:
+			last_update = meta_get(series, 'updated')
+			if last_update:
+				meta_set(series, meta_update_check_key, last_update)
+				meta_del(series, 'updated')
+
+			update_history = meta_get(series, meta_update_history_key)
+			if not update_history and last_update:
+				meta_set(series, meta_update_history_key, [last_update])
+				fixed_update_history += 1
+
+			series.pop('id', None)
+
+
 	if db_version < 2:
 		# assign 'list_index' ordered by "added" time
 		list_index = 1
@@ -98,15 +125,19 @@ def _migrate(db:dict) -> bool:
 
 	if db_version < 2:
 		meta_set(db, meta_next_list_index_key, list_index)
-		print(f'{_f}Built list indexes for all %d series, next index: %d{_0}' % (len(db) - 1, list_index))
+		print(f'{_f}Built list indexes for all {len(db) - 1} series, next index: {list_index}{_0}')
 		modified = True
 
 	if fixed_legacy_meta:
-		print(f'{_f}Migrated legacy meta-data of %d series{_0}' % fixed_legacy_meta)
+		print(f'{_f}Migrated legacy meta-data of {fixed_legacy_meta} series{_0}')
 		modified = True
 
 	if fixed_archived:
-		print(f'{_f}Fixed bad "archived" value of %d series{_0}' % fixed_archived)
+		print(f'{_f}Fixed bad "{meta_archived_key}" value of {fixed_archived} series{_0}')
+		modified = True
+
+	if fixed_update_history:
+		print(f'{_f}Fixed empty "{meta_update_history_key}" value of {fixed_update_history} series{_0}')
 		modified = True
 
 	return modified
@@ -239,7 +270,6 @@ def save(db:dict) -> None:
 		os.remove(tmp_name)
 
 
-
 def meta_get(obj:dict, key:str, def_value:Any=None) -> Any:
 	return obj.get(meta_key, {}).get(key, def_value)
 
@@ -273,31 +303,43 @@ class State(enum.IntFlag):
 
 
 T = TypeVar('T')
-def filter_map(db:dict, sort_key:Callable[[Any],Any]|None=None, filter:Callable[[dict],bool]|None=None, map:Callable[[dict],T]|None=None) -> Generator[T,None,None]:
+def filter_map(db:dict, sort_key:Callable[[str, dict],Any]|None=None, filter:Callable[[str,dict],bool]|None=None, map:Callable[[str,dict],T]|None=None) -> Generator[T,None,None]:
 
 	if filter is None:
-		filter = lambda _: True
-	if map is None:
-		map = lambda v: v
+		def no_filter(series_id:str, series:dict):
+			return True
+		filter = no_filter
 
-	db_iter = (series for sid, series in db.items() if sid != meta_key)
+	if map is None:
+		def identity(series_id:str, series:dict):
+			return series_id, series
+		map = identity
+
+	db_iter = (
+		(series_id, series)
+		for series_id, series in db.items()
+		if series_id != meta_key
+	)
 	if sort_key:
+		# def sorter(sid_series:tuple[str, dict]):
+		# 	return sort_key(sid_series[1])
 		db_iter = sorted(db_iter, key=sort_key)
 
 	return (
-		map(series)
-		for series in db_iter
-		if series['id'] != meta_key and filter(series)
+		map(series_id, series)
+		for series_id, series in db_iter
+		if filter(series_id, series)
 	)
 
 
-def _sortkey_title_and_year(series:dict) -> tuple[str,list[int]]:
+def _sortkey_title_and_year(sid_series:tuple[str,dict]) -> tuple[str,list[int]]:
+	series_id, series = sid_series
 	return series['title'].casefold(), series.get('year', [])
 
 def indexed_series(db:dict, index=None, match=None, state: State | None=None) -> list[tuple[int, str]]:
 	"""Return a list with a predictable sorting, optionally filtered."""
 
-	def flt(series:dict) -> bool:
+	def flt(series_id:str, series:dict) -> bool:
 		passed:bool = True
 		if passed and index is not None:
 			passed = meta_get(series, meta_list_index_key) == index
@@ -307,10 +349,10 @@ def indexed_series(db:dict, index=None, match=None, state: State | None=None) ->
 			passed = (series_state(series) & state) > 0
 		return passed
 
-	def index_series(series:dict) -> tuple[int, dict]:
-		return meta_get(series, meta_list_index_key), series['id']
+	def index_and_series(series_id:str, series:dict) -> tuple[int, dict]:
+		return meta_get(series, meta_list_index_key), series_id
 
-	return list(filter_map(db, sort_key=_sortkey_title_and_year, filter=flt, map=index_series))
+	return list(filter_map(db, sort_key=_sortkey_title_and_year, filter=flt, map=index_and_series))
 
 
 def find_single_series(db:dict, idx_or_id:str) -> tuple[int|None, str|None, str|None]:
@@ -354,6 +396,14 @@ def find_single_series(db:dict, idx_or_id:str) -> tuple[int|None, str|None, str|
 	return nothing_found
 
 
+def all_ids(db:dict) -> list[str]:
+	return list(
+		key
+		for key in db.keys()
+		if key != meta_key
+	)
+
+
 def series_state(series:dict) -> State:
 	is_archived = meta_has(series, meta_archived_key)
 	is_ended = series.get('status') in ('ended', 'canceled')
@@ -377,8 +427,85 @@ def series_state(series:dict) -> State:
 	return State.PLANNED
 
 
-def series_num_archived(db:dict) -> int:
-	return sum(1 if meta_has(series, meta_archived_key) else 0 for series in db.values())
+HOUR = 3600
+DAY = 24*HOUR
+WEEK = 7*DAY
+
+def should_update(series:dict) -> bool:
+
+	# never updated -> True
+	# archived -> False
+	# ended -> False
+	# if update history > 2, AGE = interval between last two updates, cap: 2 weeks
+	# else: AGE = age of last update, cap: 2 days
+	# ---
+	# if last check is older than NOW - AGE: True
+	# else: False
+
+	# TODO: take seen episodes into account?
+
+	# print(f'\x1b[33;1m{series["title"]}\x1b[m', end='')
+
+	last_check = meta_get(series, meta_update_check_key)
+	if not last_check:  # no updates whatsoever
+		# print('  never updated -> \x1b[32;1mTrue\x1b[m')
+		return True
+
+	if series_state(series) & (State.ARCHIVED | State.COMPLETED) > 0:
+		# print('  archived -> \x1b[31;1mFalse\x1b[m')
+		return False
+
+	if series.get('status') in ('ended', 'canceled'):
+		# it's assumed we already have all the necessary info (most importantly the episodes)
+		# print('  ended -> \x1b[31;1mFalse\x1b[m')
+		return False
+
+	last_check = datetime.fromisoformat(last_check)
+
+	update_history = meta_get(series, meta_update_history_key)
+	if update_history and len(update_history) >= 2:
+		# interval between the last two updates
+		updateA = datetime.fromisoformat(update_history[-2])
+		updateB = datetime.fromisoformat(update_history[-1])
+		age = int((updateB - updateA).total_seconds())
+		age = cap(age, None, 2*WEEK)
+		# print(f'  \x1b[35;1mhistory\x1b[m:', end='')
+
+	else:
+		age = int((now_datetime() - last_check).total_seconds())
+		# age = cap(age, 2*DAY, None)
+		# print(f'  \x1b[36;1mlast\x1b[m:', end='')
+
+	# print(f'{age/DAY:.1f} days', end='')
+
+	if age < 2*DAY:
+		# print(f' < 2 days -> \x1b[31;1mFalse\x1b[m')
+		return False
+
+
+	check_expiry = now_datetime() - timedelta(seconds=age)
+	# print(f'  expiry:{check_expiry}', end='')
+
+	# print(f'  earliest:{earliest} -> ', end='')
+	# if last_check < check_expiry:
+	# 	print(' -> \x1b[32;1mTrue\x1b[m')
+	# else:
+	# 	print(' -> \x1b[31;1mFalse\x1b[m')
+
+	return last_check < check_expiry
+
+	# updated_stamp = meta_get(series, meta_updated_key)
+	# if not updated_stamp:
+	# 	return True, None
+	#
+	# updated = datetime.fromisoformat(updated_stamp)
+	# age_seconds = int((now_datetime() - updated).total_seconds())
+	# # print('%s updated:' % series['title'], updated, 'age:', age_seconds, max_age_seconds)
+	# return age_seconds > max_age_seconds, updated
+
+
+# def series_num_archived(db:dict) -> int:
+# 	return sum(1 if meta_has(series, meta_archived_key) else 0 for series in db.values())
 
 
 meta_key = 'epm:meta'
@@ -387,14 +514,14 @@ meta_seen_key = 'seen'
 meta_archived_key = 'archived'
 meta_list_index_key = 'list_index'
 meta_next_list_index_key = 'next_list_index'
-meta_updated_key = 'updated'
+meta_update_check_key = 'update_check'
 meta_update_history_key = 'update_history'
 meta_version_key = 'version'
 
 
 meta_legacy_keys = (
 	meta_added_key,
-	meta_updated_key,
+	meta_update_check_key,
 	meta_seen_key,
 	meta_archived_key,
 )

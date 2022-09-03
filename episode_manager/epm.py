@@ -305,9 +305,9 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 	if not series_list:
 		return no_series(ctx.db, filtering=match or filter_director or filter_writer or filter_cast or filter_year)
 
-
 	num_shown = 0
 	num_archived = 0
+	did_refresh = False
 
 	for index, series_id in series_list:
 		series = ctx.db[series_id]
@@ -320,13 +320,12 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 
 		num_shown += 1
 
-		stale, _ = is_stale(series)
-		if stale:
-			# we've come upon a series that is stale, do a refresh (of everything)
+		if not did_refresh and should_update(series):
+			# we've come upon a series that is stale,
+			# do a refresh of thw whole list we're printing
 			subset = [sid for _, sid in series_list]
 			modified = refresh_series(ctx.db, width, subset=subset)
-			if max(modified) > 0:
-				ctx.save()
+			did_refresh |= max(modified) > 0
 
 		# alternate styling odd/even rows
 		hilite = (num_shown % 2) == 0
@@ -353,6 +352,9 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 
 		if hilite:
 			print(f'{_00}{_K}', end='')
+
+	if did_refresh:
+		ctx.save()
 
 	if num_shown == 0:
 		if match:
@@ -392,18 +394,20 @@ def cmd_calendar(ctx:Context, width:int) -> Error|None:
 
 	episodes_by_date:dict[date,list] = {}
 
+	did_refresh = False
+
 	# collect episodes over num_weeks*7
 	#   using margin of one extra week, because it's simpler
 	end_date = start_date + timedelta(days=(num_weeks + 1)*7)
-	for series_id, series in ctx.db.items():
+	for series_id in db.all_ids():
+		series = ctx.db[series_id]
+
 		if meta_has(series, meta_archived_key):
 			continue
 
-		stale, _ = is_stale(series)
-		if stale:
-			modified = refresh_series(ctx.db, width)
-			if max(modified) > 0:
-				ctx.save()
+		if not did_refresh and should_update(series):
+			mods = refresh_series(ctx.db, width)
+			did_refresh |= max(mods) > 0
 
 		# faster to loop backwards?
 		for ep in series.get('episodes', []):
@@ -416,6 +420,9 @@ def cmd_calendar(ctx:Context, width:int) -> Error|None:
 				if ep_date not in episodes_by_date:
 					episodes_by_date[ep_date] = []
 				episodes_by_date[ep_date].append( (series, ep) )
+
+	if did_refresh:
+		ctx.save()
 
 	wday_idx = -1
 	days_todo = num_weeks*7
@@ -597,7 +604,7 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> Error|None:
 
 	ctx.db[series_id] = new_series
 
-	modified = refresh_series(ctx.db, width, subset=[series_id], max_age=-1)
+	modified = refresh_series(ctx.db, width, subset=[series_id], force=True)
 	if max(modified) > 0:
 		ctx.save()
 
@@ -809,8 +816,7 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 
 	series = ctx.db[series_id]
 
-	stale, _ = is_stale(series)
-	if stale:
+	if should_update(series):
 		# we've come upon a series that is stale, do a refresh (of everything)
 		modified = refresh_series(ctx.db, width, subset=[series_id])
 		if max(modified) > 0:
@@ -1030,14 +1036,10 @@ setattr(cmd_restore, 'help', _restore_help)
 
 
 def cmd_refresh(ctx:Context, width:int) -> Error|None:
-
-	max_age = ctx.command_options.get('max-age', config.get_int('max-age'))
-	if max_age <= 0:
-		max_age = config.get_int('max-age')
-
 	forced = bool(ctx.command_options.get('force'))
 
 	find_idx, match = find_idx_or_match(ctx.command_arguments)
+	# only refresh non-archived series
 	series_list = db.indexed_series(ctx.db, state=State.ACTIVE, index=find_idx, match=match)
 
 	if not series_list:
@@ -1047,15 +1049,15 @@ def cmd_refresh(ctx:Context, width:int) -> Error|None:
 
 	t0 = time.time()
 
-	num_series, num_episodes = refresh_series(ctx.db, width, subset=subset, max_age=max_age if not forced else -1)
-	if not num_episodes:
-		return Error(f'Nothing to update (max age: {max_age/(3600*24)} days)')
-
+	num_series, num_episodes = refresh_series(ctx.db, width, subset=subset, force=forced)
 	if num_series > 0:  # can be 1 even if num_episodes is zero
 		if num_episodes > 0:
 			print(f'{_f}Refreshed %d episodes across %d series [%.1fs].{_00}' % (num_episodes, num_series, time.time() - t0), file=sys.stderr)
 
 		ctx.save()
+
+	if not num_series and not num_episodes:
+		return Error(f'Nothing to update')
 
 	return None
 
@@ -1496,32 +1498,32 @@ def no_series(db:dict, filtering:bool=False) -> Error:
 	return Error('No series%s.' % precision)
 
 
-def refresh_series(db:dict, width:int, subset:list|None=None, max_age:int|None=None) -> tuple[int, int]:
-	subset = subset or list(key for key in db.keys() if key != meta_key)
-	max_age = (max_age or config.get_int('max-age'))*3600*24
 
-	forced = max_age < 0
+def last_update(series:dict) -> datetime:
+	updates = meta_get(series, meta_update_history_key)
+	if updates:
+		return datetime.fromisoformat(updates[-1])
 
-	def last_updated(series:dict) -> tuple[str, datetime]:
-		series_id = series['id']
-		updated = meta_get(series, meta_updated_key)
-		if updated:
-			return series_id, datetime.fromisoformat(updated)
-		return series_id, now_datetime()
+	return now_datetime()
 
-	if forced:
-		to_refresh = { sid: last_updated(db[sid]) for sid in subset }
+
+def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False) -> tuple[int, int]:
+	subset = subset or m_db.all_ids(db)
+
+	if force:
+		to_refresh = subset #{ sid: last_update(db[sid])[1] for sid in subset }
 	else:
-		def stale_check(series:dict) -> bool:
-			stale, _ = is_stale(series, max_age)
-			return stale
+		def check_expired(series_id:str, series:dict) -> bool:
+			return should_update(series)
+		to_refresh = list(m_db.filter_map(db, filter=check_expired, map=lambda sid, srs: sid))#last_updated))
 
-		to_refresh = dict(m_db.filter_map(db, filter=stale_check, map=last_updated))
+	to_refresh = list(sorted(to_refresh, key=int))
+
+	# print('force:', force)
+	# print('to_refresh:', len(to_refresh), '|', ' '.join(to_refresh))
 
 	if not to_refresh:
 		return 0, 0
-
-	earliest_refresh = min(to_refresh.values())
 
 	def spread_stamp(a:datetime, b:datetime):
 		# generate a random time stamp between 'a' and 'b'
@@ -1535,22 +1537,25 @@ def refresh_series(db:dict, width:int, subset:list|None=None, max_age:int|None=N
 
 	now_time = now_stamp()
 
-	# remember last update check (regardless whether there actually were any updates)
+	# set time of last check (regardless whether there actually were any updates)
 	touched = 0
 	for series_id in to_refresh:
-		prev_update = meta_get(db[series_id], meta_updated_key)
+		prev_update = meta_get(db[series_id], meta_update_check_key)
 		if prev_update:
 			stamp = spread_stamp(datetime.fromisoformat(prev_update), now_datetime()).isoformat(' ', timespec='seconds')
 		else:
 			stamp = now_time
-		meta_set(db[series_id], meta_updated_key, stamp)
-		touched += 1
 
+		meta_set(db[series_id], meta_update_check_key, stamp)
+		touched += 1
 
 	def mk_prog(total):
 		return progress.new(total, width=width - 2, bg_color=rgb('#404040'), bar_color=rgb('#686868'), text_color=rgb('#cccccc'))
 
-	if not forced:
+	latest_update_time = now_stamp()
+
+	if not force:
+		# check with TMDb if there actually are any updates
 		prog_bar = mk_prog(len(to_refresh))
 		clrline()
 		# print('get changes:', len(to_refresh), '|', ' '.join(to_refresh))
@@ -1559,20 +1564,43 @@ def refresh_series(db:dict, width:int, subset:list|None=None, max_age:int|None=N
 		def show_ch_progress(completed:int, *_) -> None:
 			print(f'\r{_K}%s{_EOL}' % prog_bar(completed, text='Checking updates...'), end='', flush=True)
 
-		to_refresh_keys = list(to_refresh.keys())
-		changes = tmdb.changes(to_refresh_keys, earliest_refresh, ignore=ignore_changes, progress=show_ch_progress)
+		earliest_refresh = min(
+			last_update(db[sid])
+			for sid in to_refresh
+		)
 
-		print(f'\r{_K}', end='', flush=True)
+		changes = tmdb.changes(to_refresh, earliest_refresh, include=include_changes, progress=show_ch_progress)
 
-		for series_id, changes in zip(to_refresh_keys, changes):
+		clrline()
+
+		for series_id, changes in zip(list(to_refresh), changes):
+			series = db[series_id]
+			print(series_id, series['title'], 'changes:', changes)
 			if not changes:
-				del to_refresh[series_id]
+				to_refresh.remove(series_id)
+			else:
+				latest = now_datetime().date()
+				for chg in changes:
+					items = chg.get('items', [])
+					for item in items:
+						chtime = item.get('time')
+						if chtime:
+							chtime = datetime.strptime(chtime, '%Y-%m-%d %H:%M:%S %Z')
+							if chtime < latest_update_time:
+								latest_update_time = chtime
 
 		if not to_refresh:
+			# print('No updates')
+			# sys.exit(42)
 			if touched:
 				return touched, 0  # only series affected, no episodes
 
 			return 0, 0
+
+	# print('with changes:', len(to_refresh), '|', ' '.join(to_refresh))
+	# sys.exit(42)
+
+	latest_update_time = latest_update_time.isoformat(' ')
 
 	prog_bar = mk_prog(len(to_refresh))
 	clrline()
@@ -1583,22 +1611,22 @@ def refresh_series(db:dict, width:int, subset:list|None=None, max_age:int|None=N
 		clrline()
 		print(f'%s{_EOL}' % prog_bar(completed, text='Refreshing...'), end='', flush=True)
 
-	to_refresh_keys = list(to_refresh.keys())
-	result = tmdb.episodes(to_refresh_keys, with_details=True, progress=show_up_progress)
+	result = tmdb.episodes(to_refresh, with_details=True, progress=show_up_progress)
 
 	clrline()
 
 	num_episodes = 0
+	max_history = config.get_int('num-update-history')
 
-	for series_id, (details, episodes) in zip(to_refresh_keys, result):
+	for series_id, (details, episodes) in zip(to_refresh, result):
 		series = details
 		series['episodes'] = episodes
 		meta_copy(db[series_id], series)
 
 		# keep a list of last N updates
 		update_history = meta_get(series, meta_update_history_key, [])
-		update_history.append(now_time)
-		if len(update_history) > config.get_int('num-update-history'):
+		update_history.append(latest_update_time)
+		if len(update_history) > max_history:
 			update_history.pop(0)
 		meta_set(series, meta_update_history_key, update_history)
 
@@ -1609,17 +1637,6 @@ def refresh_series(db:dict, width:int, subset:list|None=None, max_age:int|None=N
 
 
 	return len(to_refresh), num_episodes
-
-
-def is_stale(series:dict, max_age_seconds:int= 2 * 3600 * 24) -> tuple[bool, datetime | None]:
-	updated_stamp = meta_get(series, meta_updated_key)
-	if not updated_stamp:
-		return True, None
-
-	updated = datetime.fromisoformat(updated_stamp)
-	age_seconds = int((now_datetime() - updated).total_seconds())
-	# print('%s updated:' % series['title'], updated, 'age:', age_seconds, max_age_seconds)
-	return age_seconds > max_age_seconds, updated
 
 
 def print_series_title(num:int|None, series:dict, width:int=0, imdb_id:str|None=None, gray:bool=False, tail: str|None=None, tail_style:str|None=None) -> None:
@@ -1964,7 +1981,7 @@ def print_seen_status(series:dict, gray: bool=False, summary=True, next=True, la
 
 
 
-def seen_unseen_episodes(series:dict, before=None) -> tuple[list,list]:
+def seen_unseen_episodes(series:dict, before:datetime|None=None) -> tuple[list,list]:
 	episodes = series.get('episodes', [])
 	seen = meta_get(series, meta_seen_key, {})
 
@@ -1975,11 +1992,11 @@ def seen_unseen_episodes(series:dict, before=None) -> tuple[list,list]:
 		if _ep_key(ep) in seen:
 			seen_eps.append(ep)
 		else:
-			# only include episodes that are already available in 'unseen'
+			# only include episodes in 'unseen' that are already available
 			dt = ep.get('date')
 			if not dt:
 				continue
-			dt = datetime.fromisoformat(ep.get('date'))
+			dt = datetime.fromisoformat(dt)
 			if before and dt > before:
 				continue
 
@@ -2121,18 +2138,6 @@ def print_cmd_aliases(command:str) -> None:
 			return
 
 
-def now() -> str:
-	return now_datetime().isoformat(' ', timespec='seconds')
-
-
-_now_datetime = None
-def now_datetime() -> datetime:
-	global _now_datetime
-	if _now_datetime is None:
-		_now_datetime = datetime.now()
-	return _now_datetime
-
-
 def rgb(*args):
 	if len(args) == 3 and isinstance(args[0], int) and isinstance(args[1], int) and isinstance(args[2], int):
 		r, g, b = args
@@ -2214,14 +2219,23 @@ imdb_url_tmpl = 'https://www.imdb.com/title/%s'
 today_date = date.today()
 
 ignore_changes = (
+	'name',   # the name we want, in all likelyhood, already exists.
 	'images',
 	'videos',
 	'production_companies',
 	'season_regular',
 	'crew',
+	'tagline',
 	'homepage',
 	'user_review_count',
+	'translations',
+	'languages',
 )
+include_changes = (
+	'season',
+	#'overview',
+)
+# TODO: also ignore changes that are not in a language we're interested in (e.g. english)
 
 def main():
 	try:

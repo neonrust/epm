@@ -6,7 +6,7 @@ from subprocess import run
 from tempfile import mkstemp
 import sys
 
-from typing import Any
+from typing import Any, TypeVar
 from types import ModuleType as Module
 
 from .styles import _0, _00, _0B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _L, _S, _u, _EOL
