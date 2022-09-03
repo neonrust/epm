@@ -34,8 +34,9 @@ class Context:
 			self.load()
 
 		if self.debug:
-			print('[ctx] ARGS:', self.command_arguments)
-			print('[ctx] OPTS:', self.command_options)
+			print('[ctx] command:', self.command)
+			print('      ARGS:', self.command_arguments)
+			print('      OPTS:', self.command_options)
 
 		if not self.command_arguments and not self.command_options:
 			self.command_arguments = [*self.default_command_arguments]
