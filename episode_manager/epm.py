@@ -588,7 +588,7 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> Error|None:
 	series_id = new_series['id']
 
 	meta_set(new_series, meta_seen_key, {})
-	meta_set(new_series, meta_added_key, now())
+	meta_set(new_series, meta_added_key, now_stamp())
 
 	# assign 'list index', and advance the global
 	next_list_index = meta_get(ctx.db, meta_next_list_index_key)
@@ -875,7 +875,7 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 
 	touched_episodes = []
 	episodes_runtime = 0
-	now_time = now()
+	now_time = now_stamp()
 
 	for ep in series.get('episodes', []):
 		if (season is None or ep['season'] in season) and (episode is None or ep['episode'] in episode):
@@ -994,7 +994,7 @@ def cmd_archive(ctx:Context, width:int, archiving:bool=True, print_state_change:
 		if partly_seen:
 			print(' (abandoned)', end='')
 		print(f':{_00}')
-		meta_set(series, meta_archived_key, now())
+		meta_set(series, meta_archived_key, now_stamp())
 		print(format_state_change(state_before, series_state(series)))
 
 	else:
@@ -1533,7 +1533,7 @@ def refresh_series(db:dict, width:int, subset:list|None=None, max_age:int|None=N
 		rnd = a + offset
 		return rnd
 
-	now_time = now()
+	now_time = now_stamp()
 
 	# remember last update check (regardless whether there actually were any updates)
 	touched = 0

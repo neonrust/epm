@@ -1,3 +1,4 @@
+from datetime import datetime
 from os.path import basename, dirname, expandvars, expanduser, exists as pexists, getsize as psize, join as pjoin
 
 import os
@@ -183,6 +184,28 @@ class ListIndex:
 
 def clrline():
 	print(f'{_00}\r{_K}', end='')
+
+T = TypeVar('T')
+def cap(v:T, lower:T|None, upper:T|None) -> T:
+	if lower is not None and v < lower:
+		return lower
+	elif upper is not None and v > upper:
+		return upper
+	return v
+
+def now_stamp() -> str:
+	"""Only evaluates once; the same value will always be returned."""
+	return now_datetime().isoformat(' ', timespec='seconds')
+
+
+_now_datetime = None
+def now_datetime() -> datetime:
+	"""Only evaluates once; the same value will always be returned."""
+	global _now_datetime
+	if _now_datetime is None:
+		_now_datetime = datetime.now()
+	return _now_datetime
+
 
 
 def _init():
