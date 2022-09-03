@@ -311,7 +311,7 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 		series = ctx.db[series_id]
 		is_archived = meta_has(series, meta_archived_key)
 
-		seen, unseen = seen_unseen_episodes(series)
+		seen, unseen = seen_unseen_episodes(series, now_datetime())
 
 		if with_unseen_eps and not unseen:
 			continue
