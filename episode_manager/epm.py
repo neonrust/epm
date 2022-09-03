@@ -296,6 +296,7 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 	elif only_abandoned: print(f'{_u}abandoned{_0} ', end='')
 	else: print(f'{_u}non-archived{_0} ', end='')
 	print('series', end='')
+	if with_unseen_eps: print(f' with {_u}unseen{_0} episodes', end='')
 	if match: print(', matching: %s' % match.styled_description, end='')
 	print(f'{_0}.')
 
