@@ -30,7 +30,7 @@ _configuration_defaults:dict[str, ValueType] = {
 	'lookup': {
 		'max-hits': default_max_hits,
 	},
-	'debug': 0,
+	'debug': False,
 }
 
 _app_config:dict[str, ValueType] = {}
