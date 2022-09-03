@@ -14,7 +14,7 @@ class Context:
 		self._resolve_cmd = rc
 
 		self.global_options = {
-			'debug': config.get_bool('debug', False),
+			'debug': config.get_bool('debug'),
 		}
 		self.command:str|None = None
 		self.command_options:dict = {}
