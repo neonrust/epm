@@ -489,9 +489,9 @@ def should_update(series:dict) -> bool:
 	if debug:
 		print(f'  expiry:{check_expiry}', end='')
 		if last_check < check_expiry:
-			print(' -> \x1b[32;1mTrue\x1b[m')
+			print(' \x1b[32;1mTrue\x1b[m')
 		else:
-			print(' -> \x1b[31;1mFalse\x1b[m')
+			print(' \x1b[31;1mFalse\x1b[m')
 
 	return last_check < check_expiry
 
