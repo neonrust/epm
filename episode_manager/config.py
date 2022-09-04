@@ -24,7 +24,6 @@ _configuration_defaults:dict[str, ValueType] = {
 			'num_weeks': 1,
 		},
 	},
-	'max-age': default_max_refresh_age,
 	'num-backups': 10,
 	'num-update-history': 5,
 	'lookup': {
@@ -227,7 +226,6 @@ if __name__ == '__main__':
 		'lookup/max-hits',
 		'debug',
 		'commands/default',
-		'max-age',
 		'paths/series-db',
 	]
 	print('='*40)
@@ -235,7 +233,6 @@ if __name__ == '__main__':
 		value = get(path)
 		print(f'\x1b[34;1m{path:<20}\x1b[m = \x1b[97;1m{value}\x1b[m')
 
-	set('max-age', 33, store=Store.Memory)
 	set('commands/default', 'unseen2', store=Store.Persistent)
 
 	dump_stores()

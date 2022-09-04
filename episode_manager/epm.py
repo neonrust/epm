@@ -1275,7 +1275,6 @@ command_options = {
 	},
 	'refresh': {
 		'force':           { 'name': ('-f', '--force'),         'help': 'Refresh whether needed or not' },
-		'max-age':         { 'name': '--max-age',  'arg': int,  'help': 'Refresh older than N days (default: %s)' % config.get_int('max-age') },
 	},
 	'add': {
 		**__opt_max_hits,
