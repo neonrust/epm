@@ -433,6 +433,8 @@ WEEK = 7*DAY
 
 def should_update(series:dict) -> bool:
 
+	debug = config.get_bool('debug')
+
 	# never updated -> True
 	# archived -> False
 	# ended -> False
@@ -444,20 +446,20 @@ def should_update(series:dict) -> bool:
 
 	# TODO: take seen episodes into account?
 
-	# print(f'\x1b[33;1m{series["title"]}\x1b[m', end='')
+	if debug: print(f'\x1b[33;1m{series["title"]}\x1b[m', end='')
 
 	last_check = meta_get(series, meta_update_check_key)
 	if not last_check:  # no updates whatsoever
-		# print('  never updated -> \x1b[32;1mTrue\x1b[m')
+		if debug: print('  never updated -> \x1b[32;1mTrue\x1b[m')
 		return True
 
 	if series_state(series) & (State.ARCHIVED | State.COMPLETED) > 0:
-		# print('  archived -> \x1b[31;1mFalse\x1b[m')
+		if debug: print('  archived -> \x1b[31;1mFalse\x1b[m')
 		return False
 
 	if series.get('status') in ('ended', 'canceled'):
 		# it's assumed we already have all the necessary info (most importantly the episodes)
-		# print('  ended -> \x1b[31;1mFalse\x1b[m')
+		if debug: print('  ended -> \x1b[31;1mFalse\x1b[m')
 		return False
 
 	last_check = datetime.fromisoformat(last_check)
@@ -469,28 +471,27 @@ def should_update(series:dict) -> bool:
 		updateB = datetime.fromisoformat(update_history[-1])
 		age = int((updateB - updateA).total_seconds())
 		age = cap(age, None, 2*WEEK)
-		# print(f'  \x1b[35;1mhistory\x1b[m:', end='')
+		if debug: print(f'  \x1b[35;1mhistory\x1b[m:', end='')
 
 	else:
 		age = int((now_datetime() - last_check).total_seconds())
-		# age = cap(age, 2*DAY, None)
-		# print(f'  \x1b[36;1mlast\x1b[m:', end='')
+		age = cap(age, None, 2*DAY)
+		if debug: print(f'  \x1b[36;1mlast\x1b[m:', end='')
 
-	# print(f'{age/DAY:.1f} days', end='')
+	if debug: print(f'{age/DAY:.1f} days', end='')
 
 	if age < 2*DAY:
-		# print(f' < 2 days -> \x1b[31;1mFalse\x1b[m')
+		if debug: print(f' < 2 days -> \x1b[31;1mFalse\x1b[m')
 		return False
 
 
 	check_expiry = now_datetime() - timedelta(seconds=age)
-	# print(f'  expiry:{check_expiry}', end='')
-
-	# print(f'  earliest:{earliest} -> ', end='')
-	# if last_check < check_expiry:
-	# 	print(' -> \x1b[32;1mTrue\x1b[m')
-	# else:
-	# 	print(' -> \x1b[31;1mFalse\x1b[m')
+	if debug:
+		print(f'  expiry:{check_expiry}', end='')
+		if last_check < check_expiry:
+			print(' -> \x1b[32;1mTrue\x1b[m')
+		else:
+			print(' -> \x1b[31;1mFalse\x1b[m')
 
 	return last_check < check_expiry
 
