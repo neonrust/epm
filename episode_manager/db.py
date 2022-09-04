@@ -485,15 +485,18 @@ def should_update(series:dict) -> bool:
 		return False
 
 
-	check_expiry = now_datetime() - timedelta(seconds=age)
+	check_expiry = last_check + timedelta(seconds=age)
+
+	expired = now_datetime() > check_expiry
+
 	if debug:
-		print(f'  expiry:{check_expiry}', end='')
-		if last_check < check_expiry:
+		print(f'  expiry:{str(check_expiry)[:19]}', end='')
+		if expired:
 			print(' \x1b[32;1mTrue\x1b[m')
 		else:
 			print(' \x1b[31;1mFalse\x1b[m')
 
-	return last_check < check_expiry
+	return expired
 
 	# updated_stamp = meta_get(series, meta_updated_key)
 	# if not updated_stamp:
