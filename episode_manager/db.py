@@ -475,13 +475,13 @@ def should_update(series:dict) -> bool:
 
 	else:
 		age = int((now_datetime() - last_check).total_seconds())
-		age = cap(age, None, 2*DAY)
 		if debug: print(f'  \x1b[36;1mlast\x1b[m:', end='')
 
+	age = cap(age, None, 4*DAY)
 	if debug: print(f'{age/DAY:.1f} days', end='')
 
-	if age < 2*DAY:
-		if debug: print(f' < 2 days -> \x1b[31;1mFalse\x1b[m')
+	if age < 4*DAY:
+		if debug: print(f' < 4 days \x1b[31;1mFalse\x1b[m')
 		return False
 
 
