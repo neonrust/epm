@@ -1001,7 +1001,6 @@ def cmd_archive(ctx:Context, width:int, archiving:bool=True, print_state_change:
 			print(' (abandoned)', end='')
 		print(f':{_00}')
 		meta_set(series, meta_archived_key, now_stamp())
-		print(format_state_change(state_before, series_state(series)))
 
 	else:
 		print(f'{_b}Series restored', end='')
@@ -1009,9 +1008,9 @@ def cmd_archive(ctx:Context, width:int, archiving:bool=True, print_state_change:
 			print(' (resumed)', end='')
 		print(f':{_00}')
 		meta_del(series, meta_archived_key)
-		print(format_state_change(state_before, series_state(series)))
 
 	print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width)
+	print(format_state_change(state_before, series_state(series)))
 
 	ctx.save()
 
