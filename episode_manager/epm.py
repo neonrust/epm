@@ -1303,7 +1303,7 @@ def is_released(target, fallback=True):
 
 
 def format_state_change(before:State, after:State):
-	return f'[{_c}{before.name.lower()} ⯈ {after.name.lower()}{_0}]'
+	return f'[\x1b[38;5;202m{before.name.lower()}{_0} ⯈ \x1b[38;5;112m{after.name.lower()}{_0}]'
 
 
 def format_title(series, width:int|None=None):
