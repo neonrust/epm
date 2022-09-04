@@ -374,7 +374,7 @@ def find_single_series(db:dict, idx_or_id:str) -> tuple[int|None, str|None, str|
 		else:
 			return nothing_found
 
-	def flt(series:dict) -> bool:
+	def flt(series_id:str, series:dict) -> bool:
 		passed = True
 
 		if passed and find_index is not None:
@@ -385,8 +385,8 @@ def find_single_series(db:dict, idx_or_id:str) -> tuple[int|None, str|None, str|
 
 		return passed
 
-	def index_sid(series:dict) -> tuple[int, str]:
-		return meta_get(series, meta_list_index_key), series['id']
+	def index_sid(series_id:str, series:dict) -> tuple[int, str]:
+		return meta_get(series, meta_list_index_key), series_id
 
 	found = list(filter_map(db, filter=flt, map=index_sid))
 
