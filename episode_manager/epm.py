@@ -309,11 +309,16 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 	num_archived = 0
 	did_refresh = False
 
+	from_date = now_datetime() if not future_eps else None
+	ep_limit = None
+	if not all_unseen_eps:
+		ep_limit = 1
+
 	for index, series_id in series_list:
 		series = ctx.db[series_id]
 		is_archived = meta_has(series, meta_archived_key)
 
-		seen, unseen = seen_unseen_episodes(series, now_datetime())
+		seen, unseen = seen_unseen_episodes(series, from_date)
 
 		if with_unseen_eps and not unseen:
 			continue
@@ -347,8 +352,8 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 		if seen_eps:
 			print_episodes(series, seen, width=width)
 
-		if all_unseen_eps:
-			print_episodes(series, unseen, width=width, also_future=future_eps)
+		if all_unseen_eps or future_eps:
+			print_episodes(series, unseen, width=width, limit=ep_limit, also_future=future_eps)
 
 		if hilite:
 			print(f'{_00}{_K}', end='')
@@ -1247,34 +1252,34 @@ command_options = {
 		'debug':           { 'name': '--debug', 'help': 'Enable debug mode', 'func': _set_debug, 'hidden': True },
 	},
 	'show': {
-		'all':             { 'name': ('-a', '--all'),         'help': 'List also archived series' },
-		'archived':        { 'name': ('-A', '--archived'),    'help': 'List only archived series' },
-		'started':         { 'name': ('-s', '--started'),     'help': 'List only series with seen episodes' },
-		'planned':         { 'name': ('-p', '--planned'),     'help': 'List only series without seen episodes' },
-		'abandoned':       { 'name': '--abandoned',           'help': 'List only abandoned series' },
+		'all':               { 'name': ('-a', '--all'),         'help': 'List also archived series' },
+		'archived':          { 'name': ('-A', '--archived'),    'help': 'List only archived series' },
+		'started':           { 'name': ('-s', '--started'),     'help': 'List only series with seen episodes' },
+		'planned':           { 'name': ('-p', '--planned'),     'help': 'List only series without seen episodes' },
+		'abandoned':         { 'name': '--abandoned',           'help': 'List only abandoned series' },
 
-		'all-episodes':    { 'name': ('-e', '--episodes'),    'help': 'Show all unseen (released) episodes (not just 1st)' },
-		'future-episodes': { 'name': ('-f', '--future'),      'help': '-e also shows future/unreleased episodes' },
-		'seen-episodes':   { 'name': ('-S', '--seen'),        'help': 'Show seen episodes' },
-		'with-unseen':     { 'name': ('-u', '--unseen'),      'help': 'List only series with unseen episodes' },
-		'next-episode':    { 'name': ('-N', '--next'),        'help': 'Show only next episode, no summary' },
+		'all-episodes':      { 'name': ('-e', '--episodes'),    'help': 'Show all unseen (released) episodes' },
+		'future-episodes':   { 'name': ('-f', '--future'),      'help': 'Also show future episodes' },
+		'seen-episodes':     { 'name': ('-S', '--seen'),        'help': 'Show seen episodes' },
+		'with-unseen':       { 'name': ('-u', '--unseen'),      'help': 'List only series with unseen episodes' },
+		'next-episode':      { 'name': ('-N', '--next'),        'help': 'Show only next episode, no summary' },
 
-		'details':         { 'name': ('-I', '--details'),     'help': 'Show more details' },
+		'details':           { 'name': ('-I', '--details'),     'help': 'Show more details' },
 
-		'director':        { 'name': '--director', 'arg': str, 'help': 'Filter by director, substring match' },
-		'writer':          { 'name': '--writer',  'arg': str, 'help': 'Filter by writer, substring match' },
-		'cast':            { 'name': '--cast',    'arg': str, 'help': 'Filter by cast, substring match' },
-		'year':            { 'name': '--year',    'arg': str, 'help': 'Filter by year, <start>[-<end>]' },
-		'country':         { 'name': '--country', 'arg': str, 'help': 'Filter by country (two letters; ISO 3166)' },
+		'director':          { 'name': '--director', 'arg': str, 'help': 'Filter by director, substring match' },
+		'writer':            { 'name': '--writer',  'arg': str, 'help': 'Filter by writer, substring match' },
+		'cast':              { 'name': '--cast',    'arg': str, 'help': 'Filter by cast, substring match' },
+		'year':              { 'name': '--year',    'arg': str, 'help': 'Filter by year, <start>[-<end>]' },
+		'country':           { 'name': '--country', 'arg': str, 'help': 'Filter by country (two letters; ISO 3166)' },
 	},
 	'unseen': {
-		'started':         { 'name': ('-s', '--started'),       'help': 'List only series with seen episodes' },
-		'planned':         { 'name': ('-p', '--planned'),       'help': 'List only series without seen episodes' },
-		'all-episodes':    { 'name': ('-e', '--episodes'),      'help': 'Show all unseen episodes (not only first)' },
-		'future-episodes': { 'name': ('-f', '--future'),        'help': '-e also shows future/unreleased episodes' },
+		'started':           { 'name': ('-s', '--started'),       'help': 'List only series with seen episodes' },
+		'planned':           { 'name': ('-p', '--planned'),       'help': 'List only series without seen episodes' },
+		'all-episodes':      { 'name': ('-e', '--episodes'),      'help': 'Show all unseen episodes (not only first)' },
+		'future-episodes':   { 'name': ('-f', '--future'),        'help': 'Also shows (series with) future episodes' },
 	},
 	'refresh': {
-		'force':           { 'name': ('-f', '--force'),         'help': 'Refresh whether needed or not' },
+		'force':             { 'name': ('-f', '--force'),         'help': 'Refresh whether needed or not' },
 	},
 	'add': {
 		**__opt_max_hits,
@@ -1323,10 +1328,10 @@ def format_title(series, width:int|None=None):
 	return s
 
 
-def print_episodes(series:dict, episodes:list[dict], width:int, pre_print:Callable|None=None, also_future=False) -> list[str]:
+def print_episodes(series:dict, episodes:list[dict], width:int, pre_print:Callable|None=None, also_future:bool=False, limit:int|None=None) -> list[str]:
 
 	seen, unseen = seen_unseen_episodes(series)
-	seen_keys = {_ep_key(ep) for ep in seen}
+	seen_keys = { _ep_key(ep) for ep in seen }
 
 	indent = 6  # nice and also space to print the season "grouping labels"
 	current_season = 0
@@ -1336,7 +1341,13 @@ def print_episodes(series:dict, episodes:list[dict], width:int, pre_print:Callab
 
 	keys:list[str] = []
 
+	num_printed = 0
+
 	for ep in episodes:
+
+		if limit is not None and num_printed >= limit:
+			break
+		num_printed += 1
 
 		if pre_print:
 			pre_print()
@@ -1344,20 +1355,22 @@ def print_episodes(series:dict, episodes:list[dict], width:int, pre_print:Callab
 
 		has_seen = _ep_key(ep) in seen_keys
 
-		s = format_episode_title(None, ep, width=ep_width, today=True, seen=has_seen)
 
 		season = ep['season']
 		if season != current_season:
 			print(f'{_c}%{indent}s{_0}\r' % (f's%d' % season), end='')
 			current_season = season
 
-		# use cursor move instead of writing spaces, so we don't overwrite the season label
+		s = format_episode_title(None, ep, width=ep_width, today=True, seen=has_seen)
+
+		# moving cursor instead of writing spaces so we don't overwrite the season label
 		print(f'\x1b[{indent + margin}C{s}')
 
 		keys.append(_ep_key(ep))
 
 		if not (also_future or is_released(ep)):
 			break
+
 
 	return keys
 
