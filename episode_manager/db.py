@@ -508,6 +508,35 @@ def should_update(series:dict) -> bool:
 	# return age_seconds > max_age_seconds, updated
 
 
+
+def series_seen_unseen_eps(series:dict, before: datetime | None=None) -> tuple[list, list]:
+	episodes = series.get('episodes', [])
+	seen = meta_get(series, meta_seen_key, {})
+
+	seen_eps = []
+	unseen_eps = []
+
+	for ep in episodes:
+		if episode_key(ep) in seen:
+			seen_eps.append(ep)
+		else:
+			# only include episodes in 'unseen' that are already available
+			dt = ep.get('date')
+			if not dt:
+				continue
+			dt = datetime.fromisoformat(dt)
+			if before and dt > before:
+				continue
+
+			unseen_eps.append(ep)
+
+	return seen_eps, unseen_eps
+
+
+def episode_key(episode:dict):
+	return f'{episode["season"]}:{episode["episode"]}'
+
+
 # def series_num_archived(db:dict) -> int:
 # 	return sum(1 if meta_has(series, meta_archived_key) else 0 for series in db.values())
 

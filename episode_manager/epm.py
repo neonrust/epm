@@ -20,7 +20,7 @@ from .config import  Store
 from .utils import term_size, warning_prefix, plural, clrline, now_datetime, now_stamp
 from .db import State, meta_get, meta_set, meta_has, meta_del, meta_copy, meta_seen_key, meta_archived_key, \
 	meta_added_key, meta_update_check_key, meta_update_history_key, meta_list_index_key, meta_next_list_index_key, \
-	series_state, should_update
+	series_state, should_update, series_seen_unseen_eps, episode_key
 from .styles import _0, _00, _0B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _u, _EOL
 
 import sys
@@ -318,7 +318,7 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 		series = ctx.db[series_id]
 		is_archived = meta_has(series, meta_archived_key)
 
-		seen, unseen = seen_unseen_episodes(series, from_date)
+		seen, unseen = series_seen_unseen_eps(series, from_date)
 
 		if with_unseen_eps and not unseen:
 			continue
@@ -769,7 +769,7 @@ def cmd_delete(ctx:Context, width:int) -> Error|None:
 	print(f'{_b}Deleting series:{_00}')
 	print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width)
 
-	seen, unseen = seen_unseen_episodes(series)
+	seen, unseen = series_seen_unseen_eps(series)
 	partly_seen = seen and unseen
 
 	choices = ['yes']
@@ -890,7 +890,7 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 
 	for ep in series.get('episodes', []):
 		if (season is None or ep['season'] in season) and (episode is None or ep['episode'] in episode):
-			key = _ep_key(ep)
+			key = episode_key(ep)
 
 			if marking and key not in seen_state:
 				seen_state[key] = now_time
@@ -996,7 +996,7 @@ def cmd_archive(ctx:Context, width:int, archiving:bool=True, print_state_change:
 			return Error('Not archived: %s' % format_title(series))
 
 	state_before = series_state(series)
-	seen, unseen = seen_unseen_episodes(series)
+	seen, unseen = series_seen_unseen_eps(series)
 	partly_seen = seen and unseen
 
 
@@ -1330,8 +1330,8 @@ def format_title(series, width:int|None=None):
 
 def print_episodes(series:dict, episodes:list[dict], width:int, pre_print:Callable|None=None, also_future:bool=False, limit:int|None=None) -> list[str]:
 
-	seen, unseen = seen_unseen_episodes(series)
-	seen_keys = { _ep_key(ep) for ep in seen }
+	seen, unseen = series_seen_unseen_eps(series)
+	seen_keys = {episode_key(ep) for ep in seen}
 
 	indent = 6  # nice and also space to print the season "grouping labels"
 	current_season = 0
@@ -1353,7 +1353,7 @@ def print_episodes(series:dict, episodes:list[dict], width:int, pre_print:Callab
 			pre_print()
 			pre_print = None  # only once
 
-		has_seen = _ep_key(ep) in seen_keys
+		has_seen = episode_key(ep) in seen_keys
 
 
 		season = ep['season']
@@ -1366,7 +1366,7 @@ def print_episodes(series:dict, episodes:list[dict], width:int, pre_print:Callab
 		# moving cursor instead of writing spaces so we don't overwrite the season label
 		print(f'\x1b[{indent + margin}C{s}')
 
-		keys.append(_ep_key(ep))
+		keys.append(episode_key(ep))
 
 		if not (also_future or is_released(ep)):
 			break
@@ -1492,7 +1492,7 @@ def episodes_by_key(series:dict, keys:list) -> list:
 	keys_to_index:dict[str, int] = {}
 	episodes:list[dict] = series.get('episodes', [])
 	for idx, ep in enumerate(episodes):
-		keys_to_index[_ep_key(ep)] = idx
+		keys_to_index[episode_key(ep)] = idx
 
 	return [
 		episodes[keys_to_index[key]]
@@ -1881,7 +1881,7 @@ def print_series_details(index:int, series:dict, width:int, gray:bool=False) -> 
 def print_archive_status(series:dict) -> None:
 	if meta_has(series, meta_archived_key):
 		print(f'{_f}       Archived', end='')
-		seen, unseen = seen_unseen_episodes(series)
+		seen, unseen = series_seen_unseen_eps(series)
 		if seen and unseen:  # some has been seen, but not all
 			print(' / Abandoned', end='')
 		print('  ', meta_get(series, meta_archived_key).split()[0], end='')
@@ -1935,14 +1935,10 @@ def strip_ansi(s: str):
 	return re.sub('\x1b\\[[0-9;]*[mJ]', '', s)
 
 
-def _ep_key(episode:dict):
-	return f'{episode["season"]}:{episode["episode"]}'
-
-
 def print_seen_status(series:dict, gray: bool=False, summary=True, next=True, last=True, width:int=0):
 	ind = '       '
 
-	seen, unseen = seen_unseen_episodes(series)
+	seen, unseen = series_seen_unseen_eps(series)
 	all_seen = seen and len(seen) == len(series.get('episodes', []))
 
 	s = ''
@@ -1989,31 +1985,6 @@ def print_seen_status(series:dict, gray: bool=False, summary=True, next=True, la
 			if gray:
 				print(_f, end='')
 			print(f'{header}{s}')
-
-
-
-def seen_unseen_episodes(series:dict, before:datetime|None=None) -> tuple[list,list]:
-	episodes = series.get('episodes', [])
-	seen = meta_get(series, meta_seen_key, {})
-
-	seen_eps = []
-	unseen_eps = []
-
-	for ep in episodes:
-		if _ep_key(ep) in seen:
-			seen_eps.append(ep)
-		else:
-			# only include episodes in 'unseen' that are already available
-			dt = ep.get('date')
-			if not dt:
-				continue
-			dt = datetime.fromisoformat(dt)
-			if before and dt > before:
-				continue
-
-			unseen_eps.append(ep)
-
-	return seen_eps, unseen_eps
 
 
 def option_def(command:str|None, option:str|None=None):
