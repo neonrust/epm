@@ -12,15 +12,13 @@ import random
 
 from typing import Callable, Any
 
-from . import tmdb
-from . import progress
+from . import tmdb, progress, config, utils, db, db as m_db
 from .context import Context, BadUsageError
-from . import config, utils, db, db as m_db
 from .config import  Store
 from .utils import term_size, warning_prefix, plural, clrline, now_datetime, now_stamp
 from .db import State, meta_get, meta_set, meta_has, meta_del, meta_copy, meta_seen_key, meta_archived_key, \
 	meta_added_key, meta_update_check_key, meta_update_history_key, meta_list_index_key, meta_next_list_index_key, \
-	series_state, should_update, series_seen_unseen_eps, episode_key
+	series_state, should_update, series_seen_unseen_eps, episode_key, next_unseen_episode
 from .styles import _0, _00, _0B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _u, _EOL
 
 import sys
@@ -121,7 +119,7 @@ def eat_option(command:str|None, option:str, args:list[str], options:dict, unkno
 
 	set_func = opt_def.get('func')
 	if not set_func:
-		def _set_opt(v):
+		def _set_opt(v, key, options):
 			# print('OPT>', key, '=', v)
 			options[key] = v
 		set_func = _set_opt
@@ -134,7 +132,7 @@ def eat_option(command:str|None, option:str, args:list[str], options:dict, unkno
 		if option_arg:  # but an argument was supplied
 			bad_opt_arg(command, option, option_arg, None)
 
-		set_func(True)
+		set_func(True, key, options)
 
 	else:
 		if m:
@@ -159,7 +157,9 @@ def eat_option(command:str|None, option:str, args:list[str], options:dict, unkno
 				d = validator(d)
 				if d is None:
 					raise ValueError
-				set_func(d)
+				err = set_func(d, key, options)
+				if err:
+					bad_opt_arg(command, option, arg_str, arg_type, explain=err)
 			except ValueError:
 				bad_opt_arg(command, option, arg_str, arg_type, explain=validator_explain)
 
@@ -169,7 +169,9 @@ def eat_option(command:str|None, option:str, args:list[str], options:dict, unkno
 				v = validator(v)
 				if v is None:
 					raise ValueError
-				set_func(v)
+				err = set_func(v, key, options)
+				if err:
+					bad_opt_arg(command, option, arg_str, arg_type, explain=err)
 			except ValueError:
 				bad_opt_arg(command, option, arg_str, arg_type, explain=validator_explain)
 
@@ -301,8 +303,32 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 		except:
 			return 'Bad year filter: %s (use: <start year>[-<end year>])' % filter_year
 
+	sort_key:Callable[[dict],Any]|None = None
+
+	sorting = ctx.command_options.get('sorting', [])
+	if sorting:
+		def _series_key(series:dict, key:str) -> str:
+			if key in series:
+				return str(series[key])
+			elif key == 'earliest':
+				next_ep = next_unseen_episode(series)
+				if not next_ep:
+					return '\xff'
+				return next_ep.get('date') or ''
+			else:
+				# should never happen, since the values are verified by _opt_sort_names
+				return ''
+
+		def _sort_key(item:dict) -> Any:
+			index, series = item
+			return tuple(
+				_series_key(series, ord) for ord in sorting
+			)
+		sort_key = _sort_key
+
 	find_idx, match = find_idx_or_match(ctx.command_arguments, country=filter_country, director=filter_director, writer=filter_writer, cast=filter_cast, year=filter_year)
-	series_list = db.indexed_series(ctx.db, state=find_state, index=find_idx, match=match)
+	series_list = db.indexed_series(ctx.db, state=find_state, index=find_idx, match=match, sort_key=sort_key)
+
 
 	print(f'Listing ', end='')
 	if only_started: print(f'{_u}started{_0} ', end='')
@@ -1238,8 +1264,23 @@ known_commands:dict[str,dict[str,tuple|Callable|str]] = {
 }
 
 
-def _set_debug(value):
+def _set_debug(value:str, key:str, options:dict) -> bool:
 	config.set('debug', bool(value), store=Store.Memory)
+
+
+def _opt_list(sep:str, valid:list[str]) -> Callable[[str, str, dict], str|None]:
+	def _set(value:str, key:str, options:dict) -> bool:
+		values = options.get(key, [])
+		adding_values = value.split(sep)
+		if valid:
+			for v in adding_values:
+				if v not in valid:
+					return ', '.join(valid)
+		values.extend(adding_values)
+		options[key] = values
+
+	return _set
+
 
 def _valid_int(a:int, b:int) -> Callable[[int], bool]:
 	assert(a <= b)
@@ -1265,39 +1306,43 @@ __opt_max_hits = {
 	}
 }
 
+_opt_sort_names = _opt_list(',', ['title', 'year', 'earliest'])  # TODO: e.g. "earliest"
+
 command_options = {
 	None: { # i.e. global options
 		'debug':           { 'name': '--debug', 'help': 'Enable debug mode', 'func': _set_debug, 'hidden': True },
 	},
 	'show': {
-		'all':               { 'name': ('-a', '--all'),         'help': 'List also archived series' },
-		'archived':          { 'name': ('-A', '--archived'),    'help': 'List only archived series' },
-		'started':           { 'name': ('-s', '--started'),     'help': 'List only series with seen episodes' },
-		'planned':           { 'name': ('-p', '--planned'),     'help': 'List only series without seen episodes' },
-		'abandoned':         { 'name': '--abandoned',           'help': 'List only abandoned series' },
+		'all':               { 'name': ('-a', '--all'),          'help': 'List also archived series' },
+		'archived':          { 'name': ('-A', '--archived'),     'help': 'List only archived series' },
+		'started':           { 'name': ('-s', '--started'),      'help': 'List only series with seen episodes' },
+		'planned':           { 'name': ('-p', '--planned'),      'help': 'List only series without seen episodes' },
+		'abandoned':         { 'name': '--abandoned',            'help': 'List only abandoned series' },
 
-		'all-episodes':      { 'name': ('-e', '--episodes'),    'help': 'Show all unseen (released) episodes' },
-		'future-episodes':   { 'name': ('-f', '--future'),      'help': 'Also show future episodes' },
-		'seen-episodes':     { 'name': ('-S', '--seen'),        'help': 'Show seen episodes' },
-		'with-unseen':       { 'name': ('-u', '--unseen'),      'help': 'List only series with unseen episodes' },
-		'next-episode':      { 'name': ('-N', '--next'),        'help': 'Show only next episode, no summary' },
+		'all-episodes':      { 'name': ('-e', '--episodes'),     'help': 'Show all unseen (released) episodes' },
+		'future-episodes':   { 'name': ('-f', '--future'),       'help': 'Also show future episodes' },
+		'seen-episodes':     { 'name': ('-S', '--seen'),         'help': 'Show seen episodes' },
+		'with-unseen':       { 'name': ('-u', '--unseen'),       'help': 'List only series with unseen episodes' },
+		'next-episode':      { 'name': ('-N', '--next'),         'help': 'Show only next episode, no summary' },
 
-		'details':           { 'name': ('-I', '--details'),     'help': 'Show more details' },
+		'details':           { 'name': ('-I', '--details'),      'help': 'Show more details' },
 
 		'director':          { 'name': '--director', 'arg': str, 'help': 'Filter by director, substring match' },
-		'writer':            { 'name': '--writer',  'arg': str, 'help': 'Filter by writer, substring match' },
-		'cast':              { 'name': '--cast',    'arg': str, 'help': 'Filter by cast, substring match' },
-		'year':              { 'name': '--year',    'arg': str, 'help': 'Filter by year, <start>[-<end>]' },
-		'country':           { 'name': '--country', 'arg': str, 'help': 'Filter by country (two letters; ISO 3166)' },
+		'writer':            { 'name': '--writer',  'arg': str,  'help': 'Filter by writer, substring match' },
+		'cast':              { 'name': '--cast',    'arg': str,  'help': 'Filter by cast, substring match' },
+		'year':              { 'name': '--year',    'arg': str,  'help': 'Filter by year, <start>[-<end>]' },
+		'country':           { 'name': '--country', 'arg': str,  'help': 'Filter by country (two letters; ISO 3166)' },
+		'sorting':           { 'name': '--sort',  'arg': str,    'help': 'Sort series', 'func': _opt_sort_names},
 	},
 	'unseen': {
-		'started':           { 'name': ('-s', '--started'),       'help': 'List only series with seen episodes' },
-		'planned':           { 'name': ('-p', '--planned'),       'help': 'List only series without seen episodes' },
-		'all-episodes':      { 'name': ('-e', '--episodes'),      'help': 'Show all unseen episodes (not only first)' },
-		'future-episodes':   { 'name': ('-f', '--future'),        'help': 'Also shows (series with) future episodes' },
+		'started':           { 'name': ('-s', '--started'),      'help': 'List only series with seen episodes' },
+		'planned':           { 'name': ('-p', '--planned'),      'help': 'List only series without seen episodes' },
+		'all-episodes':      { 'name': ('-e', '--episodes'),     'help': 'Show all unseen episodes (not only first)' },
+		'future-episodes':   { 'name': ('-f', '--future'),       'help': 'Also shows (series with) future episodes' },
+		'sorting':           { 'name': '--sort',  'arg': str,    'help': 'Sort series', 'func': _opt_sort_names},
 	},
 	'refresh': {
-		'force':             { 'name': ('-f', '--force'),         'help': 'Refresh whether needed or not' },
+		'force':             { 'name': ('-f', '--force'),        'help': 'Refresh whether needed or not' },
 	},
 	'add': {
 		**__opt_max_hits,
