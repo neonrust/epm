@@ -329,7 +329,7 @@ def _sortkey_title_and_year(sid_series:tuple[str,dict]) -> tuple[str,list[int]]:
 	series_id, series = sid_series
 	return series['title'].casefold(), series.get('year', [])
 
-def indexed_series(db:dict, index=None, match=None, state: State | None=None) -> list[tuple[int, str]]:
+def indexed_series(db:dict, index=None, match=None, state:State|None=None, sort_key:Callable|None=None) -> list[tuple[int, str]]:
 	"""Return a list with a predictable sorting, optionally filtered."""
 
 	def flt(series_id:str, series:dict) -> bool:
@@ -345,7 +345,9 @@ def indexed_series(db:dict, index=None, match=None, state: State | None=None) ->
 	def index_and_series(series_id:str, series:dict) -> tuple[int, dict]:
 		return meta_get(series, meta_list_index_key), series_id
 
-	return list(filter_map(db, sort_key=_sortkey_title_and_year, filter=flt, map=index_and_series))
+	sort_key = sort_key or _sortkey_title_and_year()
+
+	return list(filter_map(db, filter=flt, map=index_and_series, sort_key=sort_key))
 
 
 def find_single_series(db:dict, idx_or_id:str) -> tuple[int|None, str|None, str|None]:
