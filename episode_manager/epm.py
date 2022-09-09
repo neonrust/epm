@@ -1563,7 +1563,7 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False) 
 	def mk_prog(total):
 		return progress.new(total, width=width - 2, bg_color=rgb('#404040'), bar_color=rgb('#686868'), text_color=rgb('#cccccc'))
 
-	latest_update_time = now_stamp()
+	latest_update_time = None
 
 	if not force:
 		# check with TMDb if there actually are any updates
@@ -1600,6 +1600,8 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False) 
 							if chtime < latest_update_time:
 								latest_update_time = chtime
 
+
+
 		if not to_refresh:
 			# print('No updates')
 			# sys.exit(42)
@@ -1607,6 +1609,12 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False) 
 				return touched, 0  # only series affected, no episodes
 
 			return 0, 0
+
+	if latest_update_time is None:
+		latest_update_time = now_stamp()
+	elif config.get_bool('debug'):
+		print('extracted latest update time:', latest_update_time)
+
 
 	# print('with changes:', len(to_refresh), '|', ' '.join(to_refresh))
 	# sys.exit(42)
