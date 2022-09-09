@@ -1186,7 +1186,7 @@ known_commands:dict[str,dict[str,tuple|Callable|str]] = {
 	    'help': 'Show/list series with optional details.',
     },
 	'calendar': {
-		'alias': (),
+		'alias': ('c',),
 		'handler': cmd_calendar,
 		'help': 'Show episode releases by date.',
 	},
