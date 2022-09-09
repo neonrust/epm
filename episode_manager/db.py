@@ -391,6 +391,33 @@ def find_single_series(db:dict, idx_or_id:str) -> tuple[int|None, str|None, str|
 	return nothing_found
 
 
+def next_unseen_episode(series:dict) -> dict|None:
+	episodes = series.get('episodes', [])
+	if not episodes:
+		return None
+
+	seen = meta_get(series, meta_seen_key, {})
+	last_seen = (0, 0)
+	for seen_key in seen.keys():
+		season, episode = [int(n) for n in seen_key.split(':')]
+		if season > last_seen[0] or episode > last_seen[1]:
+			last_seen = (season, episode)
+
+	if last_seen == (0, 0):
+		return episodes[0]
+
+	for ep in episodes:
+		season = ep['season']
+		episode = ep['episode']
+		# next episode in same season or first in next season
+		if season == last_seen[0] and episode == last_seen[1] + 1 \
+			or\
+			season == last_seen[0] + 1 and episode == 1:
+			return ep
+
+	return {}
+
+
 def all_ids(db:dict) -> list[str]:
 	return list(
 		key
