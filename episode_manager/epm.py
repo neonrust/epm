@@ -221,6 +221,19 @@ class Error(str):
 ###############################################################################
 ###############################################################################
 
+def cmd_info(ctx:Context, width:int) -> Error|None:
+	ctx.command_options['details'] = True
+	if not ctx.command_arguments:
+		return 'Specify which series to show.'
+
+	return cmd_show(ctx, width)
+
+def _info_help() -> None:
+	print_cmd_usage('info', '<series>')
+	print(f'    {_o}# / <IMDb ID>       {_0} Series to show')
+
+setattr(cmd_info, 'help', _info_help)
+
 
 def cmd_unseen(ctx:Context, width:int) -> Error|None:
 	ctx.command_options['with-unseen'] = True
@@ -1176,6 +1189,11 @@ known_commands:dict[str,dict[str,tuple|Callable|str]] = {
 		'alias': (),
 		'handler': cmd_calendar,
 		'help': 'Show episode releases by date.',
+	},
+	'info': {
+		'alias': ('i',),
+		'handler': cmd_info,
+		'help': 'Show details series information.'
 	},
 	'unseen': {
 		'alias': ('u', 'us'),
