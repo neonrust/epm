@@ -384,7 +384,7 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 	return None
 
 def _show_help() -> None:
-	print_cmd_usage('show', '<options> [<title search>...]')
+	print_cmd_usage('show', '<options> [<title search> | IMDb ID]')
 	print(f'    {_o}[<title search>]     {_0} Show only matching series')
 
 setattr(cmd_show, 'help', _show_help)
@@ -1410,14 +1410,19 @@ def find_idx_or_match(args, country:re.Pattern|None=None, director:re.Pattern|No
 		if not args:
 			raise ValueError()
 
-		find_id = int(args[0])
+		find_idx = int(args[0])
 		# we're looking tor aa single entry, by ID: other arguments are irrelevant
-		return find_id, None
+		return find_idx, None
 
 	except ValueError:
 		title = None
+		imdb_id = None
+
 		if args:
-			title = re.compile('.*?'.join(re.escape(a) for a in ' '.join(args).split()), re.IGNORECASE)
+			if len(args) == 1 and re.search('^tt[0-9]{7,}$', args[0]):
+				imdb_id = args[0]
+			else:
+				title = re.compile('.*?'.join(re.escape(a) for a in ' '.join(args).split()), re.IGNORECASE)
 
 		# print('FILTER     title:', (_c + title.pattern + _0fg) if title else 'NONE')
 		# print('         country:', (_c + country.pattern + _0fg) if country else 'NONE')
@@ -1432,6 +1437,8 @@ def find_idx_or_match(args, country:re.Pattern|None=None, director:re.Pattern|No
 			ok = True
 			if title:
 				ok = title.search(series['title']) is not None
+			if imdb_id:
+				ok = imdb_id == series.get('imdb_id')
 			if ok and country:
 				ok = country.search(series.get('country', '')) is not None
 			if ok and director:
