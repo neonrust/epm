@@ -463,25 +463,25 @@ def should_update(series:dict) -> bool:
 		return False
 
 	last_check = datetime.fromisoformat(last_check)
+	simple_age_cap = 4*DAY
 
 	update_history = meta_get(series, meta_update_history_key)
-	if update_history and len(update_history) >= 2:
-		# interval between the last two updates
-		updateA = datetime.fromisoformat(update_history[-2])
-		updateB = datetime.fromisoformat(update_history[-1])
-		age = int((updateB - updateA).total_seconds())
+	if update_history:
+		# time between the last (actual) update and the last time it was checked
+		last_update = datetime.fromisoformat(update_history[-1])
+		age = int((last_check - last_update).total_seconds())
 		age = cap(age, None, 2*WEEK)
 		if debug: print(f'  \x1b[35;1mhistory\x1b[m:', end='')
 
 	else:
 		age = int((now_datetime() - last_check).total_seconds())
 		if debug: print(f'  \x1b[36;1mlast\x1b[m:', end='')
+		age = cap(age, None, simple_age_cap)
 
-	age = cap(age, None, 4*DAY)
 	if debug: print(f'{age/DAY:.1f} days', end='')
 
-	if age < 4*DAY:
-		if debug: print(f' < 4 days \x1b[31;1mFalse\x1b[m')
+	if age < simple_age_cap:
+		if debug: print(f' < {simple_age_cap//DAY} \x1b[31;1mFalse\x1b[m')
 		return False
 
 
