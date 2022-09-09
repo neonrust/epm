@@ -1,10 +1,12 @@
 import enum
 import os
 import sys
-from os.path import basename, join as pjoin
+from os.path import basename, dirname, join as pjoin, exists as pexists
+import shutil
 from typing import Any
 
 from .utils import read_json, write_json, print_json, warning_prefix, pexpand
+from .styles import _0, _00, _0B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _L, _S, _u, _EOL
 
 
 default_max_refresh_age = 2  # days
@@ -12,8 +14,8 @@ default_max_hits = 10
 
 user_config_home = os.getenv('XDG_CONFIG_HOME') or pexpand(pjoin('$HOME', '.config'))
 
-app_config_file = ''  # set in init()
-PRG = '' # set in init()
+app_config_file = ''  # set in _init()
+PRG = ''              # set in _init()
 
 ValueType = str|int|float|list[Any]|dict[str, Any]  # "Any" b/c mypy doesn't support recursive type hints
 
@@ -54,13 +56,21 @@ def load() -> bool:
 
 	_app_config.clear()
 
+	if not pexists(app_config_file):
+		old_config_file = app_config_file.replace('/episode_manager/', '/epm/')
+		if pexists(old_config_file):
+			os.makedirs(dirname(app_config_file), exist_ok=True)
+			shutil.copy(old_config_file, app_config_file)
+			print(f'{_f}[config: imported from old location: {old_config_file}]')
+
+
 	config = read_json(app_config_file)
 	if config:
 		_app_config.update(config)
 
 	db_file = get('paths/series-db')
 	if not db_file or not isinstance(db_file, str):
-		db_file = pjoin(user_config_home, PRG, 'series')
+		db_file = pjoin(user_config_home, 'episode_manager', 'series')
 		set('paths/series-db', db_file, store=Store.Memory)
 
 	paths = _app_config.get('paths', {})
@@ -89,6 +99,7 @@ def save() -> bool:
 
 	_app_config_dirty = False
 	return True
+
 
 def forget_all(store:Store):
 	"""Clear specified config store."""
@@ -204,7 +215,7 @@ def _init():
 	global PRG
 	PRG = basename(sys.argv[0])
 	global app_config_file
-	app_config_file = pjoin(user_config_home, PRG, 'config')
+	app_config_file = pjoin(user_config_home, 'episode_manager', 'config')
 
 _init()
 
