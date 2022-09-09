@@ -46,21 +46,7 @@ def load(file_path:str|None=None) -> dict:
 	if modified:
 		save(db)
 
-	# test_eligible_update(db)
-
 	return db
-
-
-def test_eligible_update(db):
-	count = 0
-	for sid in all_ids(db):
-		series = db[sid]
-		if series_state(series) & State.ARCHIVED == 0:
-			if should_update(series):
-				count += 1
-
-	print('total stale:', count)
-	sys.exit(42)
 
 
 def _migrate(db:dict) -> bool:
