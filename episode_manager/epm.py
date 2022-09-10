@@ -18,7 +18,7 @@ from .config import  Store
 from .utils import term_size, warning_prefix, plural, clrline, now_datetime, now_stamp
 from .db import State, meta_get, meta_set, meta_has, meta_del, meta_copy, meta_seen_key, meta_archived_key, \
 	meta_added_key, meta_update_check_key, meta_update_history_key, meta_list_index_key, meta_next_list_index_key, \
-	series_state, should_update, series_seen_unseen_eps, episode_key, next_unseen_episode
+	series_state, should_update, series_seen_unseen_eps, episode_key, next_unseen_episode, last_seen_episode
 from .styles import _0, _00, _0B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _u, _EOL
 
 import sys
@@ -315,11 +315,18 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 				if not next_ep:
 					return '\xff'
 				return next_ep.get('date') or ''
+			elif key == 'latest':
+				last_ep, marked = last_seen_episode(series)
+				if not last_ep:
+					return '\xff'
+				return marked
+			elif key == 'added':
+				return meta_get(series, meta_added_key)
 			else:
 				# should never happen, since the values are verified by _opt_sort_names
 				return ''
 
-		def _sort_key(item:dict) -> Any:
+		def _sort_key(item:tuple[str,dict]) -> Any:
 			index, series = item
 			return tuple(
 				_series_key(series, ord) for ord in sorting
@@ -1306,7 +1313,16 @@ __opt_max_hits = {
 	}
 }
 
-_opt_sort_names = _opt_list(',', ['title', 'year', 'earliest'])  # TODO: e.g. "earliest"
+_opt_sort_names = _opt_list(',', ['title', 'year', 'earliest', 'latest', 'added'])  # TODO: e.g. "earliest"
+
+__opt_series_sorting = {
+	'sorting': {
+		'name': '--sort',
+		'arg': str,
+		'help': 'Sort series',
+		'func': _opt_sort_names
+	},
+}
 
 command_options = {
 	None: { # i.e. global options
@@ -1318,6 +1334,7 @@ command_options = {
 		'started':           { 'name': ('-s', '--started'),      'help': 'List only series with seen episodes' },
 		'planned':           { 'name': ('-p', '--planned'),      'help': 'List only series without seen episodes' },
 		'abandoned':         { 'name': '--abandoned',            'help': 'List only abandoned series' },
+		**__opt_series_sorting,
 
 		'all-episodes':      { 'name': ('-e', '--episodes'),     'help': 'Show all unseen (released) episodes' },
 		'future-episodes':   { 'name': ('-f', '--future'),       'help': 'Also show future episodes' },
@@ -1332,14 +1349,13 @@ command_options = {
 		'cast':              { 'name': '--cast',    'arg': str,  'help': 'Filter by cast, substring match' },
 		'year':              { 'name': '--year',    'arg': str,  'help': 'Filter by year, <start>[-<end>]' },
 		'country':           { 'name': '--country', 'arg': str,  'help': 'Filter by country (two letters; ISO 3166)' },
-		'sorting':           { 'name': '--sort',  'arg': str,    'help': 'Sort series', 'func': _opt_sort_names},
 	},
 	'unseen': {
 		'started':           { 'name': ('-s', '--started'),      'help': 'List only series with seen episodes' },
 		'planned':           { 'name': ('-p', '--planned'),      'help': 'List only series without seen episodes' },
 		'all-episodes':      { 'name': ('-e', '--episodes'),     'help': 'Show all unseen episodes (not only first)' },
 		'future-episodes':   { 'name': ('-f', '--future'),       'help': 'Also shows (series with) future episodes' },
-		'sorting':           { 'name': '--sort',  'arg': str,    'help': 'Sort series', 'func': _opt_sort_names},
+		**__opt_series_sorting,
 	},
 	'refresh': {
 		'force':             { 'name': ('-f', '--force'),        'help': 'Refresh whether needed or not' },

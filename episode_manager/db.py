@@ -325,7 +325,7 @@ def filter_map(db:dict, sort_key:Callable[[str, dict],Any]|None=None, filter:Cal
 	)
 
 
-def _sortkey_title_and_year(sid_series:tuple[str,dict]) -> tuple[str,list[int]]:
+def _sortkey_title_and_year(sid_series:tuple[str,dict]) -> Any:
 	series_id, series = sid_series
 	return series['title'].casefold(), series.get('year', [])
 
@@ -345,7 +345,7 @@ def indexed_series(db:dict, index=None, match=None, state:State|None=None, sort_
 	def index_and_series(series_id:str, series:dict) -> tuple[int, dict]:
 		return meta_get(series, meta_list_index_key), series_id
 
-	sort_key = sort_key or _sortkey_title_and_year()
+	sort_key = sort_key or _sortkey_title_and_year
 
 	return list(filter_map(db, filter=flt, map=index_and_series, sort_key=sort_key))
 
@@ -389,6 +389,33 @@ def find_single_series(db:dict, idx_or_id:str) -> tuple[int|None, str|None, str|
 		return *found[0], None
 
 	return nothing_found
+
+
+def last_seen_episode(series:dict) -> tuple[dict|None,str|None]:
+	episodes = series.get('episodes', [])
+	if not episodes:
+		return None, None
+
+	seen = meta_get(series, meta_seen_key, {})
+	last_seen = (0, 0)
+	seen_time = None
+	for seen_key in seen.keys():
+		season, episode = [int(n) for n in seen_key.split(':')]
+		if season > last_seen[0] or episode > last_seen[1]:
+			last_seen = (season, episode)
+			seen_time = seen[seen_key]
+
+	if last_seen == (0, 0):
+		return None, None
+
+	for ep in episodes:
+		season = ep['season']
+		episode = ep['episode']
+		# next episode in same season or first in next season
+		if season == last_seen[0] and episode == last_seen[1]:
+			return ep, seen_time
+
+	return None, None
 
 
 def next_unseen_episode(series:dict) -> dict|None:
