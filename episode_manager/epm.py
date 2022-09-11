@@ -1334,12 +1334,12 @@ command_options = {
 		'started':           { 'name': ('-s', '--started'),      'help': 'List only series with seen episodes' },
 		'planned':           { 'name': ('-p', '--planned'),      'help': 'List only series without seen episodes' },
 		'abandoned':         { 'name': '--abandoned',            'help': 'List only abandoned series' },
+		'with-unseen':       { 'name': ('-u', '--unseen'),       'help': 'List only series with unseen episodes' },
 		**__opt_series_sorting,
 
 		'all-episodes':      { 'name': ('-e', '--episodes'),     'help': 'Show all unseen (released) episodes' },
 		'future-episodes':   { 'name': ('-f', '--future'),       'help': 'Also show future episodes' },
 		'seen-episodes':     { 'name': ('-S', '--seen'),         'help': 'Show seen episodes' },
-		'with-unseen':       { 'name': ('-u', '--unseen'),       'help': 'List only series with unseen episodes' },
 		'next-episode':      { 'name': ('-N', '--next'),         'help': 'Show only next episode, no summary' },
 
 		'details':           { 'name': ('-I', '--details'),      'help': 'Show more details' },
