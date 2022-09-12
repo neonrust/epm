@@ -25,8 +25,8 @@ import sys
 
 PRG = basename(sys.argv[0])
 
-VERSION = '0.13'
-VERSION_DATE = '2022-09-09'
+VERSION = '0.14'
+VERSION_DATE = '2022-09-12'
 
 
 def start():
