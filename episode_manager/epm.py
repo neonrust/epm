@@ -1656,18 +1656,10 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False) 
 		rnd = a + offset
 		return rnd
 
-	now_time = now_stamp()
-
 	# set time of last check (regardless whether there actually were any updates)
 	touched = 0
 	for series_id in to_refresh:
-		prev_update = meta_get(db[series_id], meta_update_check_key)
-		if prev_update:
-			stamp = spread_stamp(datetime.fromisoformat(prev_update), now_datetime()).isoformat(' ', timespec='seconds')
-		else:
-			stamp = now_time
-
-		meta_set(db[series_id], meta_update_check_key, stamp)
+		meta_set(db[series_id], meta_update_check_key, now_stamp())
 		touched += 1
 
 	def mk_prog(total):
@@ -1696,11 +1688,12 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False) 
 
 		for series_id, changes in zip(list(to_refresh), changes):
 			series = db[series_id]
-			print(series_id, series['title'], 'changes:', changes)
+			if config.get_bool('debug'):
+				print(series_id, series['title'], 'changes:', changes)
+
 			if not changes:
 				to_refresh.remove(series_id)
 			else:
-				latest = now_datetime().date()
 				for chg in changes:
 					items = chg.get('items', [])
 					for item in items:
