@@ -17,8 +17,8 @@ class Context:
 			'debug': config.get_bool('debug'),
 		}
 		self.command:str|None = None
-		self.command_options:dict = {}
-		self.command_arguments:list = []
+		self.command_options:dict[str, Any] = {}
+		self.command_arguments:list[str] = []
 
 		self.default_command_options:dict = {}
 		self.default_command_arguments:list = []
@@ -132,7 +132,7 @@ class Context:
 
 		if apply_args:
 			# insert configured arguments
-			args = config.get('commands/%s/arguments' % self.command, [])
+			args = config.get_list('commands/%s/arguments' % self.command) or []
 			# arguments added here will be ignored if arguments were specified on the command-line
 			self.parse_args(args, default=True)
 

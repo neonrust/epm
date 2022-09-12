@@ -133,7 +133,7 @@ def get(path:str, default_value:ValueType|None=None, convert=None) -> ValueType|
 
 		# print('scope:', scope)
 		for n in range(len(scope)):
-			scope[n] = scope[n].get(key)
+			scope[n] = scope[n].get(key)  # type: ignore  # non-dicts already discarded above
 		# remove scopes where the branch doesn't exist
 		scope = [sc for sc in scope if sc is not None]
 		if not scope:
@@ -142,15 +142,15 @@ def get(path:str, default_value:ValueType|None=None, convert=None) -> ValueType|
 		current.append(key)
 
 	if not scope:
-		scope = default_value
+		value = default_value
 	else:
 		# use first value (higher prio)
-		scope = scope[0]
+		value = scope[0]
 
 	if convert is not None:
-		scope = convert(scope)
+		value = convert(value)
 
-	return scope
+	return value
 
 
 def get_int(path:str, default_value:int=0) -> int:
@@ -167,6 +167,14 @@ def get_bool(path:str, default_value:bool=False) -> bool:
 	return default_value
 
 
+def get_list(path:str, default_value:list|None=None) -> list|None:
+	v = get(path, default_value)
+	if isinstance(v, list):
+		return v
+	return default_value
+
+
+
 def set(path:str, value:Any, store:Store|None=Store.Persistent) -> None:
 	# path: key/key/key
 	keys = path.split('/')
@@ -174,9 +182,11 @@ def set(path:str, value:Any, store:Store|None=Store.Persistent) -> None:
 		raise RuntimeError('Empty key path')
 
 	store = store or Store.Memory
-	config:dict = _config_stores.get(store)
-	if store and config is None:
-		raise RuntimeError('invalid config store "%s" (one of %s)' % (store, ', '.join(_config_stores.keys())))
+	maybe_store = _config_stores.get(store)
+	if store not in _config_stores or maybe_store is None:
+		raise RuntimeError('invalid config store "%s"' % store)
+
+	config:dict[str, ValueType] = maybe_store
 	if not isinstance(config, dict): # to shut mypy up
 		return None
 
@@ -190,26 +200,27 @@ def set(path:str, value:Any, store:Store|None=Store.Persistent) -> None:
 			scope[key] = value
 			break
 
-		new_scope:dict = scope.get(key)
-		if new_scope is None:  # missing key (object container)
-			new_scope = {}
-			scope[key] = new_scope
+		sub_scope = scope.get(key)
+		if sub_scope is None:  # missing key (object container)
+			sub_scope = {}
+			scope[key] = sub_scope
 
-		if not isinstance(new_scope, dict): # exists, but is not an object
+		if not isinstance(sub_scope, dict): # exists, but is not an object
 			raise RuntimeError('Invalid path "%s"; not object at "%s", got %s (%s)' % (
 				path,
 				'/'.join(current),
 				scope,
-				type(new_scope).__name__,
+				type(sub_scope).__name__,
 			))
 
-		scope = new_scope
+		scope = sub_scope
 		current.append(key)
 
 
 	if store == Store.Persistent:
 		global _app_config_dirty
 		_app_config_dirty = True
+
 
 def _init():
 	global PRG

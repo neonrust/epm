@@ -308,15 +308,13 @@ def filter_map(db:dict, sort_key:Callable[[str, dict],Any]|None=None, filter:Cal
 			return series_id, series
 		map = identity
 
-	db_iter = (
+	db_iter:Generator|list = (
 		(series_id, series)
 		for series_id, series in db.items()
 		if series_id != meta_key
 	)
 	if sort_key:
-		# def sorter(sid_series:tuple[str, dict]):
-		# 	return sort_key(sid_series[1])
-		db_iter = sorted(db_iter, key=sort_key)
+		db_iter = sorted(db_iter, key=sort_key)  # type: ignore # 'key' expects more generic type than we use
 
 	return (
 		map(series_id, series)
@@ -342,7 +340,7 @@ def indexed_series(db:dict, index=None, match=None, state:State|None=None, sort_
 			passed = (series_state(series) & state) > 0
 		return passed
 
-	def index_and_series(series_id:str, series:dict) -> tuple[int, dict]:
+	def index_and_series(series_id:str, series:dict) -> tuple[int, str]:
 		return meta_get(series, meta_list_index_key), series_id
 
 	sort_key = sort_key or _sortkey_title_and_year
@@ -391,7 +389,7 @@ def find_single_series(db:dict, idx_or_id:str) -> tuple[int|None, str|None, str|
 	return nothing_found
 
 
-def last_seen_episode(series:dict) -> tuple[dict|None,str|None]:
+def last_seen_episode(series:dict) -> tuple[dict|None, str|None]:
 	episodes = series.get('episodes', [])
 	if not episodes:
 		return None, None

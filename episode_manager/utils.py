@@ -187,9 +187,9 @@ def clrline():
 
 T = TypeVar('T')
 def cap(v:T, lower:T|None, upper:T|None) -> T:
-	if lower is not None and v < lower:
+	if lower is not None and v < lower:  # type: ignore
 		return lower
-	elif upper is not None and v > upper:
+	elif upper is not None and v > upper:  # type: ignore
 		return upper
 	return v
 

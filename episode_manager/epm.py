@@ -64,7 +64,7 @@ def resolve_cmd(name:str, fail_ok=False) -> str|None:
 	matching = []
 
 	for primary in known_commands:
-		cmd_def:dict[str,dict] = known_commands[primary]
+		cmd_def = known_commands[primary]
 		aliases = cmd_def.get('alias')
 		names:list[str] = [primary] + list(aliases if isinstance(aliases, tuple) else ())
 
@@ -226,7 +226,7 @@ class Error(str):
 def cmd_info(ctx:Context, width:int) -> Error|None:
 	ctx.command_options['details'] = True
 	if not ctx.command_arguments:
-		return 'Specify which series to show.'
+		return Error('Specify which series to show.')
 
 	return cmd_show(ctx, width)
 
@@ -268,7 +268,24 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 	if [only_started, only_planned, only_archived, only_abandoned].count(True) > 1:
 		return Error('Specify only one of "started", "planned", "archived" and "abandoned"')
 
-	find_state = State.ACTIVE
+	if ctx.debug:
+		def _bool_color(b:bool) -> str:
+			if b:
+				return f'{_g}True{_0}'
+			return f'\x1b[31;1mFalse{_0}'
+		print('  list_all:       ', _bool_color(list_all))
+		print('  only_archived:  ', _bool_color(only_archived))
+		print('  only_started:   ', _bool_color(only_started))
+		print('  only_planned:   ', _bool_color(only_planned))
+		print('  only_abandoned: ', _bool_color(only_abandoned))
+		print('  with_unseen_eps:', _bool_color(with_unseen_eps))
+		print('  all_unseen_eps: ', _bool_color(all_unseen_eps))
+		print('  future_eps:     ', _bool_color(future_eps))
+		print('  seen_eps:       ', _bool_color(seen_eps))
+		print('  show_next:      ', _bool_color(show_next))
+		print('  show_details:   ', _bool_color(show_details))
+
+	find_state:State|None = State.ACTIVE
 	if list_all:
 		find_state = None
 	elif only_started:
@@ -301,9 +318,9 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 		try:
 			filter_year = [int(y) for y in filter_year.split('-')]
 		except:
-			return 'Bad year filter: %s (use: <start year>[-<end year>])' % filter_year
+			return Error('Bad year filter: %s (use: <start year>[-<end year>])' % filter_year)
 
-	sort_key:Callable[[dict],Any]|None = None
+	sort_key:Callable[[tuple[str,dict]],Any]|None = None
 
 	sorting = ctx.command_options.get('sorting', [])
 	if sorting:
@@ -317,7 +334,7 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 				return next_ep.get('date') or ''
 			elif key == 'latest':
 				last_ep, marked = last_seen_episode(series)
-				if not last_ep:
+				if not last_ep or marked is None:
 					return '\xff'
 				return marked
 			elif key == 'added':
@@ -345,11 +362,11 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 	else: print(f'{_u}non-archived{_0} ', end='')
 	print('series', end='')
 	if with_unseen_eps: print(f' with {_u}unseen{_0} episodes', end='')
-	if match: print(', matching: %s' % match.styled_description, end='')
+	if match: print(', matching: %s' % getattr(match, 'styled_description'), end='')
 	print(f'{_0}.')
 
 	if not series_list:
-		return no_series(ctx.db, filtering=match or filter_director or filter_writer or filter_cast or filter_year)
+		return no_series(ctx.db, filtered=bool(match or filter_director or filter_writer or filter_cast or filter_year))
 
 	num_shown = 0
 	num_archived = 0
@@ -359,6 +376,9 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 	ep_limit = None
 	if not all_unseen_eps:
 		ep_limit = 1
+
+	if ctx.debug:
+		print('  ep_limit:', ep_limit)
 
 	for index, series_id in series_list:
 		series = ctx.db[series_id]
@@ -450,7 +470,7 @@ def cmd_calendar(ctx:Context, width:int) -> Error|None:
 	# collect episodes over num_weeks*7
 	#   using margin of one extra week, because it's simpler
 	end_date = start_date + timedelta(days=(num_weeks + 1)*7)
-	for series_id in db.all_ids():
+	for series_id in db.all_ids(ctx.db):
 		series = ctx.db[series_id]
 
 		if meta_has(series, meta_archived_key):
@@ -863,7 +883,7 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 
 	index, series_id, err = db.find_single_series(ctx.db, find_id)
 	if series_id is None or err is not None:
-		return err
+		return Error(err)
 
 	series = ctx.db[series_id]
 
@@ -978,13 +998,13 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 		if len(seen_state) == len(series['episodes']): # all marked
 			print()
 			print(f'{_c}Last episode marked of an {series["status"]} series:{_0} {format_state_change(state_before, State.ARCHIVED)}')
-			ctx.command_arguments = [index]
+			ctx.command_arguments = [str(index)]
 			return cmd_archive(ctx, width, print_state_change=False)
 
 	elif not marking and is_archived:
 		print()
 		print(f'{_c}Unmarked episode of archived series:{_0} {format_state_change(state_before, State.STARTED)}')
-		ctx.command_arguments = [index]
+		ctx.command_arguments = [str(index)]
 		return cmd_restore(ctx, width, print_state_change=False)
 
 	ctx.save()
@@ -1005,7 +1025,8 @@ setattr(cmd_mark, 'help', _mark_help)
 
 
 def cmd_unmark(*args, **kwargs) -> Error|None:
-	return cmd_mark(*args, **kwargs, marking=False)
+	kwargs['marking'] = False
+	return cmd_mark(*args, **kwargs)
 
 def _unmark_help() -> None:
 	print_cmd_usage('unmark', '# / <IMDb ID> [<season / episode specifier>]')
@@ -1093,7 +1114,7 @@ def cmd_refresh(ctx:Context, width:int) -> Error|None:
 	series_list = db.indexed_series(ctx.db, state=State.ACTIVE, index=find_idx, match=match)
 
 	if not series_list:
-		return Error('Nothing matched: %s' % (match.pattern if match else find_idx))
+		return Error('Nothing matched: %s' % (getattr(match, 'pattern') if match else find_idx))
 
 	subset = [series_id for index, series_id in series_list]
 
@@ -1124,7 +1145,7 @@ def cmd_config(ctx:Context, width:int) -> Error|None:
 
 	if not ctx.command_options and not ctx.command_arguments:
 		config.print_current()
-		return
+		return None
 
 	command:str|None = None
 	if ctx.command_arguments:
@@ -1149,7 +1170,7 @@ def cmd_config(ctx:Context, width:int) -> Error|None:
 	default_cmd = ctx.command_options.get('default-command')
 	if default_cmd is not None:
 		if command:
-			return (f'{warning_prefix(ctx.command)} bad option "default command" for "{command}".')
+			return Error(f'{warning_prefix(ctx.command)} bad option "default command" for "{command}".')
 
 		config.set('commands/default', default_cmd)
 		print(f'Default command set: {_c}{default_cmd}{_0}')
@@ -1160,8 +1181,8 @@ def cmd_config(ctx:Context, width:int) -> Error|None:
 			return Error(f'{warning_prefix(ctx.command)} bad option "default args" for "{command}".')
 		defctx = Context(eat_option, resolve_cmd)
 		cmd = config.get('commands/default')
-		defctx.set_command(cmd, apply_args=False)
-		args_list:list[str] = shlex.split(default_args)
+		defctx.set_command(cmd, apply_args=False)  # type: ignore  # convince mypy 'cmd' is the correct type?
+		args_list = shlex.split(default_args)
 		# validate arguments
 		defctx.parse_args([*args_list])
 		# if we got here, the arguments are ok
@@ -1176,7 +1197,7 @@ def cmd_config(ctx:Context, width:int) -> Error|None:
 		config.set('lookup/api-key', api_key)
 		print(f'API key set.')
 
-
+	return None
 
 
 setattr(cmd_config, 'load_db', False)
@@ -1189,6 +1210,7 @@ setattr(cmd_config, 'help', _config_help)
 
 def cmd_help(*args, **kw) -> Error|None:
 	print_usage()
+	return None
 
 def _help_help() -> None:
 	print_cmd_usage('help')
@@ -1273,10 +1295,11 @@ known_commands:dict[str,dict[str,tuple|Callable|str]] = {
 
 def _set_debug(value:str, key:str, options:dict) -> bool:
 	config.set('debug', bool(value), store=Store.Memory)
+	return True
 
 
 def _opt_list(sep:str, valid:list[str]) -> Callable[[str, str, dict], str|None]:
-	def _set(value:str, key:str, options:dict) -> bool:
+	def _set(value:str, key:str, options:dict) -> str|None:
 		values = options.get(key, [])
 		adding_values = value.split(sep)
 		if valid:
@@ -1285,11 +1308,12 @@ def _opt_list(sep:str, valid:list[str]) -> Callable[[str, str, dict], str|None]:
 					return ', '.join(valid)
 		values.extend(adding_values)
 		options[key] = values
+		return None
 
 	return _set
 
 
-def _valid_int(a:int, b:int) -> Callable[[int], bool]:
+def _valid_int(a:int, b:int) -> Callable[[int], int|None]:
 	assert(a <= b)
 	def verify(v:int) -> int|None:
 		if v >= a and v <= b:
@@ -1355,7 +1379,7 @@ command_options = {
 		'planned':           { 'name': ('-p', '--planned'),      'help': 'List only series without seen episodes' },
 		'all-episodes':      { 'name': ('-e', '--episodes'),     'help': 'Show all unseen episodes (not only first)' },
 		'future-episodes':   { 'name': ('-f', '--future'),       'help': 'Also shows (series with) future episodes' },
-		**__opt_series_sorting,
+		**__opt_series_sorting,  # type: ignore  # not sure how to convince mypy here
 	},
 	'refresh': {
 		'force':             { 'name': ('-f', '--force'),        'help': 'Refresh whether needed or not' },
@@ -1385,8 +1409,8 @@ def is_released(target, fallback=True):
 	return date.fromisoformat(release_date) <= today_date
 
 
-def format_state_change(before:State, after:State):
-	return f'[\x1b[38;5;202m{before.name.lower()}{_0} ⯈ \x1b[38;5;112m{after.name.lower()}{_0}]'
+def format_state_change(before:State, after:State) -> str:
+	return f'[\x1b[38;5;202m{before.name.lower()}{_0} ⯈ \x1b[38;5;112m{after.name.lower()}{_0}]'  # type: ignore  # todo: enum
 
 
 def format_title(series, width:int|None=None):
@@ -1454,7 +1478,7 @@ def print_episodes(series:dict, episodes:list[dict], width:int, pre_print:Callab
 	return keys
 
 
-def find_idx_or_match(args, country:re.Pattern|None=None, director:re.Pattern|None=None, writer:re.Pattern|None=None, cast:re.Pattern|None=None, year:list[int]|None=None) -> tuple[int:None, Callable|None]:
+def find_idx_or_match(args, country:re.Pattern|None=None, director:re.Pattern|None=None, writer:re.Pattern|None=None, cast:re.Pattern|None=None, year:list[int]|None=None) -> tuple[int|None, Callable|None]:
 
 	# print('FILTER title/idx:', (_c + ' '.join(args) + _0fg) if args else 'NONE')
 	# print('          country:', (_c + country.pattern + _0fg) if country else 'NONE')
@@ -1586,12 +1610,12 @@ def episodes_by_key(series:dict, keys:list) -> list:
 	]
 
 
-def no_series(db:dict, filtering:bool=False) -> Error:
+def no_series(db:dict, filtered:bool=False) -> Error:
 
 	if len(db) <= 1:
 		return Error(f'No series added.  Use: {_b}%s add <title search...> [<year>]{_00}' % PRG)
 
-	precision = ' matched' if filtering else ''
+	precision = ' matched' if filtered else ''
 	return Error('No series%s.' % precision)
 
 
@@ -1649,7 +1673,7 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False) 
 	def mk_prog(total):
 		return progress.new(total, width=width - 2, bg_color=rgb('#404040'), bar_color=rgb('#686868'), text_color=rgb('#cccccc'))
 
-	latest_update_time = None
+	latest_update_time:datetime|None = None
 
 	if not force:
 		# check with TMDb if there actually are any updates
@@ -1697,15 +1721,16 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False) 
 			return 0, 0
 
 	if latest_update_time is None:
-		latest_update_time = now_stamp()
-	elif config.get_bool('debug'):
-		print('extracted latest update time:', latest_update_time)
+		latest_update_time_str = now_stamp()
+	else:
+		if config.get_bool('debug'):
+			print('extracted latest update time:', latest_update_time)
+		latest_update_time_str = latest_update_time.isoformat(' ')
 
 
 	# print('with changes:', len(to_refresh), '|', ' '.join(to_refresh))
 	# sys.exit(42)
 
-	latest_update_time = latest_update_time.isoformat(' ')
 
 	prog_bar = mk_prog(len(to_refresh))
 	clrline()
@@ -1730,7 +1755,7 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False) 
 
 		# keep a list of last N updates
 		update_history = meta_get(series, meta_update_history_key, [])
-		update_history.append(latest_update_time)
+		update_history.append(latest_update_time_str)
 		if len(update_history) > max_history:
 			update_history.pop(0)
 		meta_set(series, meta_update_history_key, update_history)
@@ -2100,7 +2125,7 @@ def option_def(command:str|None, option:str|None=None):
 def print_cmd_usage(command:str, syntax:str='') -> None:
 	summary = known_commands[command].get('help')
 	if summary:
-		print(_b + summary + _00)
+		print(f'{_b}{summary}{_00}')
 	print(f'Usage: %s {_c}%s{_00} %s' % (PRG, command, syntax))
 
 
@@ -2182,8 +2207,8 @@ def print_usage(exit_code:int=0) -> None:
 	print(f'  # = Series listing number, e.g. as listed by the {_b}l{_00}ist command.')
 	print(f'  If an argument does not match a command, it will be used as argument to the default command.')
 	print(f'  Shortest unique prefix of a command is enough, e.g. "ar"  for "archive".')
-	if db.json_serializer() != 'json':
-		print(f'  {_f}Using {_b}{db.json_serializer()}{_00}{_f} for faster load/save.')
+	if utils.json_serializer() != 'json':
+		print(f'  {_f}Using {_b}{utils.json_serializer()}{_00}{_f} for faster load/save.')
 	else:
 		print(f'  {_f}Install \'orjson\' for faster load/save{_00}')
 	if db.compressor():

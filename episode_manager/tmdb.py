@@ -382,11 +382,12 @@ def changes(series_id:str|list[str], after:datetime, include:list|tuple|None=Non
 	change_list = (data or {}).get('changes', [])
 
 	# if specified, only include requested entries
-	if change_list and include is not None:
+	if change_list and isinstance(include, (tuple, list)):
 		def accept_included(chg:dict) -> bool:
-			ok = chg.get('key') in include
-			if not ok:
-				print(series_id, '\x1b[2mignored change:', chg.get('key'), '\x1b[m')
+			ok = chg.get('key') in include  # type: ignore  # 'include' is a sequence
+			# if not ok:
+			# 	print(series_id, '\x1b[2mignored change:', chg.get('key'), '\x1b[m')
+			return ok
 
 		change_list = list(filter(accept_included, change_list))
 
@@ -552,5 +553,5 @@ def _self_test(args):
 
 
 if __name__ == '__main__':
-	set_api_key(key_from_env())
+	set_api_key(key_from_env() or '')
 	_self_test(sys.argv[1:])
