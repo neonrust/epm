@@ -864,6 +864,12 @@ def cmd_delete(ctx:Context, width:int) -> Error|None:
 	# delete it
 
 	del ctx.db[series_id]
+
+	# "roll back" next index, if we deleted the last series
+	next_index = meta_get(ctx.db, meta_next_list_index_key)
+	if index + 1 == next_index:
+		meta_set(ctx.db, meta_next_list_index_key, index)
+
 	ctx.save()
 
 	print(f'{_b}Series deleted:{_b}')

@@ -259,7 +259,6 @@ def details(title_id:str|list[str]|Iterable, type='series'):
 	])
 	_set_values(data, {
 		'year': lambda _: [int(data.get('date', [0]).split('-')[0])] if data.get('date') else None,
-		'id': lambda _: str(data['id']),
 		'country': lambda _: ', '.join(data.get('country')),
 		'genre': lambda _: ', '.join(map(lambda g: g.get('name'), data.get('genres'))),
 		'status': lambda _: _map_status(data.get('status')) if 'status' in data else None,
