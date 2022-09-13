@@ -270,6 +270,8 @@ def details(title_id:str|list[str]|Iterable, type='series'):
 	else:
 		del data['end_date']
 
+	_del_empty(data)
+
 	credits = promises[2].result() or {}
 	cast = credits.get('cast', [])
 	crew = credits.get('crew', [])
@@ -335,6 +337,7 @@ def episodes(series_id:str|list[str]|Iterable, with_details=False, progress:Call
 			'vote_average',
 			'vote_count',
 		])
+		_del_empty(data)
 
 		return data
 
