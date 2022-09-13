@@ -410,30 +410,30 @@ def _map_status(st):
 	return 'active'  # TODO: a better term?
 
 def _del_empty(data):
-	if type(data) is list:
+	if isinstance(data, list):
 		for item in data:
 			_del_empty(item)
 
-	elif type(data) is dict:
+	elif isinstance(data, dict):
 		for key, value in list(data.items()):
 			if not value:
 				del data[key]
 
 def _del_keys(data, keys):
-	if type(data) is list:
+	if isinstance(data, list):
 		for item in data:
 			_del_keys(item, keys)
 
-	elif type(data) is dict:
+	elif isinstance(data, dict):
 		for key in keys:
 			data.pop(key, 0)
 
 def _lower_case_keys(data):
-	if type(data) is list:
+	if isinstance(data, list):
 		for item in data:
 			_lower_case_keys(item)
 
-	elif type(data) is dict:
+	elif isinstance(data, dict):
 		for key, value in list(data.items()):
 			if type(key) is str:
 				keyL = key.lower()
@@ -444,22 +444,22 @@ def _lower_case_keys(data):
 _missing = object()
 
 def _rename_keys(data, renames):
-	if type(data) is list:
+	if isinstance(data, list):
 		for item in data:
 			_rename_keys(item, renames)
 
-	elif type(data) is dict:
+	elif isinstance(data, dict):
 		for old, new in renames.items():
 			value = data.pop(old, _missing)
 			if value is not _missing:
 				data[new] = value
 
 def _set_values(data, new_values):
-	if type(data) is list:
+	if isinstance(data, list):
 		for item in data:
 			_set_values(item, new_values)
 
-	elif type(data) is dict:
+	elif isinstance(data, dict):
 		for key, setter in new_values.items():
 			try:
 				value = setter(data)
