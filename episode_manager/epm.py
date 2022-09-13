@@ -658,7 +658,7 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> Error|None:
 
 
 	if selected is None:
-		return Error('Nothing selected, cancelled')
+		return Error('Nothing selected or cancelled')
 
 	# TODO: move actual "add" to a separate function
 
