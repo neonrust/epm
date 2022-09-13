@@ -394,7 +394,7 @@ def _del_empty(data):
 
 	elif isinstance(data, dict):
 		for key, value in list(data.items()):
-			if not value:
+			if value is None:
 				del data[key]
 
 def _del_keys(data, keys):
