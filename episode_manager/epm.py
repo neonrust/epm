@@ -688,7 +688,7 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> Error|None:
 	# need to loop to figure out its list index
 	imdb_id = ctx.db[series_id].get('imdb_id')
 	index = meta_get(ctx.db[series_id], meta_list_index_key)
-	print_series_title(index, new_series, imdb_id=imdb_id, width=width)
+	print_series_title(index, new_series, imdb_id=imdb_id, width=width, tail=f'  [{State.PLANNED.name.lower()}]')
 
 	return None
 
