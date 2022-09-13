@@ -165,22 +165,6 @@ def search(search:str, type:str='series', year:int|None=None, page:int=1):
 	return hits, total_results
 
 
-
-__imdb_id_to_tmdb:dict = {}
-
-def _get_tmdb_id(imdb_id):
-	data = _query(_qurl('find/%s' % imdb_id, {'external_source':'imdb_id'}))
-	if (data or {}).get('tv_results'):
-		raise RuntimeError('Unknown IMDb ID: %s' % imdb_id)
-
-	series = data.get('tv_results', [])
-	# "there can be only one"
-	title_id = series[0]['id']
-	__imdb_id_to_tmdb[imdb_id] = str(title_id)
-
-	return title_id
-
-
 __details:dict = {}
 _missing = object()
 
@@ -192,9 +176,6 @@ def details(title_id:str|list[str]|Iterable, type='series'):
 	if isinstance(title_id, Iterable) and not isinstance(title_id, str):
 		wrapped_args:list = list(map(lambda I: ( (I,), {} ) , title_id))
 		return _parallel_query(details, wrapped_args)
-
-	if title_id.startswith('tt'):
-		title_id = _get_tmdb_id(title_id)
 
 	data = __details.get(title_id, _missing)
 	if data is not _missing:
@@ -298,9 +279,6 @@ def episodes(series_id:str|list[str]|Iterable, with_details=False, progress:Call
 	if isinstance(series_id, Iterable) and not isinstance(series_id, str):
 		wrapped_args = map(lambda sid: ( (sid,), {'with_details': with_details} ), series_id)
 		return _parallel_query(episodes, wrapped_args, progress_callback=progress)
-
-	if series_id.startswith('tt'):
-		series_id = _get_tmdb_id(series_id)
 
 	# unfortunately we must synchronously get the details first
 	ser_details = details(series_id, type='series')
