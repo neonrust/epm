@@ -746,11 +746,14 @@ def menu_select(items:list[dict], width:int, item_print:Callable, force_selectio
 		last_info_lines = info_lines
 
 		# print "status bar"
-		print(f' \x1b[97;48;2;60;60;90m 🠕 and 🠗 keys to select', end='')
+		print(f' \x1b[97;48;2;60;60;90m ', end='')
+		if len(items) > 1:
+			print(f' 🠕 and 🠗 keys to select   ', end='')
+
 		if force_selection is None:
-			print(f'   [RET] to add   [ESC] to cancel', end='')
+			print(f'[RET] to add   [ESC] to cancel', end='')
 		else:
-			print(f'   [RET]/[ESC] to exit', end='')
+			print(f'[RET]/[ESC] to exit', end='')
 		print(f'{_K}{_00}', end='\r')
 
 	draw_menu()
