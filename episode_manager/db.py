@@ -103,7 +103,6 @@ def _migrate(db:dict) -> bool:
 			series.pop('id', None)
 
 		if db_version < 4:
-			path = []
 			def _del_empty(data):
 				nonlocal fixed_nulls
 				if isinstance(data, list):
@@ -118,7 +117,6 @@ def _migrate(db:dict) -> bool:
 						elif isinstance(value, (dict, list)):
 							_del_empty(value)
 
-			path.clear()
 			_del_empty(series)
 
 
