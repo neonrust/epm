@@ -1957,7 +1957,7 @@ def print_series_details(index:int, series:dict, width:int, gray:bool=False) -> 
 	print_archive_status(series)
 
 	overview = textwrap.wrap(series['overview'], width=width, initial_indent=' '*15)
-	print(f'    {_o}Overview:{_0} {_i}', end='')
+	print(f'    {_o}Overview:{_0}  {_i}{_c}', end='')
 	overview[0] = overview[0][15:]
 	print('\n'.join(overview))
 	print(_0, end='')
