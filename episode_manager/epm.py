@@ -1532,9 +1532,10 @@ def find_idx_or_match(args, country:re.Pattern|None=None, director:re.Pattern|No
 
 		def match(series):
 			ok = True
-			if title:
+
+			if ok and title:
 				ok = title.search(series['title']) is not None
-			if imdb_id:
+			if ok and imdb_id:
 				ok = imdb_id == series.get('imdb_id')
 			if ok and country:
 				ok = country.search(series.get('country', '')) is not None
