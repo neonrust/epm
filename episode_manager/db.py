@@ -579,7 +579,7 @@ def should_update(series:dict) -> bool:
 
 
 
-def series_seen_unseen_eps(series:dict, before: datetime | None=None) -> tuple[list, list]:
+def series_seen_unseen(series:dict, before: datetime | None=None) -> tuple[list, list]:
 	episodes = series.get('episodes', [])
 	seen = meta_get(series, meta_seen_key, {})
 

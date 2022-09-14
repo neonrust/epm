@@ -18,7 +18,7 @@ from .config import  Store
 from .utils import term_size, warning_prefix, plural, clrline, now_datetime, now_stamp
 from .db import State, meta_get, meta_set, meta_has, meta_del, meta_copy, meta_seen_key, meta_archived_key, \
 	meta_added_key, meta_update_check_key, meta_update_history_key, meta_list_index_key, meta_next_list_index_key, \
-	series_state, should_update, series_seen_unseen_eps, episode_key, next_unseen_episode, last_seen_episode
+	series_state, should_update, series_seen_unseen, episode_key, next_unseen_episode, last_seen_episode
 from .styles import _0, _00, _0B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _u, _EOL
 
 import sys
@@ -384,7 +384,7 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 		series = ctx.db[series_id]
 		is_archived = meta_has(series, meta_archived_key)
 
-		seen, unseen = series_seen_unseen_eps(series, from_date)
+		seen, unseen = series_seen_unseen(series, from_date)
 
 		if with_unseen_eps and not unseen:
 			continue
@@ -838,7 +838,7 @@ def cmd_delete(ctx:Context, width:int) -> Error|None:
 	print(f'{_b}Deleting series:{_00}')
 	print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width)
 
-	seen, unseen = series_seen_unseen_eps(series)
+	seen, unseen = series_seen_unseen(series)
 	partly_seen = seen and unseen
 
 	choices = ['yes']
@@ -1072,7 +1072,7 @@ def cmd_archive(ctx:Context, width:int, archiving:bool=True, print_state_change:
 			return Error('Not archived: %s' % format_title(series))
 
 	state_before = series_state(series)
-	seen, unseen = series_seen_unseen_eps(series)
+	seen, unseen = series_seen_unseen(series)
 	partly_seen = seen and unseen
 
 
@@ -1442,7 +1442,7 @@ def format_title(series, width:int|None=None):
 
 def print_episodes(series:dict, episodes:list[dict], width:int, pre_print:Callable|None=None, also_future:bool=False, limit:int|None=None) -> list[str]:
 
-	seen, unseen = series_seen_unseen_eps(series)
+	seen, unseen = series_seen_unseen(series)
 	seen_keys = {episode_key(ep) for ep in seen}
 
 	indent = 6  # nice and also space to print the season "grouping labels"
@@ -2002,7 +2002,7 @@ def print_series_details(index:int, series:dict, width:int, gray:bool=False) -> 
 def print_archive_status(series:dict) -> None:
 	if meta_has(series, meta_archived_key):
 		print(f'{_f}       Archived', end='')
-		seen, unseen = series_seen_unseen_eps(series)
+		seen, unseen = series_seen_unseen(series)
 		if seen and unseen:  # some has been seen, but not all
 			print(' / Abandoned', end='')
 		print('  ', meta_get(series, meta_archived_key).split()[0], end='')
@@ -2059,7 +2059,7 @@ def strip_ansi(s: str):
 def print_seen_status(series:dict, gray: bool=False, summary=True, next=True, last=True, width:int=0):
 	ind = '       '
 
-	seen, unseen = series_seen_unseen_eps(series)
+	seen, unseen = series_seen_unseen(series)
 	all_seen = seen and len(seen) == len(series.get('episodes', []))
 
 	s = ''
