@@ -13,7 +13,7 @@ from .styles import _0, _00, _0B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _L, _S, _
 
 from typing import Any, Callable, TypeVar, Generator
 
-DB_VERSION = 3
+DB_VERSION = 4
 
 def code_version() -> int:
 	return DB_VERSION
@@ -63,6 +63,7 @@ def _migrate(db:dict) -> bool:
 	fixed_legacy_meta = 0
 	fixed_archived = 0
 	fixed_update_history = 0
+	fixed_nulls = 0
 
 	for series_id in all_ids(db):
 		series = db[series_id]
@@ -101,6 +102,25 @@ def _migrate(db:dict) -> bool:
 
 			series.pop('id', None)
 
+		if db_version < 4:
+			path = []
+			def _del_empty(data):
+				nonlocal fixed_nulls
+				if isinstance(data, list):
+					for item in data:
+						_del_empty(item)
+
+				elif isinstance(data, dict):
+					for key, value in list(data.items()):
+						if value is None:
+							del data[key]
+							fixed_nulls += 1
+						elif isinstance(value, (dict, list)):
+							_del_empty(value)
+
+			path.clear()
+			_del_empty(series)
+
 
 	if db_version < 2:
 		# assign 'list_index' ordered by "added" time
@@ -132,6 +152,11 @@ def _migrate(db:dict) -> bool:
 	if fixed_update_history:
 		print(f'{_f}Fixed empty "{meta_update_history_key}" value of {fixed_update_history} series{_0}')
 		modified = True
+
+	if fixed_nulls:
+		print(f'{_f}Removed {fixed_nulls} null values{_0}')
+		modified = True
+
 
 	return modified
 
