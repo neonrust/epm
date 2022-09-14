@@ -592,10 +592,12 @@ def series_seen_unseen(series:dict, before: datetime | None=None) -> tuple[list,
 		else:
 			# only include episodes in 'unseen' that are already available
 			dt = ep.get('date')
-			if not dt:
-				continue
-			dt = datetime.fromisoformat(dt)
-			if before and dt > before:
+			if dt:
+				dt = datetime.fromisoformat(dt)
+				if before and dt > before:
+					continue
+
+			elif before is not None:  # we're filtering by date but episode has no date
 				continue
 
 			unseen_eps.append(ep)

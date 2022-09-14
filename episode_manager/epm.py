@@ -353,7 +353,6 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 	find_idx, match = find_idx_or_match(ctx.command_arguments, country=filter_country, director=filter_director, writer=filter_writer, cast=filter_cast, year=filter_year)
 	series_list = db.indexed_series(ctx.db, state=find_state, index=find_idx, match=match, sort_key=sort_key)
 
-
 	print(f'Listing ', end='')
 	if only_started: print(f'{_u}started{_0} ', end='')
 	elif only_planned: print(f'{_u}planned{_0} ', end='')
@@ -379,12 +378,15 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 
 	if ctx.debug:
 		print('  ep_limit:', ep_limit)
+		print('  episodes from date:', from_date)
 
 	for index, series_id in series_list:
 		series = ctx.db[series_id]
 		is_archived = meta_has(series, meta_archived_key)
 
 		seen, unseen = series_seen_unseen(series, from_date)
+		if ctx.debug:
+			print('seen:', len(seen), 'unseen:', len(unseen))
 
 		if with_unseen_eps and not unseen:
 			continue
@@ -1505,7 +1507,7 @@ def find_idx_or_match(args, country:re.Pattern|None=None, director:re.Pattern|No
 			raise ValueError()
 
 		find_idx = int(args[0])
-		# we're looking tor aa single entry, by ID: other arguments are irrelevant
+		# we're looking for a single entry, by index: other arguments are ignored
 		return find_idx, None
 
 	except ValueError:
@@ -1518,12 +1520,13 @@ def find_idx_or_match(args, country:re.Pattern|None=None, director:re.Pattern|No
 			else:
 				title = re.compile('.*?'.join(re.escape(a) for a in ' '.join(args).split()), re.IGNORECASE)
 
-		# print('FILTER     title:', (_c + title.pattern + _0fg) if title else 'NONE')
-		# print('         country:', (_c + country.pattern + _0fg) if country else 'NONE')
-		# print('        director:', (_c + director.pattern + _0fg) if director else 'NONE')
-		# print('          writer:', (_c + writer.pattern + _0fg) if writer else 'NONE')
-		# print('            cast:', (_c + cast.pattern + _0fg) if cast else 'NONE')
-		# print('            year:', (_c + '-'.join(year) + _0fg) if year else 'NONE')
+		# print('FILTER     title:', (_c + title.pattern + _0) if title else 'NONE')
+		# print('         IMDb ID:', (_c + imdb_id + _0) if imdb_id else 'NONE')
+		# print('         country:', (_c + country.pattern + _0) if country else 'NONE')
+		# print('        director:', (_c + director.pattern + _0) if director else 'NONE')
+		# print('          writer:', (_c + writer.pattern + _0) if writer else 'NONE')
+		# print('            cast:', (_c + cast.pattern + _0) if cast else 'NONE')
+		# print('            year:', (_c + '-'.join(year) + _0) if year else 'NONE')
 
 		# TODO: function should also take list index: (list_index, series) -> bool
 
