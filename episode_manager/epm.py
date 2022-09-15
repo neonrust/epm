@@ -386,7 +386,7 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 
 		seen, unseen = series_seen_unseen(series, from_date)
 		if ctx.debug:
-			print('seen:', len(seen), 'unseen:', len(unseen))
+			print(f'{_f}"{series["title"]}" seen: {len(seen)} unseen: {len(unseen)}{_0}')
 
 		if with_unseen_eps and not unseen:
 			continue
@@ -420,7 +420,7 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 		if seen_eps:
 			print_episodes(series, seen, width=width)
 
-		if all_unseen_eps or future_eps:
+		if all_unseen_eps or (future_eps and not show_next):
 			print_episodes(series, unseen, width=width, limit=ep_limit, also_future=future_eps)
 
 		if hilite:
