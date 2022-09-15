@@ -16,6 +16,10 @@ _base_url_tmpl = 'https://api.themoviedb.org/3/%%(path)s?api_key=%s'
 _base_url:str|None = None
 _api_key:str|None = None
 
+global_headers = {
+	'User-Agent': 'EpisodeManager/0',
+}
+
 env_key_name = 'TMDB_API_KEY'
 
 api_key_help = 'Set "%s" environment variable for your account.' % env_key_name
@@ -80,7 +84,7 @@ def ok() -> bool:
 def _query(url:str) -> dict[str, Any]|None:
 	# print('\x1b[2mquery: %s\x1b[m' % url)
 	try:
-		resp = requests.get(url, timeout=10)
+		resp = requests.get(url, headers=global_headers, timeout=10)
 		# print('\x1b[2mquery: DONE %s\x1b[m' % url)
 	except (ReadTimeout, ConnectTimeout) as to:
 		# print('\x1b[41;97;1mquery: TIMEOUT %s\x1b[m' % url)
