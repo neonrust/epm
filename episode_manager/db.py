@@ -15,6 +15,11 @@ from typing import Any, Callable, TypeVar, Generator
 
 DB_VERSION = 4
 
+_dirty = True
+
+def is_dirty() -> bool:
+	return _dirty
+
 def code_version() -> int:
 	return DB_VERSION
 
@@ -41,22 +46,23 @@ def load(file_path:str|None=None) -> dict:
 		ms = (t1 - t0)*1000
 		print(f'{_f}[db: read %d entries in %.1fms; v%d]{_0}' % (len(db) - 1, ms, meta_get(db, meta_version_key)), file=sys.stderr)
 
-	modified = _migrate(db)
+	_dirty = False
 
-	if modified:
+	_migrate(db)
+
+	if _dirty:
 		save(db)
 
 	return db
 
 
-def _migrate(db:dict) -> bool:
-
-	modified = False
+def _migrate(db:dict):
+	global _dirty
 
 	# no db meta data, yikes!
 	if meta_key not in db:
 		db[meta_key] = {}
-		modified = True
+		_dirty = True
 
 	db_version = db[meta_key].get('version', 0)
 
@@ -121,42 +127,38 @@ def _migrate(db:dict) -> bool:
 
 
 	if db_version < 2:
-		# assign 'list_index' ordered by "added" time
+		# assign list index in added time order
 		list_index = 1
 		for series in sorted(db.values(), key=lambda series: meta_get(series, meta_added_key)):
 			meta_set(series, meta_list_index_key, list_index)
 			list_index += 1
-		modified = True
+		_dirty = True
 
 	# if no version exists, set to current version
 	if db_version != DB_VERSION:
 		print(f'{_f}Set DB version: %s -> %s{_0}' % (meta_get(db, meta_version_key), DB_VERSION))
 		meta_set(db, meta_version_key, DB_VERSION)
-		modified = True
 
 	if db_version < 2:
 		meta_set(db, meta_next_list_index_key, list_index)
 		print(f'{_f}Built list indexes for all {len(db) - 1} series, next index: {list_index}{_0}')
-		modified = True
 
 	if fixed_legacy_meta:
 		print(f'{_f}Migrated legacy meta-data of {fixed_legacy_meta} series{_0}')
-		modified = True
+		_dirty = True
 
 	if fixed_archived:
 		print(f'{_f}Fixed bad "{meta_archived_key}" value of {fixed_archived} series{_0}')
-		modified = True
+		_dirty = True
 
 	if fixed_update_history:
 		print(f'{_f}Fixed empty "{meta_update_history_key}" value of {fixed_update_history} series{_0}')
-		modified = True
+		_dirty = True
 
 	if fixed_nulls:
 		print(f'{_f}Removed {fixed_nulls} null values{_0}')
-		modified = True
+		_dirty = True
 
-
-	return modified
 
 
 _compressor: dict | None = None
@@ -236,6 +238,14 @@ else:
 
 def save(db:dict) -> None:
 
+	global _dirty
+	if not _dirty:
+		if config.get_bool('debug'):
+			print(f'{_f}[db: save ignored; not dirty]{_0}')
+		return
+
+	_dirty = False
+
 	# print('SAVE DISABLED')
 	# import inspect
 	# frames = inspect.stack()[1:3]
@@ -295,16 +305,22 @@ def meta_has(obj:dict, key:str) -> bool:
 
 
 def meta_set(obj:dict, key: str, value) -> None:
+	global _dirty
+	_dirty = True
 	if meta_key not in obj:
 		obj[meta_key] = {}
 	obj[meta_key][key] = value
 
 
 def meta_del(obj:dict, key: str) -> None:
+	global _dirty
+	_dirty = True
 	obj[meta_key].pop(key, None)
 
 
 def meta_copy(source:dict, destination:dict) -> None:
+	global _dirty
+	_dirty = True
 	destination[meta_key] = source.get(meta_key, {})
 
 
