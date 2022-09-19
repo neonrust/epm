@@ -329,9 +329,9 @@ class State(enum.IntFlag):
 	STARTED   = 0x02  # some episodes seen
 	COMPLETED = 0x04  # all episodes seen and manually restored
 	ARCHIVED  = 0x08  # all episodes seen (automatically archived)
-	ABANDONED = 0x10  # manually archived when not all episodes seen
+	ABANDONED = 0x10 | ARCHIVED  # manually archived when not all episodes seen
 
-	ACTIVE    = 0x01 | 0x02
+	ACTIVE    = PLANNED | STARTED
 
 
 T = TypeVar('T')
