@@ -12,6 +12,8 @@ from .styles import _0, _00, _0B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _L, _S, _
 default_max_refresh_age = 2  # days
 default_max_hits = 10
 
+env_config_path = 'EPM_CONFIG'
+
 user_config_home = os.getenv('XDG_CONFIG_HOME') or pexpand(pjoin('$HOME', '.config'))
 
 app_config_file = ''  # set in _init()
@@ -225,8 +227,11 @@ def set(path:str, value:Any, store:Store|None=Store.Persistent) -> None:
 def _init():
 	global PRG
 	PRG = basename(sys.argv[0])
+
 	global app_config_file
-	app_config_file = pjoin(user_config_home, 'episode_manager', 'config')
+	app_config_file = os.getenv(env_config_path) \
+	                  or \
+	                  pjoin(user_config_home, 'episode_manager', 'config')
 
 _init()
 
