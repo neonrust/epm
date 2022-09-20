@@ -246,13 +246,7 @@ def save(db:dict) -> None:
 
 	_dirty = False
 
-	# print('SAVE DISABLED')
-	# import inspect
-	# frames = inspect.stack()[1:3]
-	# for fr in frames:
-	# 	fname = basename(fr.filename)
-	# 	print(f' from {_b}{fr.function}{_o}(){_0}  {_f}{fname}{_c}:{_0}{_f}{fr.lineno}{_0}')
-	# return
+	# utils.calltrace()
 
 	db_file = str(config.get('paths/series-db'))
 
