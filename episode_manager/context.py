@@ -123,9 +123,6 @@ class Context:
 		if not self.command:
 			self.set_command(default_command)
 
-		if self.command == 'help':
-			raise BadUsageError()
-
 
 	def set_command(self, name:str, apply_args:bool=True) -> None:
 		self.command = name
