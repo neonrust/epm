@@ -9,7 +9,7 @@ import sys
 from typing import Any, TypeVar
 from types import ModuleType as Module
 
-from .styles import _0, _00, _0B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _L, _S, _u, _EOL
+from .styles import _0, _00, _0B, _c, _i, _b, _B, _f, _fi, _K, _E, _o, _g, _L, _S, _u, _EOL
 
 # use orjson if available
 orjson:Module|None = None
@@ -205,6 +205,16 @@ def now_datetime() -> datetime:
 	if _now_datetime is None:
 		_now_datetime = datetime.now()
 	return _now_datetime
+
+
+def calltrace(num_frames:int=2):
+	import inspect
+	stack = inspect.stack()
+	print(f'{_b}{stack[1].function}{_o}(){_0}:')
+	frames = stack[2: 2 + max(0, num_frames)]
+	for fr in frames:
+		fname = basename(fr.filename)
+		print(f'  {_f}from{_0} {_B}{fr.function}{_o}(){_0}  {_f}{fname}{_c}:{_0}{_f}{fr.lineno}{_0}')
 
 
 
