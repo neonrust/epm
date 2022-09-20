@@ -13,6 +13,7 @@ default_max_refresh_age = 2  # days
 default_max_hits = 10
 
 env_config_path = 'EPM_CONFIG'
+env_series_db_path = 'EPM_SERIES_DB'
 
 user_config_home = os.getenv('XDG_CONFIG_HOME') or pexpand(pjoin('$HOME', '.config'))
 
@@ -72,7 +73,9 @@ def load() -> bool:
 
 	db_file = get('paths/series-db')
 	if not db_file or not isinstance(db_file, str):
-		db_file = pjoin(user_config_home, 'episode_manager', 'series')
+		db_file = os.getenv(env_series_db_path) \
+		          or \
+		          pjoin(user_config_home, 'episode_manager', 'series')
 		set('paths/series-db', db_file, store=Store.Memory)
 
 	paths = _app_config.get('paths', {})

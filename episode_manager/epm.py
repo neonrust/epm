@@ -1219,12 +1219,20 @@ def _config_help() -> None:
 setattr(cmd_config, 'help', _config_help)
 
 
-def cmd_help(*args, **kw) -> Error|None:
-	print_usage()
-	return None
+def cmd_help(ctx:Context, *args, **kw) -> Error|None:
+	if ctx.command_arguments:
+		arg = ctx.command_arguments.pop(0)
+		if arg in ('env', 'environment'):
+			return print_env_help()
+
+	return print_usage()
+
 
 def _help_help() -> None:
-	print_cmd_usage('help')
+	print_cmd_usage('help', '[<topic>]')
+	print('Topics:')
+	print(f'    {_o}env          {_0} Environment variables')
+	print(f'    (none)    ▶   General usage')
 
 setattr(cmd_help, 'help', _help_help)
 
@@ -2222,6 +2230,12 @@ def print_usage(exit_code:int=0) -> None:
 	if not tmdb.ok():
 		print(f'   {_c}NOTE: Need to set TMDb API key (TMDB_API_KEY environment){_00}')
 	sys.exit(exit_code)
+
+
+def print_env_help() -> None:
+	print('Some defaults may be overriden by environment variables:')
+	print(f'  {_b}{config.env_config_path:20}{_0} Path to configuration file')
+	print(f'  {_b}{config.env_series_db_path:20}{_0} Path to series database file')
 
 
 def print_cmd_help(command:str, exit_code:int=0) -> None:
