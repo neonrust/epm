@@ -2,7 +2,8 @@
 _00 = '\x1b[m'     # normal (reset all)
 _0 = '\x1b[22;23;24;39m' # normal FG style
 _0B = '\x1b[49m'  # normal BG color
-_b = '\x1b[1m'     # bold
+_b = '\x1b[1m'     # bold / intense
+_B = '\x1b[97;1m'  # super-intense
 _f = '\x1b[2m'     # faint
 _i = '\x1b[3m'     # italic
 _fi = '\x1b[2;3m'  # faint & italic
