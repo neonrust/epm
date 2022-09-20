@@ -1056,9 +1056,9 @@ def cmd_archive(ctx:Context, width:int, archiving:bool=True, print_state_change:
 	if not ctx.command_arguments:
 		return Error('Required argument missing: # / <IMDb ID>')
 
-	find_id = ctx.command_arguments.pop(0)
+	find_idx = ctx.command_arguments.pop(0)
 
-	index, series_id, err = db.find_single_series(ctx.db, find_id)
+	index, series_id, err = db.find_single_series(ctx.db, find_idx)
 	if series_id is None or err is not None:
 		return Error(err)
 
