@@ -380,6 +380,8 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 		print('  ep_limit:', ep_limit)
 		print('  episodes from date:', from_date)
 
+	refresh_affected = {}
+
 	for index, series_id in series_list:
 		series = ctx.db[series_id]
 		is_archived = meta_has(series, meta_archived_key)
@@ -397,8 +399,15 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 			# we've come upon a series that is stale,
 			# do a refresh of thw whole list we're printing
 			subset = [sid for _, sid in series_list]
-			modified = refresh_series(ctx.db, width, subset=subset)
+			modified = refresh_series(ctx.db, width, subset=subset, affected=refresh_affected)
 			did_refresh |= max(modified) > 0
+
+		if did_refresh and series_id in refresh_affected:
+			how = refresh_affected[series_id]
+			if isinstance(how, State) and how & State.ARCHIVED > 0:
+				# this series was just archived by the refresh, skip it (unless we actually want to see archived)
+				if not (only_archived or list_all):
+					continue
 
 		# alternate styling odd/even rows
 		hilite = (num_shown % 2) == 0
