@@ -1073,10 +1073,24 @@ def cmd_archive(ctx:Context, width:int, archiving:bool=True, print_state_change:
 		else:
 			return Error('Not archived: %s' % format_title(series))
 
+
+	_do_archive(series, width, archiving=archiving)
+
+	ctx.save()
+
+	return None
+
+def _archive_help() -> None:
+	print_cmd_usage('archive', '# / <IMDb ID>')
+	print(f'    {_o}# / <IMDb ID>{_0}')
+
+setattr(cmd_archive, 'help', _archive_help)
+
+
+def _do_archive(series:dict, width:int, archiving:bool=True):
 	state_before = series_state(series)
 	seen, unseen = series_seen_unseen(series)
 	partly_seen = seen and unseen
-
 
 	if archiving:
 		print(f'{_b}Series archived', end='')
@@ -1092,18 +1106,9 @@ def cmd_archive(ctx:Context, width:int, archiving:bool=True, print_state_change:
 		print(f':{_00}')
 		meta_del(series, meta_archived_key)
 
+	index = meta_get(series, meta_list_index_key)
 	print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width)
 	print(format_state_change(state_before, series_state(series)))
-
-	ctx.save()
-
-	return None
-
-def _archive_help() -> None:
-	print_cmd_usage('archive', '# / <IMDb ID>')
-	print(f'    {_o}# / <IMDb ID>{_0}')
-
-setattr(cmd_archive, 'help', _archive_help)
 
 
 def cmd_restore(*args, **kwargs) -> Error|None:
@@ -1649,7 +1654,7 @@ def last_update(series:dict) -> datetime:
 	return now_datetime()
 
 
-def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False) -> tuple[int, int]:
+def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, affected:dict|None=None) -> tuple[int, int]:
 	subset = subset or m_db.all_ids(db)
 
 	if force:
@@ -1745,6 +1750,12 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False) 
 	# print('with changes:', len(to_refresh), '|', ' '.join(to_refresh))
 	# sys.exit(42)
 
+	# remember each series status
+	previous_status = {
+		series_id: db[series_id].get('status')
+		for series_id in to_refresh
+	}
+
 
 	prog_bar = mk_prog(len(to_refresh))
 	clrline()
@@ -1776,6 +1787,15 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False) 
 
 		# replace entry in DB
 		db[series_id] = series
+
+		if series_state(series) & State.ARCHIVED == 0:
+			if previous_status[series_id] != 'ended' and series.get('status') == 'ended':
+				# status changed to 'ended', have we seen all episodes?
+				if len(series.get('episodes', [])) == len(meta_get(series, meta_seen_key, [])):
+					# allright then, we have no further business with this series
+					_do_archive(series, width=width)
+					if affected is not None:
+						affected[series_id] = State.ARCHIVED
 
 		num_episodes += len(episodes)
 
