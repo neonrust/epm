@@ -1326,11 +1326,6 @@ known_commands:dict[str,dict[str,tuple|Callable|str]] = {
 }
 
 
-def _set_debug(value:str, key:str, options:dict) -> bool:
-	config.set('debug', bool(value), store=Store.Memory)
-	return True
-
-
 def _opt_list(sep:str, valid:list[str]) -> Callable[[str, str, dict], str|None]:
 	def _set(value:str, key:str, options:dict) -> str|None:
 		values = options.get(key, [])
@@ -1383,7 +1378,6 @@ __opt_series_sorting = {
 
 command_options = {
 	None: { # i.e. global options
-		'debug':           { 'name': '--debug', 'help': 'Enable debug mode', 'func': _set_debug, 'hidden': True },
 	},
 	'show': {
 		'all':               { 'name': ('-a', '--all'),          'help': 'List also archived series' },

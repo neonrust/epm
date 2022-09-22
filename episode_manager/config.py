@@ -14,6 +14,7 @@ default_max_hits = 10
 
 env_config_path = 'EPM_CONFIG'
 env_series_db_path = 'EPM_SERIES_DB'
+env_debug = 'EPM_DEBUG'
 
 user_config_home = os.getenv('XDG_CONFIG_HOME') or pexpand(pjoin('$HOME', '.config'))
 
@@ -34,7 +35,7 @@ _configuration_defaults:dict[str, ValueType] = {
 	'lookup': {
 		'max-hits': default_max_hits,
 	},
-	'debug': False,
+	'debug': bool(os.getenv(env_debug) or False),
 }
 
 _app_config:dict[str, ValueType] = {}
