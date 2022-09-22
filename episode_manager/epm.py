@@ -14,7 +14,6 @@ from typing import Callable, Any
 
 from . import tmdb, progress, config, utils, db, db as m_db
 from .context import Context, BadUsageError
-from .config import  Store
 from .utils import term_size, warning_prefix, plural, clrline, now_datetime, now_stamp
 from .db import State, meta_get, meta_set, meta_has, meta_del, meta_copy, meta_seen_key, meta_archived_key, \
 	meta_added_key, meta_update_check_key, meta_update_history_key, meta_list_index_key, meta_next_list_index_key, \
