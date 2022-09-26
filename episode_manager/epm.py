@@ -1643,7 +1643,7 @@ def no_series(db:dict, filtered:bool=False) -> Error:
 	if len(db) <= 1:
 		return Error(f'No series added.  Use: {_b}%s add <title search...> [<year>]{_00}' % PRG)
 
-	precision = ' matched' if filtered else ''
+	precision = ' matched (try -a)' if filtered else ''
 	return Error('No series%s.' % precision)
 
 
