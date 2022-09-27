@@ -1134,6 +1134,10 @@ def cmd_refresh(ctx:Context, width:int) -> Error|None:
 	forced = bool(ctx.command_options.get('force'))
 
 	find_idx, match = find_idx_or_match(ctx.command_arguments)
+
+	# the user searched for something, they apparently mean it :)
+	forced |= bool(find_idx or match)
+
 	# only refresh non-archived series
 	series_list = db.indexed_series(ctx.db, state=State.ACTIVE, index=find_idx, match=match)
 

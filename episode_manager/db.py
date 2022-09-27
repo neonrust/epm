@@ -551,11 +551,11 @@ def should_update(series:dict) -> bool:
 		last_update = datetime.fromisoformat(update_history[-1])
 		age = int((last_check - last_update).total_seconds())
 		age = cap(age, None, 2*WEEK)
-		if debug: print(f'  \x1b[35;1mhistory\x1b[m:', end='')
+		if debug: print(f'  \x1b[35;1mhistory\x1b[m-', end='')
 
 	else:
 		age = int((now_datetime() - last_check).total_seconds())
-		if debug: print(f'  \x1b[36;1mlast\x1b[m:', end='')
+		if debug: print(f'  \x1b[36;1mlast\x1b[m-', end='')
 		age = cap(age, None, simple_age_cap)
 
 	if debug: print(f'{age/DAY:.1f} days', end='')
