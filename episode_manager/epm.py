@@ -417,8 +417,6 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 			print_series_details(index, series,width=width, gray=is_archived and not only_archived)
 		else:
 			print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width, gray=is_archived and not only_archived)
-
-			#if only_archived:
 			print_archive_status(series)
 
 		# don't print "next" if we're printing all unseen episodes anyway
@@ -1475,10 +1473,11 @@ def print_episodes(series:dict, episodes:list[dict], width:int, pre_print:Callab
 	keys:list[str] = []
 
 	num_printed = 0
+	stop_at_date_after = None
 
 	for ep in episodes:
 
-		if limit is not None and num_printed >= limit:
+		if limit is not None and num_printed >= limit and stop_at_date_after is not None:
 			break
 		num_printed += 1
 
@@ -1486,8 +1485,10 @@ def print_episodes(series:dict, episodes:list[dict], width:int, pre_print:Callab
 			pre_print()
 			pre_print = None  # only once
 
-		has_seen = episode_key(ep) in seen_keys
+		if stop_at_date_after is not None and stop_at_date_after != ep.get('date'):
+			break
 
+		has_seen = episode_key(ep) in seen_keys
 
 		season = ep['season']
 		if season != current_season:
@@ -1502,7 +1503,7 @@ def print_episodes(series:dict, episodes:list[dict], width:int, pre_print:Callab
 		keys.append(episode_key(ep))
 
 		if not (also_future or is_released(ep)):
-			break
+			stop_at_date_after = ep.get('date')
 
 
 	return keys
