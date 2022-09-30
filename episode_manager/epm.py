@@ -193,12 +193,12 @@ def bad_opt_arg(command:str|None, option, arg, arg_type:Callable|None, explain:s
 		expected = arg_type.__name__
 
 	if expected is None:
-		print(f' Unexpected argument for {_o}{option}{_0}: {_b}{arg}{_00}', file=sys.stderr, end='')
+		print(f' Unexpected argument for {_o}{option}{_0}: {_b}{arg}{_0}', file=sys.stderr, end='')
 	elif arg is None:
 		explain = ('; %s' % explain) if explain else ''
 		print(f' Required argument missing for {_o}{option}{_0}{explain}', file=sys.stderr, end='')
 	else:
-		print(f' Bad option argument for {_o}{option}{_0}: {_b}{arg}{_00}  ', file=sys.stderr, end='')
+		print(f' Bad option argument for {_o}{option}{_0}: {_b}{arg}{_0}  ', file=sys.stderr, end='')
 		if arg_type is str:
 			print(f'(expected {explain})', file=sys.stderr, end='')
 		else:
@@ -211,7 +211,7 @@ def bad_opt_arg(command:str|None, option, arg, arg_type:Callable|None, explain:s
 
 
 def ambiguous_cmd(name:str, matching:list[str]) -> None:
-	print(f'{warning_prefix()} Ambiguous command: {_E}%s{_00}  matches: %s' % (name, f'{_o},{_00} '.join(sorted(matching))), file=sys.stderr)
+	print(f'{warning_prefix()} Ambiguous command: {_E}%s{_00}  matches: %s' % (name, f'{_o},{_0} '.join(sorted(matching))), file=sys.stderr)
 	sys.exit(1)
 
 
@@ -620,10 +620,10 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> Error|None:
 	if add:
 		already = list(filter(lambda H: H['id'] in ctx.db, hits))
 		if already:
-			print(f'{_f}Already added: %d{_00}' % len(already))
+			print(f'{_f}Already added: %d{_0}' % len(already))
 			for new_series in already:
 				if meta_has(ctx.db[new_series['id']], meta_archived_key):
-					arch_tail = f'  \x1b[33m(archived){_00}'
+					arch_tail = f'  \x1b[33m(archived){_0}'
 				else:
 					arch_tail = None
 
@@ -1123,7 +1123,7 @@ def cmd_restore(*args, **kwargs) -> Error|None:
 
 def _restore_help() -> None:
 	print_cmd_usage('restore', '# / <IMDb ID>')
-	print(f'    {_o}# / <IMDb ID>{_00}')
+	print(f'    {_o}# / <IMDb ID>{_0}')
 
 setattr(cmd_restore, 'help', _restore_help)
 
@@ -1149,7 +1149,7 @@ def cmd_refresh(ctx:Context, width:int) -> Error|None:
 	num_series, num_episodes = refresh_series(ctx.db, width, subset=subset, force=forced)
 	if num_series > 0:  # can be 1 even if num_episodes is zero
 		if num_episodes > 0:
-			print(f'{_f}Refreshed %d episodes across %d series [%.1fs].{_00}' % (num_episodes, num_series, time.time() - t0), file=sys.stderr)
+			print(f'{_f}Refreshed %d episodes across %d series [%.1fs].{_0}' % (num_episodes, num_series, time.time() - t0), file=sys.stderr)
 
 		ctx.save()
 
@@ -1651,7 +1651,7 @@ def episodes_by_key(series:dict, keys:list) -> list:
 def no_series(db:dict, filtered:bool=False) -> Error:
 
 	if len(db) <= 1:
-		return Error(f'No series added.  Use: {_b}%s add <title search...> [<year>]{_00}' % PRG)
+		return Error(f'No series added.  Use: {_b}%s add <title search...> [<year>]{_0}' % PRG)
 
 	precision = ' matched (try -a)' if filtered else ''
 	return Error('No series%s.' % precision)
@@ -2170,8 +2170,8 @@ def option_def(command:str|None, option:str|None=None):
 def print_cmd_usage(command:str, syntax:str='') -> None:
 	summary = known_commands[command].get('help')
 	if summary:
-		print(f'{_b}{summary}{_00}')
-	print(f'Usage: %s {_c}%s{_00} %s' % (PRG, command, syntax))
+		print(f'{_b}{summary}{_0}')
+	print(f'{_b}Usage:{_0} %s {_c}%s{_0} %s' % (PRG, command, syntax))
 
 
 def print_cmd_option_help(command:str|None, print_label:bool=True) -> None:
@@ -2218,7 +2218,7 @@ def print_cmd_help_table():
 		for idx, ch in enumerate(cmd):
 			matched = filter(lambda a: a.lower() == ch.lower(), aliases)
 			try:
-				highlighted += f'{_c}{next(matched)}{_00}' + cmd[idx + 1:]
+				highlighted += f'{_c}{next(matched)}{_0}' + cmd[idx + 1:]
 				break
 			except StopIteration:
 				pass
@@ -2237,31 +2237,31 @@ def print_cmd_help_table():
 def print_usage(exit_code:int=0) -> None:
 	default_command = config.get('commands/default')
 
-	print(f'{_b}%s{_00} / {_b}Ep{_00}isode {_b}M{_00}anager / (c)2022 André Jonsson' % PRG)
+	print(f'{_b}%s{_0} / {_b}Ep{_0}isode {_b}M{_0}anager / (c)2022 André Jonsson' % PRG)
 	print('Version %s (%s) ' % (VERSION, VERSION_DATE))
-	print(f'{_b}Usage:{_00} %s [<{_b}command{_00}>] [{_o}<args ...>{_00}]' % PRG)
+	print(f'{_b}Usage:{_0} %s [<global options>] [<{_b}command{_0}>] [{_o}<args ...>{_0}]' % PRG)
 	print()
 	print(f'Where {_b}<global options>{_0} are:')
 	print_cmd_option_help(None, print_label=False)
 	print()
-	print(f'Where {_b}<command>{_00} is:  {_f}(one-letter alias highlighted){_00}')
+	print(f'Where {_b}<command>{_0} is:  {_f}(one-letter alias highlighted){_0}')
 	print_cmd_help_table()
-	print(f'  (none)  ▶  {_b}%s{_00}' % default_command)
+	print(f'  (none)  ▶  {_b}%s{_0}' % default_command)
 	print()
-	print(f'See: %s {_b}<command> --help{_00} for command-specific help.' % PRG)
+	print(f'See: %s {_b}<command> --help{_0} for command-specific help.' % PRG)
 	print()
 	print('Remarks:')
-	print(f'  # = Series listing number, e.g. as listed by the {_b}l{_00}ist command.')
+	print(f'  # = Series listing number, e.g. as listed by the {_b}l{_0}ist command.')
 	print(f'  If an argument does not match a command, it will be used as argument to the default command.')
 	print(f'  Shortest unique prefix of a command is enough, e.g. "ar"  for "archive".')
 	if utils.json_serializer() != 'json':
-		print(f'  {_f}Using {_b}{utils.json_serializer()}{_00}{_f} for faster load/save.')
+		print(f'  {_f}Using {_b}{utils.json_serializer()}{_0}{_f} for faster load/save.')
 	else:
-		print(f'  {_f}Install \'orjson\' for faster load/save{_00}')
+		print(f'  {_f}Install \'orjson\' for faster load/save{_0}')
 	if db.compressor():
-		print(f'  {_f}Using {_b}{db.compressor()}{_00}{_f} to compress database backups.')
+		print(f'  {_f}Using {_b}{db.compressor()}{_0}{_f} to compress database backups.')
 	if not tmdb.ok():
-		print(f'   {_c}NOTE: Need to set TMDb API key (TMDB_API_KEY environment){_00}')
+		print(f'   {_c}NOTE: Need to set TMDb API key (TMDB_API_KEY environment){_0}')
 	sys.exit(exit_code)
 
 
@@ -2288,7 +2288,7 @@ def print_cmd_help(command:str, exit_code:int=0) -> None:
 def print_cmd_aliases(command:str) -> None:
 	for cmd in known_commands:
 		if cmd[0] == command and len(cmd) > 1:
-			print(f'{_b}Aliases:{_00} %s' % ', '.join(cmd[1:]))
+			print(f'{_b}Aliases:{_0} %s' % ', '.join(cmd[1:]))
 			return
 
 
