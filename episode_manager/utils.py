@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date
 from os.path import basename, dirname, expandvars, expanduser, exists as pexists, getsize as psize, join as pjoin
 
 import os
@@ -199,12 +199,26 @@ def now_stamp() -> str:
 
 
 _now_datetime = None
+_now_datetime_faked = False
 def now_datetime() -> datetime:
 	"""Only evaluates once; the same value will always be returned."""
 	global _now_datetime
 	if _now_datetime is None:
 		_now_datetime = datetime.now()
 	return _now_datetime
+
+now_datetime()
+
+
+def fake_now(value:date) -> None:
+	global _now_datetime
+	_now_datetime = _now_datetime.replace(year=value.year, month=value.month, day=value.day)
+	global _now_datetime_faked
+	_now_datetime_faked = True
+
+
+def faked_now() -> bool:
+	return _now_datetime_faked
 
 
 def calltrace(num_frames:int=2):

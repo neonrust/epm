@@ -150,9 +150,9 @@ def eat_option(command:str|None, option:str, args:list[str], options:dict, unkno
 		validator = opt_def.get('validator', lambda v: v)
 		validator_explain = validator.__doc__ or ''
 
-		if arg_type is datetime:
+		if arg_type is date:
 			try:
-				d = datetime.fromisoformat(arg_str)
+				d = date.fromisoformat(arg_str)
 				d = validator(d)
 				if d is None:
 					raise ValueError
@@ -1342,6 +1342,10 @@ def _opt_list(sep:str, valid:list[str]) -> Callable[[str, str, dict], str|None]:
 	return _set
 
 
+def _set_fake_date(value:date, key:str, options:dict) -> str|None:
+	utils.fake_now(value)
+
+
 def _valid_int(a:int, b:int) -> Callable[[int], int|None]:
 	assert(a <= b)
 	def verify(v:int) -> int|None:
@@ -1354,8 +1358,6 @@ def _valid_int(a:int, b:int) -> Callable[[int], int|None]:
 def _valid_cmd(name:str) -> str|None:
 	'valid command name'
 	return resolve_cmd(name, fail_ok=True)
-
-# TODO: merge with 'known_commands' ?  (at least for the command-specific options)
 
 __opt_max_hits = {
 	'max-hits': {
@@ -1377,8 +1379,11 @@ __opt_series_sorting = {
 	},
 }
 
+# TODO: merge with 'known_commands' ?  (at least for the command-specific options)
+
 command_options = {
 	None: { # i.e. global options
+		'fake-now':          { 'name': '--fake-now', 'arg': date, 'help': 'Simulate a specific "today" date', 'func': _set_fake_date },
 	},
 	'show': {
 		'all':               { 'name': ('-a', '--all'),          'help': 'List also archived series' },
@@ -1909,8 +1914,7 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=Fals
 		today = False
 
 	# TODO: if 'ep_date' is "recent past" (configurable),
-	#   show like "2 weeks ago"
-	#   do note that this is longer/wider (use "wks"/"mons" ?)
+	#   show like "2 weeks ago", which, however, is wider (use "wks"/"mons" ?)
 
 	# print('date:', ep['date'])
 	# print('future:', future)
@@ -2170,10 +2174,11 @@ def print_cmd_usage(command:str, syntax:str='') -> None:
 	print(f'Usage: %s {_c}%s{_00} %s' % (PRG, command, syntax))
 
 
-def print_cmd_option_help(command:str) -> None:
+def print_cmd_option_help(command:str|None, print_label:bool=True) -> None:
 	options = option_def(command)
 	if options:
-		print(f'{_b}Options:{_00}')
+		if print_label:
+			print(f'{_b}Options:{_0}')
 
 		options = {
 			name: opts
@@ -2200,10 +2205,8 @@ def arg_placeholder(arg_type):
 		return 'N'
 	if arg_type is float:
 		return 'F'
-	if arg_type is datetime:
+	if arg_type is date:
 		return 'YYYY-MM-DD'
-	if arg_type is not None:
-		return 'string'
 
 	raise RuntimeError('argument placeholder type can not be None')
 
@@ -2237,6 +2240,9 @@ def print_usage(exit_code:int=0) -> None:
 	print(f'{_b}%s{_00} / {_b}Ep{_00}isode {_b}M{_00}anager / (c)2022 André Jonsson' % PRG)
 	print('Version %s (%s) ' % (VERSION, VERSION_DATE))
 	print(f'{_b}Usage:{_00} %s [<{_b}command{_00}>] [{_o}<args ...>{_00}]' % PRG)
+	print()
+	print(f'Where {_b}<global options>{_0} are:')
+	print_cmd_option_help(None, print_label=False)
 	print()
 	print(f'Where {_b}<command>{_00} is:  {_f}(one-letter alias highlighted){_00}')
 	print_cmd_help_table()
