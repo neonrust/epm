@@ -1346,6 +1346,12 @@ def _set_fake_date(value:date, key:str, options:dict) -> str|None:
 	utils.fake_now(value)
 
 
+_disable_refresh = False
+
+def _disable_refresh(value:date, key:str, options:dict) -> str|None:
+	global _disable_refresh
+	_disable_refresh = True
+
 def _valid_int(a:int, b:int) -> Callable[[int], int|None]:
 	assert(a <= b)
 	def verify(v:int) -> int|None:
@@ -1384,6 +1390,7 @@ __opt_series_sorting = {
 command_options = {
 	None: { # i.e. global options
 		'fake-now':          { 'name': '--fake-now', 'arg': date, 'help': 'Simulate a specific "today" date', 'func': _set_fake_date },
+		'no-refresh':        { 'name': '--no-refresh',           'help': 'Don\'t refresh any series data', 'func': _disable_refresh },
 	},
 	'show': {
 		'all':               { 'name': ('-a', '--all'),          'help': 'List also archived series' },
@@ -1667,6 +1674,9 @@ def last_update(series:dict) -> datetime:
 
 
 def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, affected:dict|None=None) -> tuple[int, int]:
+	if _disable_refresh:
+		return 0, 0
+
 	subset = subset or m_db.all_ids(db)
 
 	if force:
