@@ -1694,16 +1694,6 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, 
 	if not to_refresh:
 		return 0, 0
 
-	def spread_stamp(a:datetime, b:datetime):
-		# generate a random time stamp between 'a' and 'b'
-		diff = int((b - a).total_seconds())
-		if diff//2 == diff:
-			offset = timedelta(seconds=diff)
-		else:
-			offset = timedelta(seconds=int(random.randrange(diff//2, diff)))  # skewed towards 'b'
-		rnd = a + offset
-		return rnd
-
 	# set time of last check (regardless whether there actually were any updates)
 	touched = 0
 	for series_id in to_refresh:
