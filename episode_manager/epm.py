@@ -962,6 +962,28 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 		except:
 			return Error(f'Bad episode number/range: {episode}')
 
+
+	seen, unseen = series_seen_unseen(series)
+
+	if not marking:
+		# reverse the logic below
+		#   maybe name the variables something else? ;)
+		unseen, seen = seen, unseen
+
+	already = [
+		ep
+		for ep in seen
+		if (season is None or ep['season'] in season) and (episode is None or ep['episode'] in episode)
+	]
+	if already:
+		if marking:
+			print(f'{_f}Already marked:{_0}')
+		else:
+			print(f'{_f}Not marked:{_0}')
+		for ep in already:
+			print(format_episode_title('  ', ep, include_season=True, include_time=False, width=width, gray=True))
+
+
 	state_before = series_state(series)
 
 	seen_state = meta_get(series, meta_seen_key, {})
@@ -971,7 +993,7 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 	episodes_runtime = 0
 	now_time = now_stamp()
 
-	for ep in series.get('episodes', []):
+	for ep in unseen:
 		if (season is None or ep['season'] in season) and (episode is None or ep['episode'] in episode):
 			key = episode_key(ep)
 
