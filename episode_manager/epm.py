@@ -971,7 +971,7 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 					season = range(min(rng), max(rng) + 1)
 				else:
 					season = (int(rng[0]), )
-			except ValueError as ve:
+			except ValueError:
 				return Error(f'Bad season number/range: {season}')
 
 		if args:
@@ -983,9 +983,11 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 					episode = range(min(rng), max(rng) + 1)
 				else:
 					episode = (int(rng[0]), )
-			except:
+			except ValueError:
 				return Error(f'Bad episode number/range: {episode}')
 
+		if args:
+			return Error('Unexpected extra arguments: %s' % ' '.join(args))
 
 	seen, unseen = series_seen_unseen(series)
 

@@ -467,7 +467,7 @@ def next_unseen_episode(series:dict) -> dict|None:
 	for ep in episodes:
 		season = ep['season']
 		episode = ep['episode']
-		# next episode in same season or first in next season
+		# next episode in same season (checked first) or first in next season
 		if season == last_seen[0] and episode == last_seen[1] + 1 \
 			or\
 			season == last_seen[0] + 1 and episode == 1:
