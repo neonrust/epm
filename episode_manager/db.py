@@ -437,7 +437,7 @@ def last_seen_episode(series:dict) -> tuple[dict|None, str|None]:
 			seen_time = seen[seen_key]
 
 	if last_seen == (0, 0):
-		return None, None
+		return 0, None
 
 	for ep in episodes:
 		season = ep['season']

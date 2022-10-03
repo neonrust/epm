@@ -926,41 +926,65 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 	#   "descriptor" spaced ranges:  s1-3 e1-4  (seasons 1-3, episodes 1-4)
 
 	args = [*ctx.command_arguments]
-	if args:
-		arg = args.pop(0)
 
-		m = ep_ptn.search(arg)
-		if m:
-			args = [ m.group(1) ]
-			if m.group(3):
-				args.append(m.group(3))
-
-		else:
-			args.insert(0, arg)
-
-	if args:
-		season_str = args.pop(0)
-
-		try:
-			rng = [int(n) for n in season_str.lower().lstrip('s').split('-')]
-			if len(rng) == 2:
-				season = range(min(rng), max(rng) + 1)
+	if len(args) == 1:
+		if marking and args[0] in ('next', 'n'):
+			# mark next logical episode
+			next_unseen = next_unseen_episode(series)
+			if not next_unseen:
+				return Error('there is no logical next episode')
+			elif next_unseen == (0, 0):
+				season = (1, )
+				episode = (1, )
 			else:
-				season = (int(rng[0]), )
-		except ValueError as ve:
-			return Error(f'Bad season number/range: {season}')
+				season = (next_unseen.get('season'), )
+				episode = (next_unseen.get('episode'), )
 
-	if args:
-		episode_str = args.pop(0)
+		elif not marking and args[0] in ('last', 'l'):
+			# unmark the last marked episode
+			last_seen, _ = db.last_seen_episode(series)
+			if not last_seen:
+				return Error('no episode marked')
 
-		try:
-			rng = [int(n) for n in episode_str.lower().lstrip('e').split('-')]
-			if len(rng) == 2:
-				episode = range(min(rng), max(rng) + 1)
+			season = (last_seen.get('season'), )
+			episode = (last_seen.get('episode'), )
+	else:
+
+		if args:
+			arg = args.pop(0)
+
+			m = ep_ptn.search(arg)
+			if m:
+				args = [ m.group(1) ]
+				if m.group(3):
+					args.append(m.group(3))
+
 			else:
-				episode = (int(rng[0]), )
-		except:
-			return Error(f'Bad episode number/range: {episode}')
+				args.insert(0, arg)
+
+		if args:
+			season_str = args.pop(0)
+
+			try:
+				rng = [int(n) for n in season_str.lower().lstrip('s').split('-')]
+				if len(rng) == 2:
+					season = range(min(rng), max(rng) + 1)
+				else:
+					season = (int(rng[0]), )
+			except ValueError as ve:
+				return Error(f'Bad season number/range: {season}')
+
+		if args:
+			episode_str = args.pop(0)
+
+			try:
+				rng = [int(n) for n in episode_str.lower().lstrip('e').split('-')]
+				if len(rng) == 2:
+					episode = range(min(rng), max(rng) + 1)
+				else:
+					episode = (int(rng[0]), )
+			except:
+				return Error(f'Bad episode number/range: {episode}')
 
 
 	seen, unseen = series_seen_unseen(series)
@@ -1054,6 +1078,7 @@ def _mark_help() -> None:
 	print_cmd_usage('mark', '# / <IMDb ID> [<season / episode specifier>]')
 	print(f'    {_o}# / <IMDb ID> <season> <episode> {_0} Episodes')
 	print(f'    {_o}# / <IMDb ID> <season>           {_0} Seasons')
+	print(f'    {_o}# / <IMDb ID> next               {_0} Next logical episode')
 	print(f'    {_o}# / <IMDb ID>                    {_0} Whole series')
 	print('Also support ranges:')
 	print('  > %s .mark 42 1 1-5' % PRG)
@@ -1071,6 +1096,7 @@ def _unmark_help() -> None:
 	print_cmd_usage('unmark', '# / <IMDb ID> [<season / episode specifier>]')
 	print(f'    {_o}# / <IMDb ID> <season> <episode> {_0} Episodes')
 	print(f'    {_o}# / <IMDb ID> <season>           {_0} Seasons')
+	print(f'    {_o}# / <IMDb ID> next               {_0} Last marked episode')
 	print(f'    {_o}# / <IMDb ID>                    {_0} Whole series')
 	print('Also support ranges:')
 	print('  > %s unmark 42 1 1-5' % PRG)
