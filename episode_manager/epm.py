@@ -2243,14 +2243,16 @@ def print_cmd_option_help(command:str|None, print_label:bool=True) -> None:
 
 			arg_type = opt.get('arg')
 			if arg_type is not None:
-				arg_string = arg_placeholder(arg_type)
+				arg_string = arg_placeholder(option, arg_type)
 				option = '%s %s' % (option, arg_string)
 
 			text = opt.get('help', '')
 			print('   %-20s %s' % (option, text))
 
 
-def arg_placeholder(arg_type):
+def arg_placeholder(option, arg_type):
+	if arg_type is str:
+		return 'string'
 	if arg_type is int:
 		return 'N'
 	if arg_type is float:
@@ -2258,7 +2260,7 @@ def arg_placeholder(arg_type):
 	if arg_type is date:
 		return 'YYYY-MM-DD'
 
-	raise RuntimeError('argument placeholder type can not be None')
+	raise RuntimeError(f'{option} argument placeholder type can not be %s' % arg_type.__name__)
 
 
 def print_cmd_help_table():
