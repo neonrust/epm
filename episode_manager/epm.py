@@ -1033,8 +1033,7 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 
 
 	if not touched_episodes:
-		print(f'{_c}No episodes %smarked{_00}' % ('' if marking else 'un'))
-		return None
+		return Error(f'{_c}No episodes %smarked{_00}' % ('' if marking else 'un'))
 
 	if marking:
 		print('Marked ', end='')
