@@ -381,26 +381,28 @@ def indexed_series(db:dict, index=None, match=None, state:State|None=None, sort_
 	return list(filter_map(db, filter=flt, map=index_and_series, sort_key=sort_key))
 
 
-def find_single_series(db:dict, idx_or_id:str) -> tuple[int|None, str|None, str|None]:
-	nothing_found = None, None, f'Series not found: {idx_or_id}'
+def find_single_series(db:dict, needle:str) -> tuple[int | None, str | None, str | None]:
+	nothing_found = None, None, f'Series not found: {needle}'
 
-	if not idx_or_id:
+	if not needle:
 		return nothing_found
 
 	find_index:int|None = None
 	imdb_id:str|None = None
+	find_title:str|None = None
 
 	# int -> list index
 	# "tt[0-9]+" -> IMDb ID
+	# anything else -> title
 	try:
-		find_index = int(idx_or_id)
-	except:
-		if idx_or_id[:2] == 'tt':
-			imdb_id = idx_or_id
+		find_index = int(needle)
+	except ValueError:
+		if needle[:2] == 'tt':
+			imdb_id = needle
 		else:
-			return nothing_found
+			find_title = needle.casefold()
 
-	def flt(series_id:str, series:dict) -> bool:
+	def flt(_, series:dict) -> bool:
 		passed = True
 
 		if passed and find_index is not None:
@@ -409,6 +411,9 @@ def find_single_series(db:dict, idx_or_id:str) -> tuple[int|None, str|None, str|
 		if passed and imdb_id is not None:
 			passed = series.get('imdb_id') == imdb_id
 
+		if passed and find_title is not None:
+			passed = find_title in series.get('title', '').casefold()
+
 		return passed
 
 	def index_sid(series_id:str, series:dict) -> tuple[int, str]:
@@ -416,8 +421,14 @@ def find_single_series(db:dict, idx_or_id:str) -> tuple[int|None, str|None, str|
 
 	found = list(filter_map(db, filter=flt, map=index_sid))
 
-	if found:
+	if len(found) == 1:
 		return *found[0], None
+
+	if len(found) > 1:
+		message = f'Ambiguous ({len(found)}): {_c}%s{_0}' % f'{_0}, {_c}'.join(db[sid].get('title') for idx, sid in found[:4])
+		if len(found) > 4:
+			message += ', etc'
+		return None, None, message
 
 	return nothing_found
 

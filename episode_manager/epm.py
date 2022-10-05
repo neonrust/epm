@@ -896,9 +896,9 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 	if not ctx.command_arguments:
 		return Error('Required argument missing: # / <IMDb ID>')
 
-	find_id = ctx.command_arguments.pop(0)
+	find = ctx.command_arguments.pop(0)
 
-	index, series_id, err = db.find_single_series(ctx.db, find_id)
+	index, series_id, err = db.find_single_series(ctx.db, find)
 	if series_id is None or err is not None:
 		return Error(err)
 
