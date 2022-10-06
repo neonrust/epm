@@ -1129,7 +1129,7 @@ def cmd_archive(ctx:Context, width:int, archiving:bool=True, print_state_change:
 			return Error('Not archived: %s' % format_title(series))
 
 
-	_do_archive(series, width, archiving=archiving)
+	_do_archive(series, width, archiving=archiving, print_state_change=print_state_change)
 
 	ctx.save()
 
@@ -1142,7 +1142,7 @@ def _archive_help() -> None:
 setattr(cmd_archive, 'help', _archive_help)
 
 
-def _do_archive(series:dict, width:int, archiving:bool=True):
+def _do_archive(series:dict, width:int, archiving:bool=True, print_state_change:bool=True):
 	state_before = series_state(series)
 	seen, unseen = series_seen_unseen(series)
 	partly_seen = seen and unseen
@@ -1163,7 +1163,9 @@ def _do_archive(series:dict, width:int, archiving:bool=True):
 
 	index = meta_get(series, meta_list_index_key)
 	print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width)
-	print(format_state_change(state_before, series_state(series)))
+
+	if print_state_change:
+		print(format_state_change(state_before, series_state(series)))
 
 
 def cmd_restore(*args, **kwargs) -> Error|None:
