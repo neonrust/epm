@@ -18,7 +18,7 @@ from .utils import term_size, warning_prefix, plural, clrline, now_datetime, now
 from .db import State, meta_get, meta_set, meta_has, meta_del, meta_copy, meta_seen_key, meta_archived_key, \
 	meta_added_key, meta_update_check_key, meta_update_history_key, meta_list_index_key, meta_next_list_index_key, \
 	series_state, should_update, series_seen_unseen, episode_key, next_unseen_episode, last_seen_episode
-from .styles import _0, _00, _0B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _u, _EOL
+from .styles import _0, _00, _0B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _u, _w, _EOL
 
 import sys
 
@@ -1896,7 +1896,7 @@ def print_series_title(num:int|None, series:dict, width:int=0, imdb_id:str|None=
 	is_ended = series.get('status') in ('ended', 'canceled')
 	if is_ended:
 		width -= 2 + 5
-		left += f'  {_c}{_i}ended{_0}'
+		left += f'  {_w}{_i}ended{_0}'
 
 	if gray:
 		# remove all escape sequences and print in faint-ish gray
