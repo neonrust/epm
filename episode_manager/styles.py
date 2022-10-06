@@ -11,6 +11,7 @@ _u = '\x1b[4m'     # underline
 _g = '\x1b[32;1m'  # good/green
 _c = '\x1b[33;1m'  # command
 _o = '\x1b[34;1m'  # option
+_w = '\x1b[38;2;220;120;80m'  # warning/attention
 _K = '\x1b[K'      # clear end-of-line
 _E = '\x1b[41;97;1m' # ERROR (white on red)
 _EOL = '\x1b[666C' # move far enough to the right to hit the edge
