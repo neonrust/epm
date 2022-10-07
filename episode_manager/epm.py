@@ -2089,11 +2089,14 @@ def print_series_details(index:int, series:dict, width:int, gray:bool=False) -> 
 	if guests:
 		print(f'    {_o}Guests:   {_0}', f'{_o},{_0} '.join(guests))
 
-	num_seasons = max(ep.get('season',0) for ep in episodes)
-	print(f'    {_o}Seasons: {_0}', num_seasons, end='')
-	print(f'  {_f}/{_0}  {_o}Episodes: {_0}', len(episodes))
-	for season in range(1, num_seasons + 1):
-		print(f'     {_c}{"s%d" % season:>3}{_0}', '%3d' % len(list(filter(lambda ep: ep.get('season') == season, episodes))), 'episodes')
+	if episodes:
+		num_seasons = max(ep.get('season',0) for ep in episodes)
+		print(f'    {_o}Seasons: {_0}', num_seasons, end='')
+		print(f'  {_f}/{_0}  {_o}Episodes: {_0}', len(episodes))
+		for season in range(1, num_seasons + 1):
+			print(f'     {_c}{"s%d" % season:>3}{_0}', '%3d' % len(list(filter(lambda ep: ep.get('season') == season, episodes))), 'episodes')
+	else:
+		print(f'       {_c}{_i}no episodes{_0}')
 
 	print(f'    {_o}Added:{_0}', meta_get(series, meta_added_key))
 
