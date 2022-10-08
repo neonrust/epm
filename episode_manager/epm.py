@@ -239,6 +239,7 @@ setattr(cmd_info, 'help', _info_help)
 def cmd_unseen(ctx:Context, width:int) -> Error|None:
 	ctx.command_options['with-unseen'] = True
 	ctx.command_options['next-episode'] = True
+	ctx.command_options['no-seen-summary'] = True
 	return cmd_show(ctx, width)
 
 def _unseen_help() -> None:
@@ -252,17 +253,18 @@ setattr(cmd_unseen, 'help', _unseen_help)
 def cmd_show(ctx:Context, width:int) -> Error|None:
 	# TODO: print header/columns
 
-	list_all = 'all' in ctx.command_options
-	only_archived = 'archived' in ctx.command_options
-	only_started = 'started' in ctx.command_options
-	only_planned = 'planned' in ctx.command_options
-	only_abandoned = 'abandoned' in ctx.command_options
-	with_unseen_eps = 'with-unseen' in ctx.command_options
-	all_unseen_eps = 'all-episodes' in ctx.command_options
-	future_eps = 'future-episodes' in ctx.command_options
-	seen_eps = 'seen-episodes' in ctx.command_options
-	show_next = 'next-episode' in ctx.command_options
-	show_details = 'details' in ctx.command_options
+	list_all = ctx.has_option('all')
+	only_archived = ctx.has_option('archived')
+	only_started = ctx.has_option('started')
+	only_planned = ctx.has_option('planned')
+	only_abandoned = ctx.has_option('abandoned')
+	with_unseen_eps = ctx.has_option('with-unseen')
+	all_unseen_eps = ctx.has_option('all-episodes')
+	future_eps = ctx.has_option('future-episodes')
+	seen_eps = ctx.has_option('seen-episodes')
+	show_next = ctx.has_option('next-episode')
+	no_summary =  ctx.has_option('no-seen-summary')
+	show_details = ctx.has_option('details')
 
 	if [only_started, only_planned, only_archived, only_abandoned].count(True) > 1:
 		return Error('Specify only one of "started", "planned", "archived" and "abandoned"')
@@ -420,8 +422,14 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 			print_archive_status(series)
 
 		# don't print "next" if we're printing all unseen episodes anyway
-		grayed = is_archived and not only_archived
-		print_seen_status(series, summary=not show_next, last=not show_next, next=show_next or not all_unseen_eps, width=width, gray=grayed)
+		print_seen_status(
+			series,
+			summary=(not show_next or not all_unseen_eps) and not no_summary,
+			last=not show_next and not all_unseen_eps,
+			next=show_next or not all_unseen_eps,
+			width=width,
+			gray=is_archived and not only_archived,
+		)
 
 		if seen_eps:
 			print_episodes(series, seen, width=width)
@@ -1456,6 +1464,7 @@ command_options = {
 		'future-episodes':   { 'name': ('-f', '--future'),       'help': 'Also show future episodes' },
 		'seen-episodes':     { 'name': ('-S', '--seen'),         'help': 'Show seen episodes' },
 		'next-episode':      { 'name': ('-N', '--next'),         'help': 'Show only next episode, no summary' },
+		'no-seen-summary':   { 'name': '--no-summary',           'help': "Don't show seen summary" },
 
 		'details':           { 'name': ('-I', '--details'),      'help': 'Show more details' },
 
