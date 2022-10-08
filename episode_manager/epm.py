@@ -1904,10 +1904,10 @@ def print_series_title(num:int|None, series:dict, width:int=0, imdb_id:str|None=
 
 	left += format_title(series, width=width) #f' \x1b[38;5;253m{title}{_0}{years}'
 
-	is_ended = series.get('status') in ('ended', 'canceled')
-	if is_ended:
+	series_status = series.get('status')
+	if series_status in ('ended', 'canceled'):
 		width -= 2 + 5
-		left += f'  {_w}{_i}ended{_0}'
+		left += f'  {_w}{_i}{series_status}{_0}'
 
 	if gray:
 		# remove all escape sequences and print in faint-ish gray
