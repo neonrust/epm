@@ -363,14 +363,18 @@ def _sortkey_title_and_year(sid_series:tuple[str,dict]) -> Any:
 def indexed_series(db:dict, index=None, match=None, state:State|None=None, sort_key:Callable|None=None) -> list[tuple[int, str]]:
 	"""Return a list with a predictable sorting, optionally filtered."""
 
-	def flt(series_id:str, series:dict) -> bool:
+	def flt(_, series:dict) -> bool:
 		passed:bool = True
+
 		if passed and index is not None:
 			passed = meta_get(series, meta_list_index_key) == index
+
 		if passed and match is not None:
 			passed = match(series)
+
 		if passed and state is not None:
 			passed = (series_state(series) & state) > 0
+
 		return passed
 
 	def index_and_series(series_id:str, series:dict) -> tuple[int, str]:

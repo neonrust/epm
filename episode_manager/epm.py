@@ -1742,7 +1742,7 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, 
 	if force:
 		to_refresh = subset #{ sid: last_update(db[sid])[1] for sid in subset }
 	else:
-		def check_expired(series_id:str, series:dict) -> bool:
+		def check_expired(_, series:dict) -> bool:
 			return should_update(series)
 		to_refresh = list(m_db.filter_map(db, filter=check_expired, map=lambda sid, srs: sid))#last_updated))
 
