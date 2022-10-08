@@ -1408,11 +1408,8 @@ def _set_fake_date(value:date, key:str, options:dict) -> str|None:
 	utils.fake_now(value)
 
 
-_disable_refresh = False
-
 def _disable_refresh(value:date, key:str, options:dict) -> str|None:
-	global _disable_refresh
-	_disable_refresh = True
+	config.set('refresh-enabled', False, store=Store.Memory)
 
 def _valid_int(a:int, b:int) -> Callable[[int], int|None]:
 	assert(a <= b)
@@ -1737,7 +1734,7 @@ def last_update(series:dict) -> datetime:
 
 
 def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, affected:dict|None=None) -> tuple[int, int]:
-	if _disable_refresh:
+	if not config.get_bool('refresh-enabled', True):
 		return 0, 0
 
 	subset = subset or m_db.all_ids(db)
