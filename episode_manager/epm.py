@@ -269,6 +269,9 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 	if [only_started, only_planned, only_archived, only_abandoned].count(True) > 1:
 		return Error('Specify only one of "started", "planned", "archived" and "abandoned"')
 
+	if all_unseen_eps:
+		show_next = False
+
 	if ctx.debug:
 		def _bool_color(b:bool) -> str:
 			if b:
