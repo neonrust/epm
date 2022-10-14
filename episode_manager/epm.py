@@ -391,8 +391,8 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 		is_archived = meta_has(series, meta_archived_key)
 
 		seen, unseen = series_seen_unseen(series, from_date)
-		if ctx.debug:
-			print(f'{_f}"{series["title"]}" seen: {len(seen)} unseen: {len(unseen)}{_0}')
+		# if ctx.debug:
+		# 	print(f'{_f}"{series["title"]}" seen: {len(seen)} unseen: {len(unseen)}{_0}')
 
 		if with_unseen_eps and not unseen:
 			continue
