@@ -554,7 +554,7 @@ def should_update(series:dict) -> bool:
 
 	if series.get('status') in ('ended', 'canceled'):
 		# it's assumed we already have all the necessary info (most importantly the episodes)
-		if debug: print('  ended -> \x1b[31;1mFalse\x1b[m')
+		if debug: print(f'  \x1b[3m{series["status"]}\x1b[m -> \x1b[31;1mFalse\x1b[m')
 		return False
 
 	last_check = datetime.fromisoformat(last_check)
