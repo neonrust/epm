@@ -850,6 +850,11 @@ def cmd_delete(ctx:Context, width:int) -> Error|None:
 
 	index, series_id, err = db.find_single_series(ctx.db, ctx.command_arguments.pop(0))
 	if series_id is None or err is not None:
+		if isinstance(err, list):
+			found = err
+			# TODO: if more than 4, list the "closest" ones
+			message = ', '.join(f'{list_index_style}{idx}{_0} %s' % format_title(ctx.db[sid]) for idx, sid in found[:4])
+			return Error(f'Ambiguous ({len(found)}): %s' % message)
 		return Error(err)
 
 	series = ctx.db[series_id]
@@ -911,6 +916,11 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 
 	index, series_id, err = db.find_single_series(ctx.db, find)
 	if series_id is None or err is not None:
+		if isinstance(err, list):
+			found = err
+			# TODO: if more than 4, list the "closest" ones
+			message = ', '.join(f'{list_index_style}{idx}{_0} %s' % format_title(ctx.db[sid]) for idx, sid in found[:4])
+			return Error(f'Ambiguous ({len(found)}): %s' % message)
 		return Error(err)
 
 	series = ctx.db[series_id]
@@ -1126,6 +1136,11 @@ def cmd_archive(ctx:Context, width:int, archiving:bool=True, print_state_change:
 
 	index, series_id, err = db.find_single_series(ctx.db, find_idx)
 	if series_id is None or err is not None:
+		if isinstance(err, list):
+			found = err
+			# TODO: if more than 4, list the "closest" ones
+			message = ', '.join(f'{list_index_style}{idx}{_0} %s' % format_title(ctx.db[sid]) for idx, sid in found[:4])
+			return Error(f'Ambiguous ({len(found)}): %s' % message)
 		return Error(err)
 
 	series = ctx.db[series_id]
@@ -1874,6 +1889,7 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, 
 
 	return len(to_refresh), num_episodes
 
+list_index_style = '\x1b[3;38;2;200;160;100m'
 
 def print_series_title(num:int|None, series:dict, width:int=0, imdb_id:str|None=None, gray:bool=False, tail: str|None=None, tail_style:str|None=None) -> None:
 
@@ -1886,7 +1902,7 @@ def print_series_title(num:int|None, series:dict, width:int=0, imdb_id:str|None=
 		num_w = 5
 		width -= num_w
 
-		left = f'\x1b[3;38;2;200;160;100m{num:>{num_w}}{_0} '
+		left = f'{list_index_style}{num:>{num_w}}{_0} '
 
 	r_offset = 0
 

@@ -429,10 +429,7 @@ def find_single_series(db:dict, needle:str) -> tuple[int | None, str | None, str
 		return *found[0], None
 
 	if len(found) > 1:
-		message = f'Ambiguous ({len(found)}): {_c}%s{_0}' % f'{_0}, {_c}'.join(db[sid].get('title') for idx, sid in found[:4])
-		if len(found) > 4:
-			message += ', etc'
-		return None, None, message
+		return None, None, found
 
 	return nothing_found
 
