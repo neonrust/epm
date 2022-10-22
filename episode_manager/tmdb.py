@@ -26,6 +26,7 @@ api_key_help = 'Set "%s" environment variable for your account.' % env_key_name
 
 _raw_output = bool(os.getenv('TMDB_RAW'))
 
+_image_url_prefix = 'https://image.tmdb.org/t/p/w500/'
 
 class NoAPIKey(RuntimeError):
 	pass
@@ -383,6 +384,56 @@ def changes(series_id:str|list[str], after:datetime, include:list|tuple|None=Non
 	return change_list
 
 
+def posters(series_id:str, season:int|list[int]|tuple[int]|None, language:str|None=None) -> dict:
+	# 'season' = None: only main posters for the series
+	# 'season' = 1: all posters for the specified season
+	# 'season' = [2,3,4]: all posters for the specified seasons
+
+	if _qurl is None:
+		return []
+
+	query = {}
+	language = 'en'
+	if language:
+		query['language'] = language
+
+	if season is None:
+		data = _query(_qurl('tv/%s/images' % series_id, query))
+	elif isinstance(season, int):
+		data = _query(_qurl('tv/%s/season/%s/images' % (series_id, season), query))
+	elif isinstance(season, (tuple, list)):
+		wrapped_args = map(lambda season: ( (series_id, season), {'language': language} ), season)
+		return _parallel_query(posters, wrapped_args)
+
+	images = data.get('posters')
+
+	if not _raw_output:
+		_del_keys(images, [
+			'aspect_ratio',
+			'vote_count'
+		])
+		_rename_keys(images, {
+			'iso_639_1': 'language',
+		})
+		_set_values(images, {
+			'url': lambda poster: _image_url_prefix + poster['file_path'].lstrip('/'),
+		})
+		_del_keys(images, [
+			'file_path',
+		])
+
+	return images
+
+
+def find_imdb(imdb_id:str) -> dict:
+	data = _query(_qurl('find/%s' % imdb_id, {'external_source': 'imdb_id'}))
+
+	if not _raw_output:
+		pass
+
+	return data
+
+
 def _job_people(people, job):
 	return list(
 		person.get('name')
@@ -497,11 +548,20 @@ def _self_test(args):
 		else:
 			return args.pop(0, None)
 
+	def all_next():
+		v = list(args)
+		del args[:]
+		return v
+
 	op = next()
 
 	if op == 's':
 		print('SEARCH', file=sys.stderr)
 		info = search(next(), year=int(next()))
+
+	elif op == 'i':  # IMDb
+		print('IMDB', file=sys.stderr)
+		info = find_imdb(next())
 
 	elif op == 'e':
 		print('EPISODE', file=sys.stderr)
@@ -532,6 +592,17 @@ def _self_test(args):
 		print('CHANGES   PARALLEL', file=sys.stderr)
 		dt = datetime.now() - timedelta(days=int(next()))
 		info = changes(args, after=dt, include=('overview', 'season'))
+
+	elif op == 'im':
+		print('IMAGES', file=sys.stderr)
+		series_id = next()
+		try: season = [int(n) for n in all_next()]
+		except ValueError as ve:
+			print('bad season:', ve);
+			sys.exit(1)
+		if len(season) == 1:
+			season = season[0]
+		info = posters(series_id, season=season)
 
 	else:
 		print('_self_test: <op> [args...]', file=sys.stderr)
