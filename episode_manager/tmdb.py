@@ -24,6 +24,8 @@ env_key_name = 'TMDB_API_KEY'
 
 api_key_help = 'Set "%s" environment variable for your account.' % env_key_name
 
+_raw_output = bool(os.getenv('TMDB_RAW'))
+
 
 class NoAPIKey(RuntimeError):
 	pass
@@ -139,27 +141,28 @@ def search(search:str, type:str='series', year:int|None=None, page:int=1):
 
 	hits = data.get('results', [])
 
-	_rename_keys(hits, {
-		'name': 'title',
-		'first_air_date': 'date',
-		'original_name': 'original_title',
-		'original_language': 'language',
-		'origin_country': 'country',
-	})
-	_del_keys(hits, [
-		'backdrop_path',
-		'popularity',
-		'poster_path',
-		'vote_average',
-		'vote_count',
-		'genre_ids',   # for now (in this tool), we don't need these
-	])
-	_set_values(hits, {
-		'year': lambda hit: [int(hit.get('date', [0]).split('-')[0])] if hit.get('date') else None,
-		'id': lambda hit: str(hit['id']),
-		'country': lambda hit: ', '.join(hit.get('country')),
-	})
-	_del_empty(hits)
+	if not _raw_output:
+		_rename_keys(hits, {
+			'name': 'title',
+			'first_air_date': 'date',
+			'original_name': 'original_title',
+			'original_language': 'language',
+			'origin_country': 'country',
+		})
+		_del_keys(hits, [
+			'backdrop_path',
+			'popularity',
+			'poster_path',
+			'vote_average',
+			'vote_count',
+			'genre_ids',   # for now (in this tool), we don't need these
+		])
+		_set_values(hits, {
+			'year': lambda hit: [int(hit.get('date', [0]).split('-')[0])] if hit.get('date') else None,
+			'id': lambda hit: str(hit['id']),
+			'country': lambda hit: ', '.join(hit.get('country')),
+		})
+		_del_empty(hits)
 
 	if builtins.type(hits) is dict:
 		hits = [ hits ]
@@ -209,70 +212,71 @@ def details(title_id:str|list[str]|Iterable, type='series'):
 	if imdb_id:
 		data['imdb_id'] = imdb_id
 
-	_rename_keys(data, {
-		'name': 'title',
-		'first_air_date': 'date',
-		'last_air_date': 'end_date',
-		'original_name': 'original_title',
-		'original_language': 'language',
-		'origin_country': 'country',
-		'number_of_seasons': 'total_seasons',
-		'number_of_episodes': 'total_episodes',
-	})
-	_del_keys(data, [
-		'backdrop_path',
-		'popularity',
-		'poster_path',
-		'vote_average',
-		'vote_count',
-		'production_companies',
-		'production_countries',
-		'homepage',
-		'in_production',
-		'languages',
-		'spoken_languages',
-		'last_episode_to_air',
-		'next_episode_to_air',
-		'networks',
-		'type',
-		'id',
-		'tagline',
-		'seasons',
-		'created_by',
-		'adult',
-		'episode_run_time',
-	])
-	_set_values(data, {
-		'year': lambda _: [int(data.get('date', [0]).split('-')[0])] if data.get('date') else None,
-		'country': lambda _: ', '.join(data.get('country')),
-		'genre': lambda _: ', '.join(map(lambda g: g.get('name'), data.get('genres'))),
-		'status': lambda _: _map_status(data.get('status')) if 'status' in data else None,
-	})
-	_del_keys(data, ['genres'])
+	if not _raw_output:
+		_rename_keys(data, {
+			'name': 'title',
+			'first_air_date': 'date',
+			'last_air_date': 'end_date',
+			'original_name': 'original_title',
+			'original_language': 'language',
+			'origin_country': 'country',
+			'number_of_seasons': 'total_seasons',
+			'number_of_episodes': 'total_episodes',
+		})
+		_del_keys(data, [
+			'backdrop_path',
+			'popularity',
+			'poster_path',
+			'vote_average',
+			'vote_count',
+			'production_companies',
+			'production_countries',
+			'homepage',
+			'in_production',
+			'languages',
+			'spoken_languages',
+			'last_episode_to_air',
+			'next_episode_to_air',
+			'networks',
+			'type',
+			'id',
+			'tagline',
+			'seasons',
+			'created_by',
+			'adult',
+			'episode_run_time',
+		])
+		_set_values(data, {
+			'year': lambda _: [int(data.get('date', [0]).split('-')[0])] if data.get('date') else None,
+			'country': lambda _: ', '.join(data.get('country')),
+			'genre': lambda _: ', '.join(map(lambda g: g.get('name'), data.get('genres'))),
+			'status': lambda _: _map_status(data.get('status')) if 'status' in data else None,
+		})
+		_del_keys(data, ['genres'])
 
-	if data.get('status') in ('ended', 'canceled') and 'end_date' in data and 'year' in data:
-		data['year'] = data['year'] + [ int(data.get('end_date').split('-')[0]) ]
-	else:
-		del data['end_date']
+		if data.get('status') in ('ended', 'canceled') and 'end_date' in data and 'year' in data:
+			data['year'] = data['year'] + [ int(data.get('end_date').split('-')[0]) ]
+		else:
+			del data['end_date']
 
-	_del_empty(data)
+		_del_empty(data)
 
-	credits = promises[2].result() or {}
-	cast = credits.get('cast', [])
-	crew = credits.get('crew', [])
+		credits = promises[2].result() or {}
+		cast = credits.get('cast', [])
+		crew = credits.get('crew', [])
 
-	_set_values(data, {
-		'director': lambda ep: _job_people(crew, 'Director'),
-		'writer': lambda ep: _job_people(crew, 'Writer'),
-		'cast': lambda ep: list(map(lambda p: p.get('name') or '', cast))
-	})
+		_set_values(data, {
+			'director': lambda ep: _job_people(crew, 'Director'),
+			'writer': lambda ep: _job_people(crew, 'Writer'),
+			'cast': lambda ep: list(map(lambda p: p.get('name') or '', cast))
+		})
 
 	__details[title_id] = data
 
 	return data
 
 
-def episodes(series_id:str|list[str]|Iterable, with_details=False, progress:Callable|None=None):
+def episodes(series_id:str|list[str]|Iterable, with_details=False, progress:Callable|None=None) -> list:
 
 	if not _api_key:
 		raise NoAPIKey()
@@ -294,32 +298,33 @@ def episodes(series_id:str|list[str]|Iterable, with_details=False, progress:Call
 		data = _query(_qurl('tv/%s/season/%d' % (series_id, season))) or {}
 		data = data.get('episodes', [])
 
-		_rename_keys(data, {
-			'name': 'title',
-			'first_air_date': 'date',
-			'original_name': 'original_title',
-			'original_language': 'language',
-			'origin_country': 'country',
-			'air_date': 'date',
-			'season_number': 'season',
-			'episode_number': 'episode',
-		})
-		_set_values(data, {
-			'director': lambda ep: _job_people(ep.get('crew', []), 'Director'),
-			'writer': lambda ep: _job_people(ep.get('crew', []), 'Writer'),
-			'guest_cast': lambda ep: list(map(lambda p: p.get('name') or '', ep.get('guest_stars', [])))
-		})
-		_del_keys(data, [
-			'id',
-			'show_id',
-			'still_path',
-			'crew',
-			'guest_stars',
-			'production_code',
-			'vote_average',
-			'vote_count',
-		])
-		_del_empty(data)
+		if not _raw_output:
+			_rename_keys(data, {
+				'name': 'title',
+				'first_air_date': 'date',
+				'original_name': 'original_title',
+				'original_language': 'language',
+				'origin_country': 'country',
+				'air_date': 'date',
+				'season_number': 'season',
+				'episode_number': 'episode',
+			})
+			_set_values(data, {
+				'director': lambda ep: _job_people(ep.get('crew', []), 'Director'),
+				'writer': lambda ep: _job_people(ep.get('crew', []), 'Writer'),
+				'guest_cast': lambda ep: list(map(lambda p: p.get('name') or '', ep.get('guest_stars', [])))
+			})
+			_del_keys(data, [
+				'id',
+				'show_id',
+				'still_path',
+				'crew',
+				'guest_stars',
+				'production_code',
+				'vote_average',
+				'vote_count',
+			])
+			_del_empty(data)
 
 		return data
 
