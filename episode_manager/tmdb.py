@@ -175,7 +175,7 @@ def search(search:str, type:str='series', year:int|None=None, page:int=1):
 __details:dict = {}
 _missing = object()
 
-def details(title_id:str|list[str]|Iterable, type='series'):
+def details(title_id:str|list[str]|Iterable, type='series') -> dict:
 
 	if not _api_key:
 		raise NoAPIKey()
