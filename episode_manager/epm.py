@@ -14,6 +14,7 @@ from typing import Callable, Any
 
 from . import tmdb, progress, config, utils, db, db as m_db
 from .context import Context, BadUsageError
+from .config import Store
 from .utils import term_size, warning_prefix, plural, clrline, now_datetime, now_stamp
 from .db import State, meta_get, meta_set, meta_has, meta_del, meta_copy, meta_seen_key, meta_archived_key, \
 	meta_added_key, meta_update_check_key, meta_update_history_key, meta_list_index_key, meta_next_list_index_key, \
@@ -384,7 +385,8 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 		print('  ep_limit:', ep_limit)
 		print('  episodes from date:', from_date)
 
-	refresh_affected = {}
+	was_refreshed = {}
+	refresh_subset = [sid for _, sid in series_list]
 
 	for index, series_id in series_list:
 		series = ctx.db[series_id]
@@ -401,13 +403,14 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 
 		if not did_refresh and should_update(series):
 			# we've come upon a series that is stale,
-			# do a refresh of thw whole list we're printing
-			subset = [sid for _, sid in series_list]
-			modified = refresh_series(ctx.db, width, subset=subset, affected=refresh_affected)
+			# do a refresh, of the remainder of the list we're printing (so we don't need to do it again)
+			modified = refresh_series(ctx.db, width, subset=refresh_subset, affected=was_refreshed)
 			did_refresh |= max(modified) > 0
 
-		if did_refresh and series_id in refresh_affected:
-			how = refresh_affected[series_id]
+		refresh_subset.remove(series_id)
+
+		if did_refresh and series_id in was_refreshed:
+			how = was_refreshed[series_id]
 			if isinstance(how, State) and how & State.ARCHIVED > 0:
 				# this series was just archived by the refresh, skip it (unless we actually want to see archived)
 				if not (only_archived or list_all):
@@ -1068,6 +1071,10 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 
 	for ep in touched_episodes:
 		print('  %s' % format_episode_title(None, ep, include_season=True, width=width - 2))
+
+
+	# TODO: detect if a mark gap was created (e.g. marked eps 1, 2 and 4)
+
 
 	is_archived = meta_has(series, meta_archived_key)
 
@@ -1790,12 +1797,15 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, 
 		def show_ch_progress(completed:int, *_) -> None:
 			print(f'\r{_K}%s{_EOL}' % prog_bar(completed, text='Checking updates...'), end='', flush=True)
 
-		earliest_refresh = min(
+		oldest_refresh = min(
 			last_update(db[sid])
 			for sid in to_refresh
 		)
 
-		changes = tmdb.changes(to_refresh, earliest_refresh, include=include_changes, progress=show_ch_progress)
+		if config.get_bool('debug'):
+			print('changes since:', oldest_refresh)
+
+		changes = tmdb.changes(to_refresh, oldest_refresh, include=include_changes, progress=show_ch_progress)
 
 		clrline()
 
