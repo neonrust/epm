@@ -1813,7 +1813,7 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, 
 						chtime = item.get('time')
 						if chtime:
 							chtime = datetime.strptime(chtime, '%Y-%m-%d %H:%M:%S %Z')
-							if chtime < latest_update_time:
+							if latest_update_time is None or chtime < latest_update_time:
 								latest_update_time = chtime
 
 
