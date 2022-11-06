@@ -561,7 +561,7 @@ def should_update(series:dict) -> bool:
 	if update_history:
 		# time between the last (actual) update and the last time it was checked
 		last_update = datetime.fromisoformat(update_history[-1])
-		age = int((last_check - last_update).total_seconds())
+		age = int((now_datetime() - max(last_check, last_update)).total_seconds())
 		age = cap(age, None, 2*WEEK)
 		if debug: print(f'  \x1b[35;1mhistory\x1b[m/', end='')
 
