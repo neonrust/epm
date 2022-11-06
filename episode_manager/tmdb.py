@@ -297,6 +297,7 @@ def episodes(series_id:str|list[str]|Iterable, with_details=False, progress:Call
 
 	def fetch_season(season):
 		data = _query(_qurl('tv/%s/season/%d' % (series_id, season))) or {}
+
 		data = data.get('episodes', [])
 
 		if not _raw_output:
@@ -542,11 +543,11 @@ def _parallel_query(func:Callable, arg_list:list|map, progress_callback:Callable
 
 
 def _self_test(args):
-	def next(required=True):
-		if required:
-			return args.pop(0)
+	def next(required=True, conv=str):
+		if required or args:
+			return conv(args.pop(0))
 		else:
-			return args.pop(0, None)
+			return None
 
 	def all_next():
 		v = list(args)
@@ -557,7 +558,7 @@ def _self_test(args):
 
 	if op == 's':
 		print('SEARCH', file=sys.stderr)
-		info = search(next(), year=int(next()))
+		info = search(next(), year=next(required=False, conv=int))
 
 	elif op == 'i':  # IMDb
 		print('IMDB', file=sys.stderr)
@@ -585,20 +586,21 @@ def _self_test(args):
 
 	elif op == 'c':
 		print('CHANGES', file=sys.stderr)
+		series_id = next()
 		dt = datetime.now() - timedelta(days=int(next()))
-		info = changes(next(), after=dt)#, include=('overview', 'season'))
+		info = changes(series_id, after=dt)#, include=('overview', 'season'))
 
 	elif op == 'cp':
 		print('CHANGES   PARALLEL', file=sys.stderr)
 		dt = datetime.now() - timedelta(days=int(next()))
-		info = changes(args, after=dt, include=('overview', 'season'))
+		info = changes(all_next(), after=dt, include=('overview', 'season'))
 
 	elif op == 'im':
 		print('IMAGES', file=sys.stderr)
 		series_id = next()
 		try: season = [int(n) for n in all_next()]
 		except ValueError as ve:
-			print('bad season:', ve);
+			print('bad season:', ve, file=sys.stderr);
 			sys.exit(1)
 		if len(season) == 1:
 			season = season[0]
