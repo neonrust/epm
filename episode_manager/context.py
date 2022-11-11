@@ -1,4 +1,5 @@
 from . import config, db
+from .config import debug
 
 from typing import Callable, Any
 
@@ -8,14 +9,10 @@ class BadUsageError(RuntimeError):
 
 class Context:
 	def __init__(self, eo:Callable, rc:Callable):
-		self.debug:bool = False
-
 		self._eat_option = eo
 		self._resolve_cmd = rc
 
-		self.global_options = {
-			'debug': config.get_bool('debug'),
-		}
+		self.global_options = {}
 		self.command:str|None = None
 		self.command_options:dict[str, Any] = {}
 		self.command_arguments:list[str] = []

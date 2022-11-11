@@ -25,8 +25,8 @@ import sys
 
 PRG = basename(sys.argv[0])
 
-VERSION = '0.15'
-VERSION_DATE = '2022-09-22'
+VERSION = '0.16'
+VERSION_DATE = '2022-11-11'
 
 
 def start():
@@ -929,7 +929,7 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 	series = ctx.db[series_id]
 
 	if should_update(series):
-		# we've come upon a series that is stale, do a refresh (of everything)
+		# we've come upon a series that is stale, do a refresh
 		modified = refresh_series(ctx.db, width, subset=[series_id])
 		if max(modified) > 0:
 			ctx.save()
@@ -940,7 +940,9 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 	ep_ptn = re.compile(r'^\s*(s\d+(-\d+)?)(e\d+(-\d+)?)\s*$')
 
 	# supported syntaxes:
-	#   nothing:                                (all seasons, all episodes)
+	#   nothing:                                (next episode)
+	#   'next'                                  (next episode)
+	#   'all'                                   (everything)
 	#   single numbers:              1 2        (season 1, episode 2)
 	#   ranges:                      1-2 1-5    (seasons 1-2, episodes 1-5)
 	#   season descriptor:           s1         (season 1, all episodes)
@@ -951,40 +953,50 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 
 	args = [*ctx.command_arguments]
 
-	if len(args) == 1:
-		if marking and args[0] in ('next', 'n'):
-			# mark next logical episode
-			next_unseen = next_unseen_episode(series)
-			if not next_unseen:
-				return Error('there is no logical next episode')
-			elif next_unseen == (0, 0):
-				season = (1, )
-				episode = (1, )
-			else:
-				season = (next_unseen.get('season'), )
-				episode = (next_unseen.get('episode'), )
+	incremental = False
 
-		elif not marking and args[0] in ('last', 'l'):
-			# unmark the last marked episode
-			last_seen, _ = db.last_seen_episode(series)
-			if not last_seen:
-				return Error('no episode marked')
+	if not args:   # no season/episode specifier is the same as 'next episode'
+		args = ['next']
 
-			season = (last_seen.get('season'), )
-			episode = (last_seen.get('episode'), )
-	else:
+	if len(args) == 1 and marking and args[0] in ('next', 'n'):
+		# mark next logical episode
+		next_unseen = next_unseen_episode(series)
+		if not next_unseen:
+			return Error('there is no logical next episode')
+		elif next_unseen == (0, 0):
+			season = (1, )
+			episode = (1, )
+		else:
+			season = (next_unseen.get('season'), )
+			episode = (next_unseen.get('episode'), )
+		incremental = True
 
-		if args:
-			arg = args.pop(0)
+	elif len(args) == 1 and not marking and args[0] in ('last', 'l'):
+		# unmark the last marked episode
+		last_seen, _ = db.last_seen_episode(series)
+		if not last_seen:
+			return Error('no episode marked')
 
-			m = ep_ptn.search(arg)
-			if m:
-				args = [ m.group(1) ]
-				if m.group(3):
-					args.append(m.group(3))
+		season = (last_seen.get('season'), )
+		episode = (last_seen.get('episode'), )
+		incremental = True
 
-			else:
-				args.insert(0, arg)
+	elif len(args) == 1 and args[0].lower() == 'all':
+		season = None
+		episode = None
+		incremental = True
+
+	elif args:
+		arg = args.pop(0)
+
+		m = ep_ptn.search(arg)
+		if m:
+			args = [ m.group(1) ]
+			if m.group(3):
+				args.append(m.group(3))
+
+		else:
+			args.insert(0, arg)
 
 		if args:
 			season_str = args.pop(0)
@@ -1015,14 +1027,16 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 
 	seen, unseen = series_seen_unseen(series)
 
+	subset = unseen
+	already_subset = seen
+
 	if not marking:
-		# reverse the logic below
-		#   maybe name the variables something else? ;)
-		unseen, seen = seen, unseen
+		# reverse the subsets for below processing
+		subset, already_subset = already_subset, subset
 
 	already = [
 		ep
-		for ep in seen
+		for ep in already_subset
 		if (season is None or ep['season'] in season) and (episode is None or ep['episode'] in episode)
 	]
 	if already:
@@ -1043,7 +1057,7 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 	episodes_runtime = 0
 	now_time = now_stamp()
 
-	for ep in unseen:
+	for ep in subset:
 		if (season is None or ep['season'] in season) and (episode is None or ep['episode'] in episode):
 			key = episode_key(ep)
 
@@ -1057,7 +1071,7 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 
 
 	if not touched_episodes:
-		return Error(f'{_c}No episodes %smarked{_00}' % ('' if marking else 'un'))
+		return Error(f'{_c}No episodes %smarked{_0}' % ('' if marking else 'un'))
 
 	if marking:
 		print('Marked ', end='')
@@ -1065,7 +1079,7 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 		print('Unmarked ', end='')
 
 	print(f'{_c}{len(touched_episodes)}{_00}', end='')
-	print(f' episode{plural(touched_episodes)} as seen:  {_00}{_f}{format_duration(episodes_runtime)}{_00}')
+	print(f' episode{plural(touched_episodes)} as seen:  {_0}{_f}{format_duration(episodes_runtime)}{_0}')
 
 	print_series_title(index, series, width, imdb_id=series.get('imdb_id'))
 
@@ -1073,7 +1087,9 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 		print('  %s' % format_episode_title(None, ep, include_season=True, width=width - 2))
 
 
-	# TODO: detect if a mark gap was created (e.g. marked eps 1, 2 and 4)
+	if not incremental:
+		# TODO: detect if a mark gap was created (e.g. marked eps 1, 2 and 4)
+		pass
 
 
 	is_archived = meta_has(series, meta_archived_key)

@@ -5,7 +5,7 @@ from os.path import basename, dirname, join as pjoin, exists as pexists
 import shutil
 from typing import Any
 
-from .utils import read_json, write_json, print_json, warning_prefix, pexpand
+from .utils import read_json, write_json, print_json, warning_prefix, pexpand, calltrace
 from .styles import _0, _00, _0B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _L, _S, _u, _EOL
 
 
@@ -35,8 +35,17 @@ _configuration_defaults:dict[str, ValueType] = {
 	'lookup': {
 		'max-hits': default_max_hits,
 	},
-	'debug': bool(os.getenv(env_debug) or False),
 }
+
+if os.getenv(env_debug):
+	_debug_log = pjoin(user_config_home, 'episode_manager', 'debug.log')
+	_debug_fp = open(_debug_log, 'w+')
+	def debug(*args, **kw):
+		print(*args, **kw, file=_debug_fp)
+else:
+	def debug(*_, **__):
+		pass
+
 
 _app_config:dict[str, ValueType] = {}
 _app_config_dirty = False  # if True, it needs to be saved to disk
@@ -255,7 +264,6 @@ if __name__ == '__main__':
 
 	paths = [
 		'lookup/max-hits',
-		'debug',
 		'commands/default',
 		'paths/series-db',
 	]
