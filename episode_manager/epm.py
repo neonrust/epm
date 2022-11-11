@@ -953,8 +953,11 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 
 	incremental = False
 
-	if not args:   # no season/episode specifier is the same as 'next episode'
-		args = ['next']
+	if not args:
+		if marking:   # no season/episode specifier is the same as 'next episode'
+			args = ['next']
+		else:
+			args = ['last']
 
 	if len(args) == 1 and marking and args[0] in ('next', 'n'):
 		# mark next logical episode
@@ -1089,7 +1092,6 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 		# TODO: detect if a mark gap was created (e.g. marked eps 1, 2 and 4)
 		pass
 
-
 	is_archived = meta_has(series, meta_archived_key)
 
 	state_after = series_state(series)  # will not cover the auto-archive/restore below
@@ -1119,14 +1121,14 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 
 def _mark_help() -> None:
 	print_cmd_usage('mark', '# / <IMDb ID> [<season / episode specifier>]')
+	print(f'    {_o}# / <IMDb ID> [next]             {_0} Next logical episode')
 	print(f'    {_o}# / <IMDb ID> <season> <episode> {_0} Episodes')
 	print(f'    {_o}# / <IMDb ID> <season>           {_0} Seasons')
-	print(f'    {_o}# / <IMDb ID> next               {_0} Next logical episode')
-	print(f'    {_o}# / <IMDb ID>                    {_0} Whole series')
+	print(f'    {_o}# / <IMDb ID> all                {_0} Whole series')
 	print('Also support ranges:')
-	print('  > %s .mark 42 1 1-5' % PRG)
+	print('  > %s mark 42 1 1-5' % PRG)
 	print('And episode specifiers (with ranges):')
-	print('  > %s unmark 42 s1e1-5' % PRG)
+	print('  > %s mark 42 s1e1-5' % PRG)
 
 setattr(cmd_mark, 'help', _mark_help)
 
@@ -1137,10 +1139,10 @@ def cmd_unmark(*args, **kwargs) -> Error|None:
 
 def _unmark_help() -> None:
 	print_cmd_usage('unmark', '# / <IMDb ID> [<season / episode specifier>]')
+	print(f'    {_o}# / <IMDb ID> [last]             {_0} Last marked episode')
 	print(f'    {_o}# / <IMDb ID> <season> <episode> {_0} Episodes')
 	print(f'    {_o}# / <IMDb ID> <season>           {_0} Seasons')
-	print(f'    {_o}# / <IMDb ID> next               {_0} Last marked episode')
-	print(f'    {_o}# / <IMDb ID>                    {_0} Whole series')
+	print(f'    {_o}# / <IMDb ID> all                {_0} Whole series')
 	print('Also support ranges:')
 	print('  > %s unmark 42 1 1-5' % PRG)
 	print('And episode specifiers (with ranges):')
@@ -1395,7 +1397,7 @@ known_commands:dict[str,dict[str,tuple|Callable|str]] = {
 	'unmark': {
 		'alias': ('M', 'um'),
 		'handler': cmd_unmark,
-		'help': 'Unmark a series/season/episode - reverse of `mark`.',
+		'help': f'Unmark a series/season/episode - reverse of {_c}mark{_0}.',
 	},
 	'archive': {
 		'alias': ('A', ),
