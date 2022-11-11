@@ -39,7 +39,7 @@ _configuration_defaults:dict[str, ValueType] = {
 
 if os.getenv(env_debug):
 	_debug_log = pjoin(user_config_home, 'episode_manager', 'debug.log')
-	_debug_fp = open(_debug_log, 'w+')
+	_debug_fp = open(_debug_log, 'w')
 	def debug(*args, **kw):
 		print(*args, **kw, file=_debug_fp)
 else:

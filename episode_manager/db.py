@@ -8,6 +8,7 @@ from tempfile import mkstemp
 import enum
 
 from . import config
+from .config import debug
 from .utils import read_json, write_json, warning_prefix, cap, now_datetime
 from .styles import _0, _00, _0B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _L, _S, _u, _EOL
 
@@ -42,9 +43,9 @@ def load(file_path:str|None=None) -> dict:
 	db = read_json(db_file)
 	t1 = time.time()
 
-	if config.get_bool('debug'):
+	if debug:
 		ms = (t1 - t0)*1000
-		print(f'{_f}[db: read %d entries in %.1fms; v%d]{_0}' % (len(db) - 1, ms, meta_get(db, meta_version_key)), file=sys.stderr)
+		debug(f'{_f}[db: read %d entries in %.1fms; v%d]{_0}' % (len(db) - 1, ms, meta_get(db, meta_version_key)))
 
 	_dirty = False
 
@@ -240,8 +241,7 @@ def save(db:dict) -> None:
 
 	global _dirty
 	if not _dirty:
-		if config.get_bool('debug'):
-			print(f'{_f}[db: save ignored; not dirty]{_0}')
+		debug(f'{_f}[db: save ignored; not dirty]{_0}')
 		return
 
 	_dirty = False
@@ -280,10 +280,10 @@ def save(db:dict) -> None:
 
 		os.rename(tmp_name, db_file)
 
-		if config.get_bool('debug'):
+		if debug:
 			ms = (t1 - t0)*1000
 			ms2 = (t3 - t2)*1000
-			print(f'{_f}[db: wrote %d entries in %.1fms (%.1fms); v%d]{_0}' % (len(db) - 1, ms, ms2, meta_get(db, meta_version_key)), file=sys.stderr)
+			debug(f'{_f}[db: wrote %d entries in %.1fms (%.1fms); v%d]{_0}' % (len(db) - 1, ms, ms2, meta_get(db, meta_version_key)))
 
 	else:
 		print(f'{_E}ERROR{_00} Failed saving series database: %s' % str(err))
@@ -525,8 +525,6 @@ WEEK = 7*DAY
 
 def should_update(series:dict) -> bool:
 
-	debug = config.get_bool('debug')
-
 	# never updated -> True
 	# archived -> False
 	# ended -> False
@@ -538,21 +536,21 @@ def should_update(series:dict) -> bool:
 
 	# TODO: take seen episodes into account?
 
-	if debug: print(f'\x1b[33;1m{series["title"]}\x1b[m', end='')
+	debug(f'\x1b[33;1m{series["title"]}\x1b[m', end='')
 
 	last_check = meta_get(series, meta_update_check_key)
 	if not last_check:  # no updates whatsoever
-		if debug: print('  never updated -> \x1b[32;1mTrue\x1b[m')
+		debug('  never updated -> \x1b[32;1mTrue\x1b[m')
 		return True
 
 	if series_state(series) & (State.ARCHIVED | State.COMPLETED) > 0:
-		if debug: print('  archived -> \x1b[31;1mFalse\x1b[m')
+		debug('  archived -> \x1b[31;1mFalse\x1b[m')
 		return False
 
 	if series.get('status') in ('ended', 'canceled'):
 		# it's assumed we already have all the necessary info (most importantly the episodes)
-		#if debug: print(f'  \x1b[3m{series["status"]}\x1b[m -> \x1b[31;1mFalse\x1b[m')
-		if debug: print('\r\x1b[K', end='')
+		#debug(f'  \x1b[3m{series["status"]}\x1b[m -> \x1b[31;1mFalse\x1b[m')
+		debug('\r\x1b[K', end='')
 		return False
 
 	last_check = datetime.fromisoformat(last_check)
@@ -564,17 +562,17 @@ def should_update(series:dict) -> bool:
 		last_update = datetime.fromisoformat(update_history[-1])
 		age = int((now_datetime() - max(last_check, last_update)).total_seconds())
 		age = cap(age, None, 2*WEEK)
-		if debug: print(f'  \x1b[35;1mhistory\x1b[m/', end='')
+		debug(f'  \x1b[35;1mhistory\x1b[m/', end='')
 
 	else:
 		age = int((now_datetime() - last_check).total_seconds())
-		if debug: print(f'  \x1b[36;1mlast\x1b[m/', end='')
+		debug(f'  \x1b[36;1mlast\x1b[m/', end='')
 		age = cap(age, None, simple_age_cap)
 
-	if debug: print(f'{age/DAY:.1f} days', end='')
+	debug(f'{age/DAY:.1f} days', end='')
 
 	if age < simple_age_cap:
-		if debug: print(f' < {simple_age_cap//DAY} \x1b[31;1mFalse\x1b[m')
+		debug(f' < {simple_age_cap//DAY} \x1b[31;1mFalse\x1b[m')
 		return False
 
 
@@ -582,23 +580,13 @@ def should_update(series:dict) -> bool:
 
 	expired = now_datetime() > check_expiry
 
-	if debug:
-		print(f'  expiry:{str(check_expiry)[:19]}', end='')
-		if expired:
-			print(' \x1b[32;1mTrue\x1b[m')
-		else:
-			print(' \x1b[31;1mFalse\x1b[m')
+	debug(f'  expiry:{str(check_expiry)[:19]}', end='')
+	if expired:
+		debug(' \x1b[32;1mTrue\x1b[m')
+	else:
+		debug(' \x1b[31;1mFalse\x1b[m')
 
 	return expired
-
-	# updated_stamp = meta_get(series, meta_updated_key)
-	# if not updated_stamp:
-	# 	return True, None
-	#
-	# updated = datetime.fromisoformat(updated_stamp)
-	# age_seconds = int((now_datetime() - updated).total_seconds())
-	# # print('%s updated:' % series['title'], updated, 'age:', age_seconds, max_age_seconds)
-	# return age_seconds > max_age_seconds, updated
 
 
 

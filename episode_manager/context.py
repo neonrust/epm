@@ -24,16 +24,13 @@ class Context:
 		self.db:dict[str,dict] = {}
 
 	def invoke(self, width:int) -> str|None:
-		self.debug = config.get_bool('debug')
-
 		load_db = getattr(self.handler, 'load_db', True)
 		if load_db:
 			self.load()
 
-		if self.debug:
-			print('[ctx] command:', self.command)
-			print('      ARGS:', self.command_arguments)
-			print('      OPTS:', self.command_options)
+		debug('[ctx] command:', self.command)
+		debug('      ARGS:', self.command_arguments)
+		debug('      OPTS:', self.command_options)
 
 		if not self.command_arguments and not self.command_options:
 			self.command_arguments = [*self.default_command_arguments]
@@ -64,8 +61,7 @@ class Context:
 		while args:
 			arg = args.pop(0)
 
-			if self.debug:
-				print('check arg: "%s"' % arg)
+			debug('check arg: "%s"' % arg)
 
 			if arg.startswith('-'):
 				if not self.command:
@@ -73,31 +69,25 @@ class Context:
 						raise BadUsageError()
 
 					# attempt to interpret as a global option
-					if self.debug:
-						print('  try global opt: "%s"' % arg)
+					debug('  try global opt: "%s"' % arg)
 					if self._eat_option(None, arg, args, self.global_options, unknown_ok=True):
-						if self.debug:
-							print('  -> global opt:', arg)
+						debug('  -> global opt:', arg)
 						continue
 
 					self.set_command(default_command)
-					if self.debug:
-						print('  -> cmd: %s (default)' % self.command)
+					debug('  -> cmd: %s (default)' % self.command)
 
-				if self.debug:
-					print('  opt:', arg, '(cmd: %s)' % self.command)
+				debug('  opt:', arg, '(cmd: %s)' % self.command)
 
 				self._eat_option(self.command, arg, args, command_options)  # will exit if not correct
 				continue
 
 			if not self.command and not arg.startswith('.'):
-				if self.debug:
-					print('  try cmd: "%s"' % arg)
+				debug('  try cmd: "%s"' % arg)
 				cmd = self._resolve_cmd(arg)
 				if cmd:
 					self.set_command(cmd)
-					if self.debug:
-						print('  -> cmd = %s' % self.command)
+					debug('  -> cmd = %s' % self.command)
 					continue
 
 			if not self.command:
@@ -105,13 +95,11 @@ class Context:
 					arg = arg[1: ]
 
 				self.set_command(default_command)
-				if self.debug:
-					print('  -> cmd = %s (default)' % self.command)
+				debug('  -> cmd = %s (default)' % self.command)
 
 			if self.command:
 				command_arguments.append(arg)
-				if self.debug:
-					print('  -> "%s" [%s]' % (self.command, ' '.join(command_arguments)))
+				debug('  -> "%s" [%s]' % (self.command, ' '.join(command_arguments)))
 
 			else:
 				raise RuntimeError('Bug: unhandled argument: "%s"' % arg)

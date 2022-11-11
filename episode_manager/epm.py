@@ -14,7 +14,7 @@ from typing import Callable, Any
 
 from . import tmdb, progress, config, utils, db, db as m_db
 from .context import Context, BadUsageError
-from .config import Store
+from .config import Store, debug
 from .utils import term_size, warning_prefix, plural, clrline, now_datetime, now_stamp
 from .db import State, meta_get, meta_set, meta_has, meta_del, meta_copy, meta_seen_key, meta_archived_key, \
 	meta_added_key, meta_update_check_key, meta_update_history_key, meta_list_index_key, meta_next_list_index_key, \
@@ -273,22 +273,22 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 	if all_unseen_eps:
 		show_next = False
 
-	if ctx.debug:
+	if debug:
 		def _bool_color(b:bool) -> str:
 			if b:
 				return f'{_g}True{_0}'
 			return f'\x1b[31;1mFalse{_0}'
-		print('  list_all:       ', _bool_color(list_all))
-		print('  only_archived:  ', _bool_color(only_archived))
-		print('  only_started:   ', _bool_color(only_started))
-		print('  only_planned:   ', _bool_color(only_planned))
-		print('  only_abandoned: ', _bool_color(only_abandoned))
-		print('  with_unseen_eps:', _bool_color(with_unseen_eps))
-		print('  all_unseen_eps: ', _bool_color(all_unseen_eps))
-		print('  future_eps:     ', _bool_color(future_eps))
-		print('  seen_eps:       ', _bool_color(seen_eps))
-		print('  show_next:      ', _bool_color(show_next))
-		print('  show_details:   ', _bool_color(show_details))
+		debug('  list_all:       ', _bool_color(list_all))
+		debug('  only_archived:  ', _bool_color(only_archived))
+		debug('  only_started:   ', _bool_color(only_started))
+		debug('  only_planned:   ', _bool_color(only_planned))
+		debug('  only_abandoned: ', _bool_color(only_abandoned))
+		debug('  with_unseen_eps:', _bool_color(with_unseen_eps))
+		debug('  all_unseen_eps: ', _bool_color(all_unseen_eps))
+		debug('  future_eps:     ', _bool_color(future_eps))
+		debug('  seen_eps:       ', _bool_color(seen_eps))
+		debug('  show_next:      ', _bool_color(show_next))
+		debug('  show_details:   ', _bool_color(show_details))
 
 	find_state:State|None = State.ACTIVE
 	if list_all:
@@ -381,9 +381,8 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 	if not all_unseen_eps:
 		ep_limit = 1
 
-	if ctx.debug:
-		print('  ep_limit:', ep_limit)
-		print('  episodes from date:', from_date)
+	debug('  ep_limit:', ep_limit)
+	debug('  episodes from date:', from_date)
 
 	was_refreshed = {}
 	refresh_subset = [sid for _, sid in series_list]
@@ -393,8 +392,7 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 		is_archived = meta_has(series, meta_archived_key)
 
 		seen, unseen = series_seen_unseen(series, from_date)
-		# if ctx.debug:
-		# 	print(f'{_f}"{series["title"]}" seen: {len(seen)} unseen: {len(unseen)}{_0}')
+		# debug(f'{_f}"{series["title"]}" seen: {len(seen)} unseen: {len(unseen)}{_0}')
 
 		if with_unseen_eps and not unseen:
 			continue
@@ -1818,8 +1816,7 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, 
 			for sid in to_refresh
 		)
 
-		if config.get_bool('debug'):
-			print('changes since:', oldest_refresh)
+		debug('changes since:', oldest_refresh)
 
 		changes = tmdb.changes(to_refresh, oldest_refresh, include=include_changes, progress=show_ch_progress)
 
@@ -1827,8 +1824,7 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, 
 
 		for series_id, changes in zip(list(to_refresh), changes):
 			series = db[series_id]
-			if config.get_bool('debug'):
-				print(series_id, series['title'], 'changes:', changes)
+			debug(series_id, series['title'], 'changes:', changes)
 
 			if not changes:
 				to_refresh.remove(series_id)
@@ -1855,8 +1851,7 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, 
 	if latest_update_time is None:
 		latest_update_time_str = now_stamp()
 	else:
-		if config.get_bool('debug'):
-			print('extracted latest update time:', latest_update_time)
+		debug('extracted latest update time:', latest_update_time)
 		latest_update_time_str = latest_update_time.isoformat(' ')
 
 
