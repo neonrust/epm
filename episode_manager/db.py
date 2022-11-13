@@ -470,7 +470,7 @@ def next_unseen_episode(series:dict) -> dict|None:
 	last_seen = (0, 0)
 	for seen_key in seen.keys():
 		season, episode = [int(n) for n in seen_key.split(':')]
-		if season > last_seen[0] or episode > last_seen[1]:
+		if season > last_seen[0] or (season == last_seen[0] and episode > last_seen[1]):
 			last_seen = (season, episode)
 
 	if last_seen == (0, 0):
