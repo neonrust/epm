@@ -1965,8 +1965,6 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=Fals
 
 	# this function should never touch the BG color
 
-	# print('width 0:  ', width)
-
 	episode_title_margin = 1
 
 	ep = episode
@@ -1990,21 +1988,15 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=Fals
 	season_ep = f'{left_pad}{_0}{season_ep}{_0}'
 	width -= s_ep_max_w + episode_title_margin
 
-	# print('width S.E:', width, len(left_pad), s_ep_w, s_ep_max_w)
-
 	# Depending on episode release date:
 	#   in the future    -> show how long until release (or nothing if only_released=True)
 	#   in th past       -> show the date
 	#   same date as now -> show 'TODAY'
 
-
 	ep_date = ep.get('date')
 
 	future = False
 	if isinstance(ep_date, str):
-		# ep['date'] = '2026-11-11'
-		# ep['date'] = (now_datetime().date() + timedelta(days=-2)).isoformat()
-
 		dt = date.fromisoformat(ep_date)
 		now_date = now_datetime().date()
 		diff = (dt - now_date).total_seconds()
@@ -2019,10 +2011,6 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=Fals
 
 	# TODO: if 'ep_date' is "recent past" (configurable),
 	#   show like "2 weeks ago", which, however, is wider (use "wks"/"mons" ?)
-
-	# print('date:', ep['date'])
-	# print('future:', future)
-	# print('today:', today)
 
 	ep_time_w = len('999 months')  # the longest variant of date or duration
 	ep_time = None
@@ -2043,8 +2031,6 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=Fals
 		ep_time = f'{ep_date}'
 		time_style = ''
 
-	# print('width 2:', width)
-
 	if not ep_time or not include_time:
 		ep_time = ''
 		ep_time_w = 0
@@ -2052,39 +2038,24 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=Fals
 	if ep_time:
 		width -= 1 + ep_time_w
 		ep_time = f' {time_style}{ep_time:>{ep_time_w}}{_0}'
-		#ep_time = '|' + 'T'*ep_time_w
-	# ep_time = ''
-
-	# print('width TIM:', width, ep_time_w)
 
 	runtime = ep.get('runtime')
 	if runtime and isinstance(runtime, int):
 		runtime_str = ' %dmin' % runtime  # could use fmt_duration() but we only want minutes here
-		#runtime_str = 'r'*10
 		width -= len(runtime_str)
 	else:
 		runtime_str = ''
-
-	# print('width RT: ', width)
-
-	# print('width 3:', width)
 
 	s = ''
 	if prefix and prefix is not None:
 		s += f'{prefix}'
 		width -= len(prefix)
 
-	# print('width 4:', width)
-
-	#ep['title'] = 'N'*(width + 3)
-
 	# not enough space: truncate & ellipt
 	if len(ep['title']) > width:
 		width -= 1
 		ep['title'] = ep['title'][:width] + '…'
 		# TODO: to fancy fade to black at the end ;)
-
-	# print('width 5:', width)
 
 	s += f'{season_ep:}{" "*episode_title_margin}{_o}{ep["title"]:{width}}{_f}{runtime_str}{_0}{ep_time}'
 
