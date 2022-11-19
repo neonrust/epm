@@ -632,6 +632,8 @@ meta_list_index_key = 'list_index'
 meta_next_list_index_key = 'next_list_index'
 meta_update_check_key = 'update_check'
 meta_update_history_key = 'update_history'
+meta_rating_key = 'rating'
+meta_rating_comment_key = 'rating_comment'
 meta_version_key = 'version'
 
 

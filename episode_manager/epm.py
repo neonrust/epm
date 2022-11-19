@@ -17,7 +17,7 @@ from .context import Context, BadUsageError
 from .config import Store, debug
 from .utils import term_size, warning_prefix, plural, clrline, now_datetime, now_stamp
 from .db import State, meta_get, meta_set, meta_has, meta_del, meta_copy, meta_seen_key, meta_archived_key, \
-	meta_added_key, meta_update_check_key, meta_update_history_key, meta_list_index_key, meta_next_list_index_key, \
+	meta_added_key, meta_update_check_key, meta_update_history_key, meta_rating_key, meta_rating_comment_key, meta_list_index_key, meta_next_list_index_key, \
 	series_state, should_update, series_seen_unseen, episode_key, next_unseen_episode, last_seen_episode
 from .styles import _0, _00, _0B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _u, _w, _EOL
 
@@ -1334,6 +1334,53 @@ def _config_help() -> None:
 setattr(cmd_config, 'help', _config_help)
 
 
+def cmd_rate(ctx:Context, *args, **kw) -> Error|None:
+	if len(ctx.command_arguments) < 2:
+		return Error('Required arguments missing')
+
+	index, series_id, err = db.find_single_series(ctx.db, ctx.command_arguments.pop(0))
+	if series_id is None or err is not None:
+		if isinstance(err, list):
+			found = err
+			# TODO: if more than 4, list the "closest" ones
+			message = ', '.join(f'{list_index_style}{idx}{_0} %s' % format_title(ctx.db[sid]) for idx, sid in found[:4])
+			return Error(f'Ambiguous ({len(found)}): %s' % message)
+		return Error(err)
+
+	series = ctx.db[series_id]
+	if not meta_get(series, meta_archived_key):
+		return Error('only archived series may be rated')
+
+	rating = ctx.command_arguments.pop(0)
+	try:
+		rating = int(rating)
+	except ValueError as ve:
+		return Error(f'invalid rating: {ve}')
+
+	meta_set(series, meta_rating_key, rating)
+
+	print(f'Rated {format_title(series)}: {_b}{rating}{_0}')
+
+	comment = ctx.option('comment')
+	if comment:
+		meta_set(series, meta_rating_comment_key, comment)
+		print(f'{_b}Comment:{_0} {comment}')
+	else:
+		comment = meta_get(series, meta_rating_comment_key)
+		if comment:
+			print(f'{_b}Existing comment:{_0} {comment}')
+
+	ctx.save()
+
+def _rate_help() -> None:
+	print_cmd_usage('rate', '<series> <rating>')
+	print(f'    {_o}<series>     {_0} Rate specified series')
+	print(f'    {_o}<rating>     {_0} Number, 0 - 10')
+
+setattr(cmd_rate, 'help', _rate_help)
+
+
+
 def cmd_help(ctx:Context, *args, **kw) -> Error|None:
 	if ctx.command_arguments:
 		arg = ctx.command_arguments.pop(0)
@@ -1403,6 +1450,11 @@ known_commands:dict[str,dict[str,tuple|Callable|str]] = {
 		'alias': ('A', ),
 		'handler': cmd_archive,
 		'help': 'Archving series - hides from default `list` and not refreshed.',
+	},
+	'rate': {
+		'alias': ('comment', ),
+		'handler': cmd_rate,
+		'help': 'Rate archived series, with optional comment.',
 	},
 	'restore': {
 		'alias': ('R', ),
@@ -1521,6 +1573,9 @@ command_options = {
 	},
 	'refresh': {
 		'force':             { 'name': ('-f', '--force'),        'help': 'Refresh whether needed or not' },
+	},
+	'rate': {
+		'comment':           { 'name': ('-c', '--comment'), 'arg': str, 'help': 'Add comment to rating' },
 	},
 	'add': {
 		**__opt_max_hits,
@@ -2118,6 +2173,16 @@ def print_series_details(index:int, series:dict, width:int, gray:bool=False) -> 
 		print(f'       {_c}{_i}no episodes{_0}')
 
 	print(f'    {_o}Added:{_0}', meta_get(series, meta_added_key))
+
+	if meta_get(series, meta_archived_key):
+		rating = meta_get(series, meta_rating_key)
+		comment = meta_get(series, meta_rating_comment_key)
+		if rating is not None:
+			print(f'    {_o}Rating:{_0}  {_i}{_c}{rating}{_0}', end='')
+		if comment:
+			print(f'  "{_i}{comment}{_0}"')
+		else:
+			print()
 
 
 def print_archive_status(series:dict) -> None:
