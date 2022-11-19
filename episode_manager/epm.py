@@ -2284,7 +2284,10 @@ def print_seen_status(series:dict, gray: bool=False, summary=True, next=True, la
 		print(format_episode_title('', seen[-1], gray=gray, include_season=True, today=True, width=width - len(header)))
 
 	if next and unseen:
-		header = f'{ind}Next: '
+		if not seen:
+			header = f'{ind}First:'
+		else:
+			header = f'{ind}Next: '
 		s = format_episode_title('', unseen[0], gray=gray, include_season=True, today=True, width=width - len(header))
 		if s:
 			if gray:
