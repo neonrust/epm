@@ -232,7 +232,7 @@ def cmd_info(ctx:Context, width:int) -> Error|None:
 
 def _info_help() -> None:
 	print_cmd_usage('info', '<series>')
-	print(f'    {_o}# / <IMDb ID>       {_0} Series to show')
+	print(f'    {_o}<series>       {_0} Series to show')
 
 setattr(cmd_info, 'help', _info_help)
 
@@ -244,9 +244,8 @@ def cmd_unseen(ctx:Context, width:int) -> Error|None:
 	return cmd_show(ctx, width)
 
 def _unseen_help() -> None:
-	print_cmd_usage('unseen', '<options> <search...>')
-	print(f'    {_o}# / <IMDb ID>       {_0} Show only specific')
-	print(f'    {_o}[<pattern>]         {_0} Show only matching')
+	print_cmd_usage('unseen', '<options> [<series>]')
+	print(f'    {_o}<series>            {_0} Show only specific series')
 
 setattr(cmd_unseen, 'help', _unseen_help)
 
@@ -457,8 +456,8 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 	return None
 
 def _show_help() -> None:
-	print_cmd_usage('show', '<options> [<title search> | IMDb ID]')
-	print(f'    {_o}[<title search>]     {_0} Show only matching series')
+	print_cmd_usage('show', '<options> [<series>]')
+	print(f'    {_o}<series>     {_0} Show only matching series')
 
 setattr(cmd_show, 'help', _show_help)
 
@@ -903,8 +902,8 @@ def cmd_delete(ctx:Context, width:int) -> Error|None:
 	return None
 
 def _delete_help() -> None:
-	print_cmd_usage('delete', '# / <IMDb ID>')
-	print(f'    {_o}# / <IMDb ID>{_0}')
+	print_cmd_usage('delete', '<series>')
+	print(f'    {_o}<series>{_0}')
 
 setattr(cmd_delete, 'help', _delete_help)
 
@@ -1120,11 +1119,11 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 	return None
 
 def _mark_help() -> None:
-	print_cmd_usage('mark', '# / <IMDb ID> [<season / episode specifier>]')
-	print(f'    {_o}# / <IMDb ID> [next]             {_0} Next logical episode')
-	print(f'    {_o}# / <IMDb ID> <season> <episode> {_0} Episodes')
-	print(f'    {_o}# / <IMDb ID> <season>           {_0} Seasons')
-	print(f'    {_o}# / <IMDb ID> all                {_0} Whole series')
+	print_cmd_usage('mark', '<series> [<season / episode specifier>]')
+	print(f'    {_o}<series> [next]             {_0} Next logical episode')
+	print(f'    {_o}<series> <season> <episode> {_0} Episodes')
+	print(f'    {_o}<series> <season>           {_0} Seasons')
+	print(f'    {_o}<series> all                {_0} Whole series')
 	print('Also support ranges:')
 	print('  > %s mark 42 1 1-5' % PRG)
 	print('And episode specifiers (with ranges):')
@@ -1138,11 +1137,11 @@ def cmd_unmark(*args, **kwargs) -> Error|None:
 	return cmd_mark(*args, **kwargs)
 
 def _unmark_help() -> None:
-	print_cmd_usage('unmark', '# / <IMDb ID> [<season / episode specifier>]')
-	print(f'    {_o}# / <IMDb ID> [last]             {_0} Last marked episode')
-	print(f'    {_o}# / <IMDb ID> <season> <episode> {_0} Episodes')
-	print(f'    {_o}# / <IMDb ID> <season>           {_0} Seasons')
-	print(f'    {_o}# / <IMDb ID> all                {_0} Whole series')
+	print_cmd_usage('unmark', '<series> [<season / episode specifier>]')
+	print(f'    {_o}<series> [last]             {_0} Last marked episode')
+	print(f'    {_o}<series> <season> <episode> {_0} Episodes')
+	print(f'    {_o}<series> <season>           {_0} Seasons')
+	print(f'    {_o}<series> all                {_0} Whole series')
 	print('Also support ranges:')
 	print('  > %s unmark 42 1 1-5' % PRG)
 	print('And episode specifiers (with ranges):')
@@ -1185,8 +1184,8 @@ def cmd_archive(ctx:Context, width:int, archiving:bool=True, print_state_change:
 	return None
 
 def _archive_help() -> None:
-	print_cmd_usage('archive', '# / <IMDb ID>')
-	print(f'    {_o}# / <IMDb ID>{_0}')
+	print_cmd_usage('archive', '<series>')
+	print(f'    {_o}<series>{_0}')
 
 setattr(cmd_archive, 'help', _archive_help)
 
@@ -1222,8 +1221,8 @@ def cmd_restore(*args, **kwargs) -> Error|None:
 	return cmd_archive(*args, **kwargs)
 
 def _restore_help() -> None:
-	print_cmd_usage('restore', '# / <IMDb ID>')
-	print(f'    {_o}# / <IMDb ID>{_0}')
+	print_cmd_usage('restore', '<series>')
+	print(f'    {_o}<series>{_0}')
 
 setattr(cmd_restore, 'help', _restore_help)
 
@@ -1260,9 +1259,8 @@ def cmd_refresh(ctx:Context, width:int) -> Error|None:
 
 
 def _refresh_help() -> None:
-	print_cmd_usage('refresh', '# / <IMDb ID> {_o}|{_n} <pattern>')
-	print(f'    {_o}[# / <IMDb ID>]     {_0} Only the specified series')
-	print(f'    {_o}[<pattern>]         {_0} Only matching series')
+	print_cmd_usage('refresh', '[<series>]')
+	print(f'    {_o}<series>      {_0} Only the specified series')
 
 setattr(cmd_refresh, 'help', _refresh_help)
 
