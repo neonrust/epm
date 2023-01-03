@@ -2312,9 +2312,13 @@ def option_def(command:str|None, option:str|None=None):
 
 
 def print_cmd_usage(command:str, syntax:str='') -> None:
-	summary = known_commands[command].get('help')
+	entry = known_commands[command]
+	summary = entry.get('help')
 	if summary:
 		print(f'{_b}{summary}{_0}')
+	aliases = entry.get('alias')
+	if aliases:
+		print(f'{_b}Alias:{_0} %s' % ', '.join(aliases))
 	print(f'{_b}Usage:{_0} %s {_c}%s{_0} %s' % (PRG, command, syntax))
 
 
@@ -2341,7 +2345,7 @@ def print_cmd_option_help(command:str|None, print_label:bool=True) -> None:
 				option = '%s %s' % (option, arg_string)
 
 			text = opt.get('help', '')
-			print('   %-20s %s' % (option, text))
+			print('   %-22s %s' % (option, text))
 
 
 def arg_placeholder(option, arg_type):
