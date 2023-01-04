@@ -223,12 +223,13 @@ def faked_now() -> bool:
 
 def calltrace(num_frames:int=2):
 	import inspect
+	from .config import debug
 	stack = inspect.stack()
-	print(f'{_b}{stack[1].function}{_o}(){_0}:')
+	debug(f'{_b}{stack[1].function}{_o}(){_0}:')
 	frames = stack[2: 2 + max(0, num_frames)]
 	for fr in frames:
 		fname = basename(fr.filename)
-		print(f'  {_f}from{_0} {_B}{fr.function}{_o}(){_0}  {_f}{fname}{_c}:{_0}{_f}{fr.lineno}{_0}')
+		debug(f'  {_f}from{_0} {_B}{fr.function}{_o}(){_0}  {_f}{fname}{_c}:{_0}{_f}{fr.lineno}{_0}')
 
 
 
