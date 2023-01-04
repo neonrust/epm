@@ -400,9 +400,9 @@ def meta_copy(source:dict, destination:dict) -> None:
 	destination[meta_key] = source.get(meta_key, {})
 
 
-def changelog_add(obj:dict, message:str):
+def changelog_add(obj:dict, message:str, subject:str|None=None):
 	log = meta_get(obj, meta_changes_log_key, [])
-	log.append(message)
+	log.append((message, subject))
 	meta_set(obj, meta_changes_log_key, log)
 
 
