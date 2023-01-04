@@ -349,9 +349,6 @@ def rollback():
 	db = load()
 	log = meta_get(db, meta_changes_log_key, [])
 
-	# only during testing make a "undo backup" :)
-	shutil.copy2(db_file, db_file + '.undo-debug')
-
 	unmk_backup(first_backup, db_file)
 
 	# decreease the index of all other backups
