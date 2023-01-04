@@ -1330,6 +1330,28 @@ setattr(cmd_config, 'load_db', False)
 setattr(cmd_config, 'help', _config_help)
 
 
+def cmd_undo(ctx:Context, *args, **kw) -> Error|None:
+	remaining, message, changes = db.rollback()
+	if remaining is None and message:
+		return Error(message)
+
+	print(f'Restored database from backup {message}')
+
+	if changes:
+		print('These changes were undone:')
+		for ch in changes:
+			print(f'  - {_i}{_g}{ch}{_0}')
+		print()
+
+	print(f'Remaining backups: {remaining}')
+
+def _undo_help() -> None:
+	print_cmd_usage('undo')
+
+setattr(cmd_undo, 'load_db', False)
+setattr(cmd_undo, 'help', _undo_help)
+
+
 def cmd_rate(ctx:Context, *args, **kw) -> Error|None:
 	if len(ctx.command_arguments) < 2:
 		return Error('Required arguments missing')
@@ -1467,6 +1489,11 @@ known_commands:dict[str,dict[str,tuple|Callable|str]] = {
 		'handler': cmd_config,
 		'help': 'Configure aspects of %s, e.g. defaults.' % PRG,
 	},
+	'undo': {
+		'alias': (),
+		'handler': cmd_undo,
+		'help': 'Undo last change.'
+	},
 	'help': {
 		'alias': (),
 		'handler': cmd_help,
@@ -1535,7 +1562,7 @@ __opt_series_sorting = {
 command_options = {
 	None: { # i.e. global options
 		'fake-now':          { 'name': '--fake-now', 'arg': date, 'help': 'Simulate a specific "today" date', 'func': _set_fake_date },
-		'no-refresh':        { 'name': '--no-refresh',           'help': 'Don\'t refresh any series data', 'func': _disable_refresh },
+		'no-refresh':        { 'name': '--no-refresh',            'help': 'Don\'t refresh any series data', 'func': _disable_refresh },
 	},
 	'show': {
 		'all':               { 'name': ('-a', '--all'),          'help': 'List also archived series' },

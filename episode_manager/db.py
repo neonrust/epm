@@ -170,21 +170,25 @@ _compressors:list[dict[str, str | list[str]]] = [
 		'binary': 'zstd',
 		'extension': '.zst',
 		'args': ['-7', '--quiet', '--threads=0'],
+		'unargs': ['--decompress', '--quiet', '--threads=0'],
 	},
 	{
 		'binary': 'lz4',
 		'extension': '.lz4',
 		'args': ['-9', '--quiet'],
+		'unargs': ['--decompress', '--quiet'],
 	},
 	{
 		'binary': 'gzip',
 		'extension': '.gz',
 		'args': ['-8', '--quiet'],
+		'unargs': ['--decompress', '--quiet'],
 	},
 	{
 		'binary': 'xz',
 		'extension': '.xz',
 		'args': ['-2', '--quiet', '--threads=0'],
+		'unargs': ['--decompress', '--quiet', '--threads=0'],
 	}
 ]
 
@@ -203,43 +207,62 @@ def mk_uncompressed_backup(source:str, destination:str) -> bool:
 	os.rename(source, destination)
 	return True
 
-if _compressor:
-	def mk_backup(source:str, destination:str) -> bool:
+def unmk_uncompressed_backup(source:str, destination:str) -> bool:
+	os.rename(source, destination)
+	return True
 
+if _compressor:
+	def _run_compressor(source:str, destination:str, args:list[str], label:str) -> bool:
 		# copy file access & mod timestamps from source
 		file_info = os.stat(source)
 
-		destination += _compressor.get('extension', _compressor['binary']) # type: ignore
+		command_line = [_compressor['binary']] + args # type: ignore
 
 		try:
-			command_line = [_compressor['binary']] + _compressor['args'] # type: ignore
-
 			infp = open(source, 'rb')
 			outfp = open(destination, 'wb')
 
 			comp = run(command_line, stdin=infp, stdout=outfp, universal_newlines=False)
 			success = comp.returncode == 0
 
-			if success:
-				# file compressed into destination, we can safely remove the source(s)
-				os.remove(source)
-			else:
-				# compression failed, just fall back to uncomrpessed
-				print(f'[{warning_prefix()}] Compression failed: {source} -> {destination}: {comp.returncode}', file=sys.stderr)
-				mk_uncompressed_backup(source, destination)
+			infp.close()
+			outfp.close()
 
+			if not success:
+				raise RuntimeError('exit code: %d' % comp.returncode)
+
+			# file compressed into destination
+
+			# we can safely remove the source(s)
+			os.remove(source)
 			# copy timestamps from source file
 			os.utime(destination, (file_info.st_atime, file_info.st_mtime))
 
 		except Exception as e:
-			print(f'{_E}ERROR{_00} Failed compressing database backup: %s' % str(e))
-			os.rename(source, destination)
+			# (de)compression failed, just fall back to uncomrpessed
+			print(f'{_E}ERROR{_00} {label} backup failed: {e}')
 			success = False
 
 		return success
 
+	def mk_backup(source:str, destination:str) -> bool:
+		if not _run_compressor(source, destination, _compressor['args'], 'Compressing'):
+			mk_uncompressed_backup(source, destination)
+			return False
+
+		return True
+
+	def unmk_backup(source:str, destination:str) -> bool:
+		if not _run_compressor(source, destination, _compressor['unargs'], 'Decompressing'):
+			unmk_uncompressed_backup(source, destination)
+			return False
+
+		return True
+
 else:
 	mk_backup = mk_uncompressed_backup
+	unmk_backup = unmk_uncompressed_backup
+
 
 def _backup_name(idx:int) -> str:
 	if _compressor:
@@ -299,6 +322,49 @@ def save(db:dict) -> None:
 		debug(f'{_f}[db: wrote %d entries in %.1fms (%.1fms); v%d]{_0}' % (len(db) - 1, ms, ms2, meta_get(db, meta_version_key)))
 
 
+def backups() -> list[str]:
+	"""Returns a list of existing backups, most recent first."""
+
+	db_file = active_file()
+
+	bups = []
+
+	for idx in range(1, config.get_int('num-backups') + 1):
+		bup_name = _backup_name(idx)
+		if pexists(bup_name):
+			bups.append(bup_name)
+
+	return bups
+
+
+def rollback():
+	"""Restore the most recent backup (and shift all backups indices)"""
+
+	db_file = active_file()
+
+	first_backup = _backup_name(1)
+	if not pexists(first_backup):
+		return None, f'Backup "{first_backup}" does not exist', None
+
+	db = load()
+	log = meta_get(db, meta_changes_log_key, [])
+
+	# only during testing make a "undo backup" :)
+	shutil.copy2(db_file, db_file + '.undo-debug')
+
+	unmk_backup(first_backup, db_file)
+
+	# decreease the index of all other backups
+	num_remaining = 0
+	for idx in range(2, config.get_int('num-backups') + 1):
+		org_file = _backup_name(idx)
+		if pexists(org_file):
+			num_remaining += 1
+			unshifted_file = _backup_name(idx - 1)
+			os.rename(org_file, unshifted_file)
+
+	return num_remaining, first_backup, log
+
 
 def meta_get(obj:dict, key:str, def_value:Any=None) -> Any:
 	return obj.get(meta_key, {}).get(key, def_value)
@@ -326,6 +392,12 @@ def meta_copy(source:dict, destination:dict) -> None:
 	global _dirty
 	_dirty = True
 	destination[meta_key] = source.get(meta_key, {})
+
+
+def changelog_add(obj:dict, message:str):
+	log = meta_get(obj, meta_changes_log_key, [])
+	log.append(message)
+	meta_set(obj, meta_changes_log_key, log)
 
 
 class State(enum.IntFlag):
@@ -645,6 +717,7 @@ meta_update_history_key = 'update_history'
 meta_rating_key = 'rating'
 meta_rating_comment_key = 'rating_comment'
 meta_version_key = 'version'
+meta_changes_log_key = 'changes_log'
 
 
 meta_legacy_keys = (
