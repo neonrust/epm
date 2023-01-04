@@ -376,15 +376,21 @@ def meta_has(obj:dict, key:str) -> bool:
 
 def meta_set(obj:dict, key: str, value) -> None:
 	global _dirty
-	_dirty = True
+
 	if meta_key not in obj:
+		_dirty = True
 		obj[meta_key] = {}
+
+	if value != obj[meta_key][key]:
+		_dirty = True
+
 	obj[meta_key][key] = value
 
 
 def meta_del(obj:dict, key: str) -> None:
 	global _dirty
-	_dirty = True
+	if key in obj.get(meta_key, {}):
+		_dirty = True
 	obj[meta_key].pop(key, None)
 
 
