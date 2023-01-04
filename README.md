@@ -15,39 +15,42 @@ Series that have been added to epm can have one of these user states:
 - `archived`  All episodes seen and series is "ended" or "cancelled". 
 - `abandoned` Archived but only partially seen.
 
-Most of these states are implicit and automatic. 
-However, the `archive` state can be manually controlled by the `archive` and `restore` commands.
+Transitions between these states are mostly implicit and automatic. 
+However, the `archived` state can be manually controlled by the `archive` and `restore` commands.
 
 How a series moves between the states is hopefully quite obvious when using the tool.
 
 However, a few "trickier" ones exist:
 
-- Command `mark`: If in `planned` moves to `started`. If it was the last episode (and the series is ended/cancelled), moves to `archived`.
-- Command `unmark`: If in `archived` moves to `started`. If no episode marked afterwards, moves to `planned`.
+- Command `mark`: If in `planned` state, it moves to `started`. If the last episode was marked (and the series is ended/cancelled), it moves to `archived` state.
+- Command `unmark`: If in `archived` state, it moves to `started`. If no episode marked at all afterwards, it moves to `planned` state.
 
 
 ## Dependencies
 
-Requires Python 3.9, because type hints are used (the lower-case variants).
+Requires Python 3.9 (type hints are used, the lower-case variants).
 
 - [requests](https://pypi.org/project/requests)
-- [orjson](https://pypi.org/project/orjson) (optional)
-- `zstd` command-line tool. For compressing backups. (optional)
 - [API key for The Movie Database](https://www.themoviedb.org)
+- [orjson](https://pypi.org/project/orjson) (highly recommended, but optional)
+- `zstd` command-line tool. For compressing backups. (optional)
 
 <img alt="TMDb" src="https://www.themoviedb.org/assets/2/v4/logos/v2/blue_short-8e7b30f73a4020692ccca9c88bafe5dcb6f8a62a4c6bc55cd9ba82bb2cd95f6c.svg" width="50%">
 
 
 ## File locations
 
-The configuration, series "database" and their states is stored in:
+All of EPM's stored data and configuration is located in:
 
-    ~/.config/epm/
-	
-Mainly the file `series` but also numbered backups of it.
-If this is important to you, it's recommended to backup this directory.
+    ~/.config/episode_manager/
+
+Mainly the database file `series` but also its backups.
+If this data is important to you, backing up this directory is highly recommended.
 
 Run-time configuration is stored in the file `config`.
+
+Arguably, the database file should be under ~/.local/share but I preferred to keep it all in one place.
+
 
 ## TMDb API key
 
