@@ -18,7 +18,7 @@ from .config import Store, debug
 from .utils import term_size, warning_prefix, plural, clrline, now_datetime, now_stamp
 from .db import State, meta_get, meta_set, meta_has, meta_del, meta_copy, meta_seen_key, meta_archived_key, \
 	meta_added_key, meta_update_check_key, meta_update_history_key, meta_rating_key, meta_rating_comment_key, meta_list_index_key, meta_next_list_index_key, \
-	series_state, should_update, series_seen_unseen, episode_key, next_unseen_episode, last_seen_episode
+	series_state, series_seen_unseen, episode_key, next_unseen_episode, last_seen_episode
 from .styles import _0, _00, _0B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _u, _w, _EOL
 
 import sys
@@ -354,8 +354,14 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 			)
 		sort_key = _sort_key
 
+	# refresh everything
+	modified = refresh_series(ctx.db, width=width)
+
 	find_idx, match = find_idx_or_match(ctx.command_arguments, country=filter_country, director=filter_director, writer=filter_writer, cast=filter_cast, year=filter_year)
 	series_list = db.indexed_series(ctx.db, state=find_state, index=find_idx, match=match, sort_key=sort_key)
+
+	if not series_list:
+		return no_series(ctx.db, filtered=bool(match or filter_director or filter_writer or filter_cast or filter_year))
 
 	print(f'Listing ', end='')
 	if only_started: print(f'{_u}started{_0} ', end='')
@@ -368,12 +374,8 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 	if match: print(', matching: %s' % getattr(match, 'styled_description'), end='')
 	print(f'{_0}.')
 
-	if not series_list:
-		return no_series(ctx.db, filtered=bool(match or filter_director or filter_writer or filter_cast or filter_year))
-
 	num_shown = 0
 	num_archived = 0
-	did_refresh = False
 
 	from_date = now_datetime() if not future_eps else None
 	ep_limit = None
@@ -382,9 +384,6 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 
 	debug('  ep_limit:', ep_limit)
 	debug('  episodes from date:', from_date)
-
-	was_refreshed = {}
-	refresh_subset = [sid for _, sid in series_list]
 
 	for index, series_id in series_list:
 		series = ctx.db[series_id]
@@ -397,21 +396,6 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 			continue
 
 		num_shown += 1
-
-		if not did_refresh and should_update(series):
-			# we've come upon a series that is stale,
-			# do a refresh, of the remainder of the list we're printing (so we don't need to do it again)
-			modified = refresh_series(ctx.db, width, subset=refresh_subset, affected=was_refreshed)
-			did_refresh |= max(modified) > 0
-
-		refresh_subset.remove(series_id)
-
-		if did_refresh and series_id in was_refreshed:
-			how = was_refreshed[series_id]
-			if isinstance(how, State) and how & State.ARCHIVED > 0:
-				# this series was just archived by the refresh, skip it (unless we actually want to see archived)
-				if not (only_archived or list_all):
-					continue
 
 		# alternate styling odd/even rows
 		hilite = (num_shown % 2) == 0
@@ -443,7 +427,7 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 		if hilite:
 			print(f'{_00}{_K}', end='')
 
-	if did_refresh:
+	if max(modified) > 0:
 		ctx.save()
 
 	if num_shown == 0:
@@ -463,6 +447,11 @@ setattr(cmd_show, 'help', _show_help)
 
 
 def cmd_calendar(ctx:Context, width:int) -> Error|None:
+
+	# refresh everything
+	modified = refresh_series(ctx.db, width=width)
+	if max(modified) > 0:
+		ctx.save()
 
 	cal = Calendar(MONDAY)
 	begin_date:date = date.today()
@@ -484,8 +473,6 @@ def cmd_calendar(ctx:Context, width:int) -> Error|None:
 
 	episodes_by_date:dict[date,list] = {}
 
-	did_refresh = False
-
 	# collect episodes over num_weeks*7
 	#   using margin of one extra week, because it's simpler
 	end_date = start_date + timedelta(days=(num_weeks + 1)*7)
@@ -494,10 +481,6 @@ def cmd_calendar(ctx:Context, width:int) -> Error|None:
 
 		if meta_has(series, meta_archived_key):
 			continue
-
-		if not did_refresh and should_update(series):
-			mods = refresh_series(ctx.db, width)
-			did_refresh |= max(mods) > 0
 
 		# faster to loop backwards?
 		for ep in series.get('episodes', []):
@@ -510,9 +493,6 @@ def cmd_calendar(ctx:Context, width:int) -> Error|None:
 				if ep_date not in episodes_by_date:
 					episodes_by_date[ep_date] = []
 				episodes_by_date[ep_date].append( (series, ep) )
-
-	if did_refresh:
-		ctx.save()
 
 	wday_idx = -1
 	days_todo = num_weeks*7
@@ -923,13 +903,12 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 			return Error(f'Ambiguous ({len(found)}): %s' % message)
 		return Error(err)
 
-	series = ctx.db[series_id]
+	# we've come upon a series that is stale, do a refresh
+	modified = refresh_series(ctx.db, width, subset=[series_id])
+	if max(modified) > 0:
+		ctx.save()
 
-	if should_update(series):
-		# we've come upon a series that is stale, do a refresh
-		modified = refresh_series(ctx.db, width, subset=[series_id])
-		if max(modified) > 0:
-			ctx.save()
+	series = ctx.db[series_id]
 
 	season:None|range|tuple = None
 	episode:None|range|tuple = None
@@ -1856,11 +1835,11 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, 
 	subset = subset or m_db.all_ids(db)
 
 	if force:
-		to_refresh = subset #{ sid: last_update(db[sid])[1] for sid in subset }
+		to_refresh = subset
 	else:
 		def check_expired(_, series:dict) -> bool:
-			return should_update(series)
-		to_refresh = list(m_db.filter_map(db, filter=check_expired, map=lambda sid, srs: sid))#last_updated))
+			return m_db.should_update(series)
+		to_refresh = list(m_db.filter_map(db, filter=check_expired, map=lambda sid, _: sid))
 
 	to_refresh = list(sorted(to_refresh, key=int))
 

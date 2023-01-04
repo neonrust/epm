@@ -639,30 +639,36 @@ def should_update(series:dict) -> bool:
 	simple_age_cap = 4*DAY
 
 	update_history = meta_get(series, meta_update_history_key)
-	if update_history:
-		# time between the last (actual) update and the last time it was checked
-		last_update = datetime.fromisoformat(update_history[-1])
-		age = int((now_datetime() - max(last_check, last_update)).total_seconds())
-		age = cap(age, None, 2*WEEK)
-		debug(f'  \x1b[35;1mhistory\x1b[m/', end='')
+	if not update_history:
+		debug(' \x1b[35;1mno updates\x1b[m \x1b[32;1mTrue\x1b[m')
+		return True
 
+	# time between the last (actual) update and the last time it was checked
+	last_update = datetime.fromisoformat(update_history[-1])
+	capped = ''
+
+	if len(update_history) >= 2:
+		# interval between two last updates
+		# TODO: average interval between all updates, or longest/shortest?
+		update_interval_sum = timedelta(0)
+		for idx in range(1, len(update_history)):
+			update_interval_sum += datetime.fromisoformat(update_history[idx]) - datetime.fromisoformat(update_history[idx - 1])
+		update_interval = update_interval_sum/(len(update_history) - 1)
+		if update_interval.total_seconds() >= 2*WEEK:
+			update_interval = timedelta(seconds=2*WEEK)
+			capped = 'cap'
+		debug(f' history interval:{update_interval.total_seconds()/DAY:.1f}d \x1b[33;1m{capped}\x1b[m', end='')
 	else:
-		age = int((now_datetime() - last_check).total_seconds())
-		debug(f'  \x1b[36;1mlast\x1b[m/', end='')
-		age = cap(age, None, simple_age_cap)
+		update_interval = now_datetime() - last_update
+		if update_interval.total_seconds() >= 2*WEEK:
+			update_interval = timedelta(seconds=2*WEEK)
+			capped = 'cap'
+		debug(f' last interval:{update_interval.total_seconds()/DAY:.1f}d \x1b[33;1m{capped}\x1b[m', end='')
 
-	debug(f'{age/DAY:.1f} days', end='')
+	next_update = last_check + update_interval
+	debug(f'  next:{str(next_update)[:19]}', end='')
 
-	if age < simple_age_cap:
-		debug(f' < {simple_age_cap//DAY} \x1b[31;1mFalse\x1b[m')
-		return False
-
-
-	check_expiry = last_check + timedelta(seconds=age)
-
-	expired = now_datetime() > check_expiry
-
-	debug(f'  expiry:{str(check_expiry)[:19]}', end='')
+	expired = now_datetime() > next_update
 	if expired:
 		debug(' \x1b[32;1mTrue\x1b[m')
 	else:
