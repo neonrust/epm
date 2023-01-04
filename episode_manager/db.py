@@ -166,21 +166,23 @@ _compressor: dict | None = None
 _compressors:list[dict[str, str | list[str]]] = [
 	{
 		'binary': 'zstd',
-		'args': ['-10', '-q', '-T0'],
 		'extension': '.zst',
+		'args': ['-7', '--quiet', '--threads=0'],
 	},
 	{
 		'binary': 'lz4',
-		'args': ['-9', '-q'],
+		'extension': '.lz4',
+		'args': ['-9', '--quiet'],
 	},
 	{
 		'binary': 'gzip',
-		'args': ['-8', '-q'],
 		'extension': '.gz',
+		'args': ['-8', '--quiet'],
 	},
 	{
 		'binary': 'xz',
-		'args': ['-2', '-q', '-T', '0'],
+		'extension': '.xz',
+		'args': ['-2', '--quiet', '--threads=0'],
 	}
 ]
 
