@@ -1323,12 +1323,10 @@ def cmd_config(ctx:Context, width:int) -> Error|None:
 
 	return None
 
-
-setattr(cmd_config, 'load_db', False)
-
 def _config_help() -> None:
 	print_cmd_usage('config', '[<command>] <options>')
 
+setattr(cmd_config, 'load_db', False)
 setattr(cmd_config, 'help', _config_help)
 
 

@@ -24,10 +24,12 @@ def is_dirty() -> bool:
 def code_version() -> int:
 	return DB_VERSION
 
+def active_file() -> str:
+	return str(config.get('paths/series-db'))
 
-def load(file_path:str|None=None) -> dict:
+def load() -> dict:
 
-	db_file = file_path or str(config.get('paths/series-db'))
+	db_file = active_file()
 
 	if not db_file or not isinstance(db_file, str) or len(db_file) < 2:
 		raise RuntimeError('Invalid series db file path: %r' % db_file)
@@ -239,6 +241,13 @@ if _compressor:
 else:
 	mk_backup = mk_uncompressed_backup
 
+def _backup_name(idx:int) -> str:
+	if _compressor:
+		return '%s.%d%s' % (active_file(), idx, _compressor['extension'])
+
+	return '%s.%d' % (active_file(), idx)
+
+
 def save(db:dict) -> None:
 
 	global _dirty
@@ -250,14 +259,10 @@ def save(db:dict) -> None:
 
 	# utils.calltrace()
 
-	db_file = str(config.get('paths/series-db'))
+	db_file = active_file()
 
 	if not pexists(db_file):
 		os.makedirs(dirname(db_file), exist_ok=True)
-
-	def backup_name(idx) -> str:
-		return '%s.%d' % (db_file, idx)
-
 
 	# write to a temp file and then rename it afterwards
 	tmp_name = mkstemp(dir=dirname(db_file))[1]
@@ -265,31 +270,34 @@ def save(db:dict) -> None:
 	err = write_json(tmp_name, db)
 	t1 = time.time()
 
-	if err is None:
-		# rotate backups
-		for idx in range(config.get_int('num-backups')):
-			if pexists(backup_name(idx)):
-				os.rename(backup_name(idx), backup_name(idx + 1))
-
-		# current file becomes first backup (<name>.1)
-		# TODO: spawn background process to compress to make it appear faster?
-		#   might run into (more) race-conditions of course
-
-		# backup existing(old) db file to 'series.1'
-		t2 = time.time()
-		mk_backup(db_file, backup_name(1))
-		t3 = time.time()
-
-		os.rename(tmp_name, db_file)
-
-		if debug:
-			ms = (t1 - t0)*1000
-			ms2 = (t3 - t2)*1000
-			debug(f'{_f}[db: wrote %d entries in %.1fms (%.1fms); v%d]{_0}' % (len(db) - 1, ms, ms2, meta_get(db, meta_version_key)))
-
-	else:
+	if err is not None:
 		print(f'{_E}ERROR{_00} Failed saving series database: %s' % str(err))
 		os.remove(tmp_name)
+		return
+
+	# rotate backups
+	for idx in range(config.get_int('num-backups') - 1, 0, -1):
+		org_file = _backup_name(idx)
+		if pexists(org_file):
+			shifted_file = _backup_name(idx + 1)
+			os.rename(org_file, shifted_file)
+
+	# current file becomes first backup (<name>.1)
+	# TODO: spawn background process to compress to make it appear faster?
+	#   might run into (more) race-conditions of course
+
+	# backup existing(old) db file to 'series.1'
+	t2 = time.time()
+	mk_backup(db_file, _backup_name(1))
+	t3 = time.time()
+
+	os.rename(tmp_name, db_file)
+
+	if debug:
+		ms = (t1 - t0)*1000
+		ms2 = (t3 - t2)*1000
+		debug(f'{_f}[db: wrote %d entries in %.1fms (%.1fms); v%d]{_0}' % (len(db) - 1, ms, ms2, meta_get(db, meta_version_key)))
+
 
 
 def meta_get(obj:dict, key:str, def_value:Any=None) -> Any:
