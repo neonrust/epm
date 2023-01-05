@@ -128,6 +128,7 @@ class Context:
 
 	def load(self) -> None:
 		self.db = db.load()
+		db.changelog_clear(self.db)
 
 
 	def save(self) -> None:

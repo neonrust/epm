@@ -378,7 +378,7 @@ def meta_set(obj:dict, key: str, value) -> None:
 		_dirty = True
 		obj[meta_key] = {}
 
-	if value != obj[meta_key][key]:
+	if value != obj[meta_key].get(key):
 		_dirty = True
 
 	obj[meta_key][key] = value
@@ -402,6 +402,11 @@ def changelog_add(obj:dict, message:str, subject:str|None=None):
 	log.append((message, subject))
 	meta_set(obj, meta_changes_log_key, log)
 
+def changelog_clear(obj:dict):
+	global _dirty
+	dirtyBefore = _dirty
+	meta_del(obj, meta_changes_log_key)
+	_dirty = dirtyBefore
 
 class State(enum.IntFlag):
 	PLANNED   = 0x01  # added but nothing seen (yet)

@@ -25,8 +25,8 @@ import sys
 
 PRG = basename(sys.argv[0])
 
-VERSION = '0.17'
-VERSION_DATE = '2022-12-07'
+VERSION = '0.18'
+VERSION_DATE = '2023-01-05'
 
 
 def start():
@@ -1062,7 +1062,7 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 	print_series_title(index, series, width, imdb_id=series.get('imdb_id'))
 
 	for ep in touched_episodes:
-		changelog_add(ctx.db, f'{"M" if marking else "Unm"}arked episode s%d%02d' % (ep['season'], ep['episode']), meta_get(series, meta_list_index_key))
+		changelog_add(ctx.db, f'{"M" if marking else "Unm"}arked episode s%de%02d' % (ep['season'], ep['episode']), series_id)
 		print('  %s' % format_episode_title(None, ep, include_season=True, width=width - 2))
 
 
@@ -1156,7 +1156,7 @@ def cmd_archive(ctx:Context, width:int, archiving:bool=True, print_state_change:
 			return Error('Not archived: %s' % format_title(series))
 
 
-	_do_archive(series, width, archiving=archiving, print_state_change=print_state_change)
+	_do_archive(ctx.db, series_id, width, archiving=archiving, print_state_change=print_state_change)
 
 	ctx.save()
 
@@ -1169,7 +1169,9 @@ def _archive_help() -> None:
 setattr(cmd_archive, 'help', _archive_help)
 
 
-def _do_archive(series:dict, width:int, archiving:bool=True, print_state_change:bool=True):
+def _do_archive(db:dict, series_id:str, width:int, archiving:bool=True, print_state_change:bool=True):
+	series = db[series_id]
+
 	state_before = series_state(series)
 	seen, unseen = series_seen_unseen(series)
 	partly_seen = seen and unseen
@@ -1180,7 +1182,7 @@ def _do_archive(series:dict, width:int, archiving:bool=True, print_state_change:
 			print(' (abandoned)', end='')
 		print(f':{_00}')
 		meta_set(series, meta_archived_key, now_stamp())
-		changelog_add(ctx.db, 'Archived series', meta_get(series, meta_list_index_key))
+		changelog_add(db, 'Archived series', series_id)
 
 	else:
 		print(f'{_b}Series restored', end='')
@@ -1188,7 +1190,7 @@ def _do_archive(series:dict, width:int, archiving:bool=True, print_state_change:
 			print(' (resumed)', end='')
 		print(f':{_00}')
 		meta_del(series, meta_archived_key)
-		changelog_add(ctx.db, 'Restored series', meta_get(series, meta_list_index_key))
+		changelog_add(db, 'Restored series', series_id)
 
 	index = meta_get(series, meta_list_index_key)
 	print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width)
@@ -1320,8 +1322,14 @@ def cmd_undo(ctx:Context, *args, **kw) -> Error|None:
 
 	if changes:
 		print('These changes were undone:')
-		for ch in changes:
-			print(f'  - {_i}{_g}{ch}{_0}')
+		for message, series_id in changes:
+			print(f'  - {_i}{_o}{message}', end='')
+			if series_id:
+				series = ctx.db[series_id]
+				print(f'{_0}; {format_title(series)}')
+			else:
+				print(_0)
+
 		print()
 
 	print(f'Remaining backups: {remaining}')
@@ -1329,7 +1337,6 @@ def cmd_undo(ctx:Context, *args, **kw) -> Error|None:
 def _undo_help() -> None:
 	print_cmd_usage('undo')
 
-setattr(cmd_undo, 'load_db', False)
 setattr(cmd_undo, 'help', _undo_help)
 
 
@@ -1357,7 +1364,7 @@ def cmd_rate(ctx:Context, *args, **kw) -> Error|None:
 		return Error(f'invalid rating: {ve}')
 
 	meta_set(series, meta_rating_key, rating)
-	changelog_add(ctx.db, 'Rated series', meta_get(series, meta_list_index_key))
+	changelog_add(ctx.db, 'Rated series', series_id)
 
 	print(f'Rated {format_title(series)}: {_b}{rating}{_0}')
 
@@ -1945,7 +1952,7 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, 
 
 	for series_id, (details, episodes) in zip(to_refresh, result):
 
-		changelog_add(ctx.db, 'Refreshed', meta_get(db[series_id], meta_list_index_key))
+		changelog_add(ctx.db, 'Refreshed', series_id)
 
 		series = details
 		series['episodes'] = episodes
@@ -1966,7 +1973,7 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, 
 				# status changed to 'ended', have we seen all episodes?
 				if len(series.get('episodes', [])) == len(meta_get(series, meta_seen_key, [])):
 					# allright then, we have no further business with this series
-					_do_archive(series, width=width)
+					_do_archive(ctx.db, series_id, width=width)
 					if affected is not None:
 						affected[series_id] = State.ARCHIVED
 
