@@ -16,7 +16,7 @@ from . import tmdb, progress, config, utils, db, db as m_db
 from .context import Context, BadUsageError
 from .config import Store, debug
 from .utils import term_size, warning_prefix, plural, clrline, now_datetime, now_stamp
-from .db import State, meta_get, meta_set, meta_has, meta_del, meta_copy, meta_seen_key, meta_archived_key, \
+from .db import State, meta_get, meta_set, meta_has, meta_del, meta_copy, meta_seen_key, meta_archived_key, changelog_add, \
 	meta_added_key, meta_update_check_key, meta_update_history_key, meta_rating_key, meta_rating_comment_key, meta_list_index_key, meta_next_list_index_key, \
 	series_state, series_seen_unseen, episode_key, next_unseen_episode, last_seen_episode
 from .styles import _0, _00, _0B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _u, _w, _EOL
@@ -674,13 +674,11 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> Error|None:
 
 	ctx.db[series_id] = new_series
 
+	changelog_add(ctx.db, 'Added series', series_id)
+
 	modified = refresh_series(ctx.db, width, subset=[series_id], force=True)
 	if max(modified) > 0:
 		ctx.save()
-
-	# TODO: offer to mark seasons as seen?
-
-	ctx.save()
 
 	print(f'{_b}Series added:{_00}')
 
@@ -866,10 +864,11 @@ def cmd_delete(ctx:Context, width:int) -> Error|None:
 
 
 	# delete it
-
 	del ctx.db[series_id]
 
-	# "roll back" next index, if we deleted the last series
+	changelog_add(ctx.db, 'Deleted series "%s"' % series['title'])
+
+	# if we deleted the last series, roll back "next index"
 	next_index = meta_get(ctx.db, meta_next_list_index_key)
 	if index + 1 == next_index:
 		meta_set(ctx.db, meta_next_list_index_key, index)
@@ -1063,6 +1062,7 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 	print_series_title(index, series, width, imdb_id=series.get('imdb_id'))
 
 	for ep in touched_episodes:
+		changelog_add(ctx.db, f'{"M" if marking else "Unm"}arked episode s%d%02d' % (ep['season'], ep['episode']), meta_get(series, meta_list_index_key))
 		print('  %s' % format_episode_title(None, ep, include_season=True, width=width - 2))
 
 
@@ -1180,6 +1180,7 @@ def _do_archive(series:dict, width:int, archiving:bool=True, print_state_change:
 			print(' (abandoned)', end='')
 		print(f':{_00}')
 		meta_set(series, meta_archived_key, now_stamp())
+		changelog_add(ctx.db, 'Archived series', meta_get(series, meta_list_index_key))
 
 	else:
 		print(f'{_b}Series restored', end='')
@@ -1187,6 +1188,7 @@ def _do_archive(series:dict, width:int, archiving:bool=True, print_state_change:
 			print(' (resumed)', end='')
 		print(f':{_00}')
 		meta_del(series, meta_archived_key)
+		changelog_add(ctx.db, 'Restored series', meta_get(series, meta_list_index_key))
 
 	index = meta_get(series, meta_list_index_key)
 	print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width)
@@ -1355,6 +1357,7 @@ def cmd_rate(ctx:Context, *args, **kw) -> Error|None:
 		return Error(f'invalid rating: {ve}')
 
 	meta_set(series, meta_rating_key, rating)
+	changelog_add(ctx.db, 'Rated series', meta_get(series, meta_list_index_key))
 
 	print(f'Rated {format_title(series)}: {_b}{rating}{_0}')
 
@@ -1941,6 +1944,9 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, 
 	max_history = config.get_int('num-update-history')
 
 	for series_id, (details, episodes) in zip(to_refresh, result):
+
+		changelog_add(ctx.db, 'Refreshed', meta_get(db[series_id], meta_list_index_key))
+
 		series = details
 		series['episodes'] = episodes
 		meta_copy(db[series_id], series)
