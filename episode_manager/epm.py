@@ -265,6 +265,9 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 	show_next = ctx.has_option('next-episode')
 	no_summary =  ctx.has_option('no-seen-summary')
 	show_details = ctx.has_option('details')
+	show_terse = ctx.has_option('terse')
+	if show_terse:
+		show_details = False
 
 	if [only_started, only_planned, only_archived, only_abandoned].count(True) > 1:
 		return Error('Specify only one of "started", "planned", "archived" and "abandoned"')
@@ -288,6 +291,7 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 		debug('  seen_eps:       ', _bool_color(seen_eps))
 		debug('  show_next:      ', _bool_color(show_next))
 		debug('  show_details:   ', _bool_color(show_details))
+		debug('  show_terse:     ', _bool_color(show_terse))
 
 	find_state:State|None = State.ACTIVE
 	if list_all:
@@ -406,23 +410,25 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 			print_series_details(index, series,width=width, gray=is_archived and not only_archived)
 		else:
 			print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width, gray=is_archived and not only_archived)
-			print_archive_status(series)
+			if not show_terse:
+				print_archive_status(series)
 
-		# don't print "next" if we're printing all unseen episodes anyway
-		print_seen_status(
-			series,
-			summary=(not show_next or not all_unseen_eps) and not no_summary,
-			last=not show_next and not all_unseen_eps,
-			next=show_next or not all_unseen_eps,
-			width=width,
-			gray=is_archived and not only_archived,
-		)
+		if not show_terse:
+			# don't print "next" if we're printing all unseen episodes anyway
+			print_seen_status(
+				series,
+				summary=(not show_next or not all_unseen_eps) and not no_summary,
+				last=not show_next and not all_unseen_eps,
+				next=show_next or not all_unseen_eps,
+				width=width,
+				gray=is_archived and not only_archived,
+			)
 
-		if seen_eps:
-			print_episodes(series, seen, width=width)
+			if seen_eps:
+				print_episodes(series, seen, width=width)
 
-		if all_unseen_eps or (future_eps and not show_next):
-			print_episodes(series, unseen, width=width, limit=ep_limit, also_future=future_eps)
+			if all_unseen_eps or (future_eps and not show_next):
+				print_episodes(series, unseen, width=width, limit=ep_limit, also_future=future_eps)
 
 		if hilite:
 			print(f'{_00}{_K}', end='')
@@ -1569,6 +1575,7 @@ command_options = {
 		'no-seen-summary':   { 'name': '--no-summary',           'help': "Don't show seen summary" },
 
 		'details':           { 'name': ('-I', '--details'),      'help': 'Show more details' },
+		'terse':             { 'name': '-T',                     'help': 'Show less details' },
 
 		'director':          { 'name': '--director', 'arg': str, 'help': 'Filter by director, substring match' },
 		'writer':            { 'name': '--writer',  'arg': str,  'help': 'Filter by writer, substring match' },
