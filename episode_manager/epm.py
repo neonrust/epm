@@ -1958,7 +1958,7 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, 
 
 	for series_id, (details, episodes) in zip(to_refresh, result):
 
-		changelog_add(ctx.db, 'Refreshed', series_id)
+		changelog_add(db, 'Refreshed', series_id)
 
 		series = details
 		series['episodes'] = episodes
