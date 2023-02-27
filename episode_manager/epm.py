@@ -333,9 +333,8 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 	sorting = ctx.command_options.get('sorting', [])
 	if sorting:
 		def _series_key(series:dict, key:str) -> str:
-			if key in series:
-				return str(series[key])
-			elif key == 'earliest':
+			# possible values are checked by _opt_sort_names
+			if key == 'earliest':
 				next_ep = next_unseen_episode(series)
 				if not next_ep:
 					return '\xff'
@@ -345,11 +344,11 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 				if not last_ep or marked is None:
 					return '\xff'
 				return marked
-			elif key == 'added':
-				return meta_get(series, meta_added_key)
+			elif key in series:  # possible values are checked by _opt_sort_names
+				return str(series[key])
 			else:
-				# should never happen, since the values are verified by _opt_sort_names
-				return ''
+				# possible values are checked by _opt_sort_names
+				return meta_get(series, key) or ''
 
 		def _sort_key(item:tuple[str,dict]) -> Any:
 			index, series = item
@@ -1541,7 +1540,7 @@ __opt_max_hits = {
 	}
 }
 
-_opt_sort_names = _opt_list(',', ['title', 'year', 'earliest', 'latest', 'added'])  # TODO: e.g. "earliest"
+_opt_sort_names = _opt_list(',', ['title', 'year', 'earliest', 'latest', 'added', 'archived'])  # TODO: e.g. "earliest"
 
 __opt_series_sorting = {
 	'sorting': {
