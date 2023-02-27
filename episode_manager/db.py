@@ -179,17 +179,23 @@ _compressors:list[dict[str, str | list[str]]] = [
 		'unargs': ['--decompress', '--quiet'],
 	},
 	{
+		'binary': 'plzip',
+		'extension': '.lz',
+		'args': ['-1', '--quiet'],  # parallel by default
+		'unargs': ['--decompress', '--quiet'],
+	},
+	{
+		'binary': 'lzip',
+		'extension': '.lz',
+		'args': ['-1', '--quiet'],
+		'unargs': ['--decompress', '--quiet'],
+	},
+	{
 		'binary': 'gzip',
 		'extension': '.gz',
 		'args': ['-8', '--quiet'],
 		'unargs': ['--decompress', '--quiet'],
 	},
-	{
-		'binary': 'xz',
-		'extension': '.xz',
-		'args': ['-2', '--quiet', '--threads=0'],
-		'unargs': ['--decompress', '--quiet', '--threads=0'],
-	}
 ]
 
 import shutil
