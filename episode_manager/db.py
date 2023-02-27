@@ -632,16 +632,14 @@ def should_update(series:dict) -> bool:
 
 	# TODO: take seen episodes into account?
 
-	debug(f'\x1b[33;1m{series["title"]}\x1b[m', end='')
-
 	last_check = meta_get(series, meta_update_check_key)
 	if not last_check:  # no updates whatsoever
-		debug('  never updated -> \x1b[32;1mTrue\x1b[m')
 		return True
 
 	if series_state(series) & (State.ARCHIVED | State.COMPLETED) > 0:
-		debug('  archived -> \x1b[31;1mFalse\x1b[m')
 		return False
+
+	debug(f'\x1b[33;1m{series["title"]}\x1b[m', end='')
 
 	if series.get('status') in ('ended', 'canceled'):
 		# it's assumed we already have all the necessary info (most importantly the episodes)
