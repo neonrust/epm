@@ -1323,10 +1323,10 @@ def cmd_undo(ctx:Context, *args, **kw) -> Error|None:
 	if remaining is None and message:
 		return Error(message)
 
-	print(f'Restored database from backup {message}')
+	print(f'{_c}Restored database from backup:{_0} {message}')
 
 	if changes:
-		print('These changes were undone:')
+		print('These changes were reverted:')
 		for message, series_id in changes:
 			print(f'  - {_i}{_o}{message}', end='')
 			if series_id:
