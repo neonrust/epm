@@ -1227,7 +1227,7 @@ def cmd_refresh(ctx:Context, width:int) -> Error|None:
 	series_list = db.indexed_series(ctx.db, state=State.ACTIVE | State.COMPLETED, index=find_idx, match=match)
 
 	if not series_list:
-		return Error('Nothing matched: %s' % (getattr(match, 'pattern') if match else find_idx))
+		return Error('Nothing matched')
 
 	subset = [series_id for index, series_id in series_list]
 
