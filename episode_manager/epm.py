@@ -2107,8 +2107,8 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=Fals
 		time_style = _g
 
 	elif isinstance(ep_date, str):
-		#ep_time = f'{ep_date}'
-		ep_time = ''
+		ep_time = f'{ep_date}'
+		#ep_time = ''
 		time_style = ''
 
 	if not ep_time or not include_time:
