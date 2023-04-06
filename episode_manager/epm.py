@@ -1899,7 +1899,10 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, 
 
 		for series_id, changes in zip(list(to_refresh), changes):
 			series = db[series_id]
-			debug(series_id, series['title'], 'changes:', changes)
+			debug(series_id, series['title'], 'changes:')
+			for ch in changes:
+				items = ch['items']
+				debug('  %s (%d items)' % (ch['key'], len(ch['items'])))
 
 			if not changes:
 				to_refresh.remove(series_id)
