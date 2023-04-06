@@ -1224,7 +1224,7 @@ def cmd_refresh(ctx:Context, width:int) -> Error|None:
 	forced |= bool(find_idx or match)
 
 	# only refresh non-archived series
-	series_list = db.indexed_series(ctx.db, state=State.ACTIVE, index=find_idx, match=match)
+	series_list = db.indexed_series(ctx.db, state=State.ACTIVE | State.COMPLETED, index=find_idx, match=match)
 
 	if not series_list:
 		return Error('Nothing matched: %s' % (getattr(match, 'pattern') if match else find_idx))
