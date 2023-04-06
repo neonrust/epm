@@ -16,7 +16,7 @@ from . import tmdb, progress, config, utils, db, db as m_db
 from .context import Context, BadUsageError
 from .config import Store, debug
 from .utils import term_size, warning_prefix, plural, clrline, now_datetime, now_stamp
-from .db import State, meta_get, meta_set, meta_has, meta_del, meta_copy, meta_seen_key, meta_archived_key, changelog_add, \
+from .db import State, set_dirty, meta_get, meta_set, meta_has, meta_del, meta_copy, meta_seen_key, meta_archived_key, changelog_add, \
 	meta_added_key, meta_update_check_key, meta_update_history_key, meta_rating_key, meta_rating_comment_key, meta_list_index_key, meta_next_list_index_key, \
 	series_state, series_seen_unseen, episode_key, next_unseen_episode, last_seen_episode
 from .styles import _0, _00, _0B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _u, _w, _EOL
@@ -1055,6 +1055,8 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 
 	if not touched_episodes:
 		return Error(f'{_c}No episodes %smarked{_0}' % ('' if marking else 'un'))
+
+	set_dirty()
 
 	if marking:
 		print('Marked ', end='')

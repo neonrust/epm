@@ -21,6 +21,10 @@ _dirty = True
 def is_dirty() -> bool:
 	return _dirty
 
+def set_dirty(dirty:bool=True):
+	global _dirty
+	_dirty = dirty
+
 def code_version() -> int:
 	return DB_VERSION
 
@@ -49,23 +53,21 @@ def load() -> dict:
 		ms = (t1 - t0)*1000
 		debug(f'{_f}[db: read %d entries in %.1fms; v%d]{_0}' % (len(db) - 1, ms, meta_get(db, meta_version_key)))
 
-	_dirty = False
+	set_dirty(False)
 
 	_migrate(db)
 
-	if _dirty:
+	if is_dirty():
 		save(db)
 
 	return db
 
 
 def _migrate(db:dict):
-	global _dirty
-
 	# no db meta data, yikes!
 	if meta_key not in db:
 		db[meta_key] = {}
-		_dirty = True
+		set_dirty()
 
 	db_version = db[meta_key].get('version', 0)
 
@@ -135,7 +137,7 @@ def _migrate(db:dict):
 		for series in sorted(db.values(), key=lambda series: meta_get(series, meta_added_key)):
 			meta_set(series, meta_list_index_key, list_index)
 			list_index += 1
-		_dirty = True
+		set_dirty()
 
 	# if no version exists, set to current version
 	if db_version != DB_VERSION:
@@ -148,19 +150,19 @@ def _migrate(db:dict):
 
 	if fixed_legacy_meta:
 		print(f'{_f}Migrated legacy meta-data of {fixed_legacy_meta} series{_0}')
-		_dirty = True
+		set_dirty()
 
 	if fixed_archived:
 		print(f'{_f}Fixed bad "{meta_archived_key}" value of {fixed_archived} series{_0}')
-		_dirty = True
+		set_dirty()
 
 	if fixed_update_history:
 		print(f'{_f}Fixed empty "{meta_update_history_key}" value of {fixed_update_history} series{_0}')
-		_dirty = True
+		set_dirty()
 
 	if fixed_nulls:
 		print(f'{_f}Removed {fixed_nulls} null values{_0}')
-		_dirty = True
+		set_dirty()
 
 
 
@@ -279,12 +281,11 @@ def _backup_name(idx:int) -> str:
 
 def save(db:dict) -> None:
 
-	global _dirty
-	if not _dirty:
+	if not is_dirty():
 		debug(f'{_f}[db: save ignored; not dirty]{_0}')
 		return
 
-	_dirty = False
+	set_dirty(False)
 
 	# utils.calltrace()
 
@@ -378,28 +379,22 @@ def meta_has(obj:dict, key:str) -> bool:
 
 
 def meta_set(obj:dict, key: str, value) -> None:
-	global _dirty
+	set_dirty()
 
 	if meta_key not in obj:
-		_dirty = True
 		obj[meta_key] = {}
-
-	if value != obj[meta_key].get(key):
-		_dirty = True
 
 	obj[meta_key][key] = value
 
 
 def meta_del(obj:dict, key: str) -> None:
-	global _dirty
 	if key in obj.get(meta_key, {}):
-		_dirty = True
+		set_dirty()
 	obj[meta_key].pop(key, None)
 
 
 def meta_copy(source:dict, destination:dict) -> None:
-	global _dirty
-	_dirty = True
+	set_dirty()
 	destination[meta_key] = source.get(meta_key, {})
 
 
@@ -407,12 +402,15 @@ def changelog_add(obj:dict, message:str, subject:str|None=None):
 	log = meta_get(obj, meta_changes_log_key, [])
 	log.append((message, subject))
 	meta_set(obj, meta_changes_log_key, log)
+	set_dirty()
+
+	debug('Logged change:', message, subject)
+
 
 def changelog_clear(obj:dict):
-	global _dirty
-	dirtyBefore = _dirty
+	dirtyBefore = is_dirty()
 	meta_del(obj, meta_changes_log_key)
-	_dirty = dirtyBefore
+	set_dirty(dirtyBefore)
 
 class State(enum.IntFlag):
 	PLANNED   = 0x01  # added but nothing seen (yet)
@@ -501,6 +499,9 @@ def find_single_series(db:dict, needle:str) -> tuple[int | None, str | None, str
 			imdb_id = needle
 		else:
 			find_title = needle.casefold()
+
+	if find_title:
+		debug('find_title:', find_title)
 
 	def flt(_, series:dict) -> bool:
 		passed = True
