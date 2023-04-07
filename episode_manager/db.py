@@ -75,6 +75,7 @@ def _migrate(db:dict):
 	fixed_archived = 0
 	fixed_update_history = 0
 	fixed_nulls = 0
+	fixed_update_history_dups = 0
 
 	for series_id in all_ids(db):
 		series = db[series_id]
@@ -130,6 +131,21 @@ def _migrate(db:dict):
 
 			_del_empty(series)
 
+		history = meta_get(series, meta_update_history_key)
+		if len(history) >=2:
+			history.sort()
+			idx = 0
+			mods = 0
+			while len(history) >= 2 and idx < len(history):
+				if idx > 0 and history[idx - 1] == history[idx]:
+					del history[idx - 1]
+					mods += 1
+				else:
+					idx += 1
+
+			if mods > 0:
+				debug('Removed dup %d history items from %s' % (mods, series['title']))
+				fixed_update_history_dups += mods
 
 	if db_version < 2:
 		# assign list index in added time order
@@ -164,7 +180,9 @@ def _migrate(db:dict):
 		print(f'{_f}Removed {fixed_nulls} null values{_0}')
 		set_dirty()
 
-
+	if fixed_update_history_dups:
+		print(f'{_f}Removed {fixed_update_history_dups} duplicate update history entries{_0}')
+		set_dirty()
 
 _compressor: dict | None = None
 _compressors:list[dict[str, str | list[str]]] = [
