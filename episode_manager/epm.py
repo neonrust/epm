@@ -1984,7 +1984,7 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, 
 				# status changed to 'ended', have we seen all episodes?
 				if len(series.get('episodes', [])) == len(meta_get(series, meta_seen_key, [])):
 					# allright then, we have no further business with this series
-					_do_archive(ctx.db, series_id, width=width)
+					_do_archive(db, series_id, width=width)
 					if affected is not None:
 						affected[series_id] = State.ARCHIVED
 
