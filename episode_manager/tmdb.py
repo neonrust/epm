@@ -242,7 +242,6 @@ def details(title_id:str|list[str]|Iterable, type='series') -> dict:
 			'type',
 			'id',
 			'tagline',
-			'seasons',
 			'created_by',
 			'adult',
 			'episode_run_time',
@@ -265,6 +264,12 @@ def details(title_id:str|list[str]|Iterable, type='series') -> dict:
 		credits = promises[2].result() or {}
 		cast = credits.get('cast', [])
 		crew = credits.get('crew', [])
+
+		seasons = data.pop('seasons', [])
+		specials_info = list(filter(lambda season: season.get('season_number') == 0, seasons))
+		if specials_info:
+			specials_info = specials_info[0]
+			data['specials'] = specials_info.get('episode_count', 1)
 
 		_set_values(data, {
 			'director': lambda ep: _job_people(crew, 'Director'),
@@ -293,7 +298,8 @@ def episodes(series_id:str|list[str]|Iterable, with_details=False, progress:Call
 	ser_details = details(series_id, type='series')
 
 	num_seasons = (ser_details or {}).get('total_seasons', 1)
-	ep_runtime = (ser_details or {}).get('episode_run_time')
+	has_specials = bool(ser_details.get('specials'))
+	standard_ep_runtime = (ser_details or {}).get('episode_run_time')
 
 	def fetch_season(season):
 		data = _query(_qurl('tv/%s/season/%d' % (series_id, season))) or {}
@@ -314,7 +320,8 @@ def episodes(series_id:str|list[str]|Iterable, with_details=False, progress:Call
 			_set_values(data, {
 				'director': lambda ep: _job_people(ep.get('crew', []), 'Director'),
 				'writer': lambda ep: _job_people(ep.get('crew', []), 'Writer'),
-				'guest_cast': lambda ep: list(map(lambda p: p.get('name') or '', ep.get('guest_stars', [])))
+				'guest_cast': lambda ep: list(map(lambda p: p.get('name') or '', ep.get('guest_stars', []))),
+				'season': lambda ep: 'S' if ep.get('season') == 0 else ep.get('season'),
 			})
 			_del_keys(data, [
 				'id',
@@ -336,6 +343,8 @@ def episodes(series_id:str|list[str]|Iterable, with_details=False, progress:Call
 			executor.submit(fetch_season, season)
 			for season in range(1, num_seasons + 1)
 		]
+		if has_specials:
+			promises.append(executor.submit(fetch_season, 0))
 
 	all_episodes = [
 		episode
@@ -343,11 +352,11 @@ def episodes(series_id:str|list[str]|Iterable, with_details=False, progress:Call
 		for episode in promise.result()
 	]
 
-	# if the series contains runtime info, populate each episode (unless already present)
-	if ep_runtime:
+	# set runtime of each episode, if needed and known
+	if standard_ep_runtime:
 		for ep in all_episodes:
 			if not ep.get('runtime'):
-				ep['runtime'] = ep_runtime
+				ep['runtime'] = standard_ep_runtime
 
 	if with_details:
 		return ser_details, all_episodes

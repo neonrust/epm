@@ -923,6 +923,7 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 	#   nothing:                                (next episode)
 	#   'next'                                  (next episode)
 	#   'all'                                   (everything)
+	#   'special'                               (next special)
 	#   single numbers:              1 2        (season 1, episode 2)
 	#   ranges:                      1-2 1-5    (seasons 1-2, episodes 1-5)
 	#   season descriptor:           s1         (season 1, all episodes)
@@ -969,6 +970,15 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 		episode = None
 		incremental = True
 
+	elif len(args) == 1 and args[0].lower() in ('special', 's'):
+		season = ('S', )
+		seen, unseen = db.series_seen_unseen(series)
+		special_eps = [ep for ep in unseen if ep['season'] == 'S']
+		if special_eps:
+			episode = (special_eps[0]['episode'], )
+		else:
+			return Error('no episode marked')
+
 	elif args:
 		arg = args.pop(0)
 
@@ -989,7 +999,10 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 				if len(rng) == 2:
 					season = range(min(rng), max(rng) + 1)
 				else:
-					season = (int(rng[0]), )
+					if rng[0].upper() == 'S':
+						season = 'S'
+					else:
+						season = (int(rng[0]), )
 			except ValueError:
 				return Error(f'Bad season number/range: {season}')
 
@@ -1069,7 +1082,13 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 	print_series_title(index, series, width, imdb_id=series.get('imdb_id'))
 
 	for ep in touched_episodes:
-		changelog_add(ctx.db, f'{"M" if marking else "Unm"}arked episode s%de%02d' % (ep['season'], ep['episode']), series_id)
+		msg = msg = f'{"M" if marking else "Unm"}arked episode '
+		if ep['season'] == 'S':
+			msg += 'S '
+		else:
+			msg += 's%d' % ep['season']
+		msg += 'e%02d' % ep['episode']
+		changelog_add(ctx.db, msg, series_id)
 		print('  %s' % format_episode_title(None, ep, include_season=True, width=width - 2))
 
 
@@ -1677,7 +1696,10 @@ def print_episodes(series:dict, episodes:list[dict], width:int, pre_print:Callab
 
 		season = ep['season']
 		if season != current_season:
-			print(f'{_c}%{indent}s{_0}\r' % (f's%d' % season), end='')
+			if season == 'S':
+				print(f'{_b}%{indent}s {_0}\r' % 'S ', end='')
+			else:
+				print(f'{_c}%{indent}s{_0}\r' % (f's%d' % season), end='')
 			current_season = season
 
 		s = format_episode_title(None, ep, width=ep_width, today=True, seen=has_seen)
@@ -2062,7 +2084,10 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=Fals
 	# left-pad to fill the max width
 	left_pad = ' '*(s_ep_max_w - s_ep_w)
 	if include_season:
-		season_ep = f'\x1b[33ms{_b}{season}{_0}\x1b[33me{_b}{episode:02}'
+		if season == 'S':
+			season_ep = f'{_b}S {_0}\x1b[33me{_b}{episode:02}'
+		else:
+			season_ep = f'\x1b[33ms{_b}{season}{_0}\x1b[33me{_b}{episode:02}'
 	else:
 		season_ep = f'\x1b[33me{_b}{episode:02}'
 
