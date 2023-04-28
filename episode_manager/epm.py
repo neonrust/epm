@@ -650,7 +650,10 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> Error|None:
 		imdb_id = item.get('imdb_id')
 		tail = None
 		if 'total_episodes' in item:
-			tail = '%5d episodes' % item['total_episodes']
+			if 'specials' in item:
+				tail = '%5d eps/%d SP' % (item['total_episodes'], item['specials'])
+			else:
+				tail = '%5d episodes' % item['total_episodes']
 		if current:
 			print(f'\x1b[48;2;60;70;90m{_K}', end='')
 		print_series_title(idx + 1, item, imdb_id=imdb_id, width=width, tail=tail)
@@ -1084,10 +1087,10 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 	for ep in touched_episodes:
 		msg = msg = f'{"M" if marking else "Unm"}arked episode '
 		if ep['season'] == 'S':
-			msg += 'S '
+			msg += 'SP %d' % ep['episode']
 		else:
-			msg += 's%d' % ep['season']
-		msg += 'e%02d' % ep['episode']
+			msg += 's%de%02d' % (ep['season'], ep['episode'])
+
 		changelog_add(ctx.db, msg, series_id)
 		print('  %s' % format_episode_title(None, ep, include_season=True, width=width - 2))
 
@@ -1697,7 +1700,7 @@ def print_episodes(series:dict, episodes:list[dict], width:int, pre_print:Callab
 		season = ep['season']
 		if season != current_season:
 			if season == 'S':
-				print(f'{_b}%{indent}s {_0}\r' % 'S ', end='')
+				print(f'{_b}%{indent}s {_0}\r' % 'SP ', end='')
 			else:
 				print(f'{_c}%{indent}s{_0}\r' % (f's%d' % season), end='')
 			current_season = season
@@ -2074,6 +2077,9 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=Fals
 
 	season = ep['season']
 	episode = ep['episode']
+
+	is_special = season == 'S'
+
 	if include_season:
 		s_ep_max_w = len('s99e999')
 		s_ep_w = len(f's{season}e{episode:02}')
@@ -2085,9 +2091,13 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=Fals
 	left_pad = ' '*(s_ep_max_w - s_ep_w)
 	if include_season:
 		if season == 'S':
-			season_ep = f'{_b}S {_0}\x1b[33me{_b}{episode:02}'
+			season_ep = f'{_b}SP {_0}\x1b[33m{_b}{episode}'
 		else:
 			season_ep = f'\x1b[33ms{_b}{season}{_0}\x1b[33me{_b}{episode:02}'
+
+	elif is_special:
+		season_ep = f'\x1b[33m{_b}{episode}'
+
 	else:
 		season_ep = f'\x1b[33me{_b}{episode:02}'
 
