@@ -17,7 +17,7 @@ from .context import Context, BadUsageError
 from .config import Store, debug
 from .utils import term_size, warning_prefix, plural, clrline, now_datetime, now_stamp
 from .db import State, set_dirty, meta_get, meta_set, meta_has, meta_del, meta_copy, meta_seen_key, meta_archived_key, changelog_add, \
-	meta_added_key, meta_update_check_key, meta_update_history_key, meta_rating_key, meta_rating_comment_key, meta_list_index_key, meta_next_list_index_key, \
+	meta_added_key, meta_update_check_key, meta_update_history_key, meta_rating_key, meta_rating_comment_key, meta_list_index_key, meta_next_list_index_key, meta_add_comment_key, \
 	series_state, series_seen_unseen, episode_key, next_unseen_episode, last_seen_episode
 from .styles import _0, _00, _0B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _u, _w, _EOL
 
@@ -679,6 +679,14 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> Error|None:
 	next_list_index = meta_get(ctx.db, meta_next_list_index_key)
 	meta_set(new_series, meta_list_index_key, next_list_index)
 	meta_set(ctx.db, meta_next_list_index_key, next_list_index + 1)
+
+	if ctx.option('comment'):
+		comment = ctx.option('comment').strip()
+	else:
+		comment = input('Write a comment (empty to skip): ').strip()
+
+	if comment:
+		meta_set(new_series, meta_add_comment_key, comment)
 
 	ctx.db[series_id] = new_series
 
@@ -1627,6 +1635,7 @@ command_options = {
 		'comment':           { 'name': ('-c', '--comment'), 'arg': str, 'help': 'Add comment to rating' },
 	},
 	'add': {
+		'comment':           { 'name': ('-c', '--comment'), 'arg': str, 'help': 'Set comment when adding series' },
 		**__opt_max_hits,
 	},
 	'search': {
@@ -2245,7 +2254,12 @@ def print_series_details(index:int, series:dict, width:int, gray:bool=False) -> 
 	else:
 		print(f'       {_c}{_i}no episodes{_0}')
 
-	print(f'    {_o}Added:{_0}', meta_get(series, meta_added_key))
+	print(f'    {_o}Added:{_0}', meta_get(series, meta_added_key), end='')
+	if meta_get(series, meta_add_comment_key):
+		add_comment = meta_get(series, meta_add_comment_key)
+		print(f'  {_g}{_i}"{add_comment}"{_0}')
+	else:
+		print()
 
 	if meta_get(series, meta_archived_key):
 		rating = meta_get(series, meta_rating_key)

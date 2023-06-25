@@ -761,6 +761,7 @@ meta_rating_key = 'rating'
 meta_rating_comment_key = 'rating_comment'
 meta_version_key = 'version'
 meta_changes_log_key = 'changes_log'
+meta_add_comment_key = 'add_comment'
 
 
 meta_legacy_keys = (
