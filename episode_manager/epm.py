@@ -727,6 +727,13 @@ def menu_select(items:list[dict], width:int, item_print:Callable, force_selectio
 				print(f'{_f}┃{_0}', end='')
 			print(line, end=f'{_K}\n\r')
 
+		if 'genre' in item:
+			print(f'{_f}┃{_0} {_o}Genre:{_0} ', end='')
+			print(item['genre'])
+
+		print(f'{_f}┃{_0} {_o}Episodes:{_0} ', end='')
+		print('%d (%d season%s)' % (item['total_episodes'], item['total_seasons'], 's' if item['total_seasons'] != 1 else ''))
+
 		print(f'{_f}┗%s{_0}' % ('━'*(width-1)), end=f'{_K}\n\r')
 
 		return 1 + len(overview) + 1
