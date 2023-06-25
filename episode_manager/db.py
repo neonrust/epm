@@ -577,6 +577,7 @@ def last_seen_episode(series:dict) -> tuple[dict|None, str|None]:
 
 
 def next_unseen_episode(series:dict) -> dict|None:
+
 	episodes = series.get('episodes', [])
 	if not episodes:
 		return None
@@ -584,7 +585,12 @@ def next_unseen_episode(series:dict) -> dict|None:
 	seen = meta_get(series, meta_seen_key, {})
 	last_seen = (0, 0)
 	for seen_key in seen.keys():
-		season, episode = [int(n) for n in seen_key.split(':')]
+		season, episode = [
+			n if n == 'S' else int(n)
+			for n in seen_key.split(':')
+		]
+		if season == 'S':
+			continue  # only count "regular" epixodes
 		if season > last_seen[0] or (season == last_seen[0] and episode > last_seen[1]):
 			last_seen = (season, episode)
 
@@ -709,7 +715,7 @@ def should_update(series:dict) -> bool:
 
 
 
-def series_seen_unseen(series:dict, before: datetime | None=None) -> tuple[list, list]:
+def series_seen_unseen(series:dict, before:datetime|None=None) -> tuple[list, list]:
 	episodes = series.get('episodes', [])
 	seen = meta_get(series, meta_seen_key, {})
 
