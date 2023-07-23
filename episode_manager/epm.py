@@ -916,7 +916,14 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 
 	find = ctx.command_arguments.pop(0)
 
-	index, series_id, err = db.find_single_series(ctx.db, find)
+	state_filter = State.PLANNED | State.STARTED
+	if not marking:
+		state_filter = State.STARTED | State.COMPLETED
+
+	def filter_callback(series:dict) -> bool:
+		return series_state(series) & state_filter > 0
+
+	index, series_id, err = db.find_single_series(ctx.db, find, filter_callback)
 	if series_id is None or err is not None:
 		if isinstance(err, list):
 			found = err

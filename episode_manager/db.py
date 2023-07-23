@@ -497,7 +497,7 @@ def indexed_series(db:dict, index=None, match=None, state:State|None=None, sort_
 	return list(filter_map(db, filter=flt, map=index_and_series, sort_key=sort_key))
 
 
-def find_single_series(db:dict, needle:str) -> tuple[int | None, str | None, str | None]:
+def find_single_series(db:dict, needle:str, filter_callback=Callable[[dict],bool]|None) -> tuple[int|None, str|None, str|None]:
 	nothing_found = None, None, f'Series not found: {needle}'
 
 	if not needle:
@@ -532,6 +532,9 @@ def find_single_series(db:dict, needle:str) -> tuple[int | None, str | None, str
 
 		if passed and find_title is not None:
 			passed = find_title in series.get('title', '').casefold()
+
+		if passed and filter_callback is not None:
+			passed = filter_callback(series)
 
 		return passed
 
