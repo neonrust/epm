@@ -5,8 +5,8 @@ from os.path import basename, dirname, join as pjoin, exists as pexists
 import shutil
 from typing import Any
 
-from .utils import read_json, write_json, print_json, warning_prefix, pexpand, calltrace
-from .styles import _0, _00, _0B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _L, _S, _u, _EOL
+from .utils import read_json, write_json, print_json, warning_prefix, pexpand
+from .styles import _00, _f, _E
 
 
 default_max_refresh_age = 2  # days
