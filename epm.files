@@ -1,0 +1,14 @@
+LICENSE
+README.md
+episode_manager/__init__.py
+episode_manager/config.py
+episode_manager/context.py
+episode_manager/db.py
+episode_manager/epm.py
+episode_manager/progress.py
+episode_manager/styles.py
+episode_manager/tmdb.py
+episode_manager/utils.py
+test.py
+test/test_config.py
+test/test_db.py
