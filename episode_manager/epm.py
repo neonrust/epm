@@ -357,16 +357,37 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 			)
 		sort_key = _sort_key
 
+
+	ep_limit = None
+	if not all_unseen_eps:
+		ep_limit = 1
+
+	from_date = now_datetime() if not future_eps else None
+	debug('  ep_limit:', ep_limit)
+	debug('  episodes from date:', from_date)
+
+	def match_series(series):
+		if with_unseen_eps:
+			_, unseen = series_seen_unseen(series, from_date)
+			if not unseen:
+				return False
+
+		return True
+
 	# refresh everything
 	modified = refresh_series(ctx.db, width=width)
 
-	find_idx, match = find_idx_or_match(ctx.command_arguments, country=filter_country, director=filter_director, writer=filter_writer, cast=filter_cast, year=filter_year)
+	find_idx, match = find_idx_or_match(ctx.command_arguments, country=filter_country, director=filter_director, writer=filter_writer, cast=filter_cast, year=filter_year, match=match_series)
 	series_list = db.indexed_series(ctx.db, state=find_state, index=find_idx, match=match, sort_key=sort_key)
 
 	if not series_list:
 		return no_series(ctx.db, filtered=bool(match or filter_director or filter_writer or filter_cast or filter_year))
 
-	print(f'Listing ', end='')
+	print('matched:', len(series_list))
+	if len(series_list) == 1:
+		all_unseen_eps = True
+
+	print('Listing ', end='')
 	if only_started: print(f'{_u}started{_0} ', end='')
 	elif only_planned: print(f'{_u}planned{_0} ', end='')
 	elif only_archived: print(f'{_u}archived{_0} ', end='')
@@ -380,14 +401,6 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 	num_shown = 0
 	num_archived = 0
 
-	from_date = now_datetime() if not future_eps else None
-	ep_limit = None
-	if not all_unseen_eps:
-		ep_limit = 1
-
-	debug('  ep_limit:', ep_limit)
-	debug('  episodes from date:', from_date)
-
 	for index, series_id in series_list:
 		series = ctx.db[series_id]
 		is_archived = meta_has(series, meta_archived_key)
@@ -395,8 +408,8 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 		seen, unseen = series_seen_unseen(series, from_date)
 		# debug(f'{_f}"{series["title"]}" seen: {len(seen)} unseen: {len(unseen)}{_0}')
 
-		if with_unseen_eps and not unseen:
-			continue
+		#if with_unseen_eps and not unseen:
+		#	continue
 
 		num_shown += 1
 
@@ -612,8 +625,8 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> Error|None:
 	if not hits:
 		return Error('Nothing found. Try generalizing your search.')
 
-	# exclude ones we already have in our config
 	if add:
+		# exclude ones we already have in our config
 		already = list(filter(lambda H: H['id'] in ctx.db, hits))
 		if already:
 			print(f'{_f}Already added: %d{_0}' % len(already))
@@ -1728,7 +1741,7 @@ def print_episodes(series:dict, episodes:list[dict], width:int, pre_print:Callab
 			if season == 'S':
 				print(f'{_b}%{indent}s {_0}\r' % 'SP ', end='')
 			else:
-				print(f'{_c}%{indent}s{_0}\r' % (f's%d' % season), end='')
+				print(f'{_c}%{indent}s{_0}\r' % (f's{season}'), end='')
 			current_season = season
 
 		s = format_episode_title(None, ep, width=ep_width, today=True, seen=has_seen)
@@ -1745,7 +1758,7 @@ def print_episodes(series:dict, episodes:list[dict], width:int, pre_print:Callab
 	return keys
 
 
-def find_idx_or_match(args, country:re.Pattern|None=None, director:re.Pattern|None=None, writer:re.Pattern|None=None, cast:re.Pattern|None=None, year:list[int]|None=None) -> tuple[int|None, Callable|None]:
+def find_idx_or_match(args, country:re.Pattern|None=None, director:re.Pattern|None=None, writer:re.Pattern|None=None, cast:re.Pattern|None=None, year:list[int]|None=None, match:Callable[[dict],bool]|None=None) -> tuple[int|None, Callable|None]:
 
 	# print('FILTER title/idx:', (_c + ' '.join(args) + _0fg) if args else 'NONE')
 	# print('          country:', (_c + country.pattern + _0fg) if country else 'NONE')
@@ -1755,8 +1768,10 @@ def find_idx_or_match(args, country:re.Pattern|None=None, director:re.Pattern|No
 	# print('            year:', (_c + '-'.join(year) + _0fg) if year else 'NONE')
 
 
-	if not args and country is None and director is None and writer is None and cast is None and year is None:
+	if not args and country is None and director is None and writer is None and cast is None and year is None and match is None:
 		return None, None
+
+	match_callback = match
 
 	try:
 		if not args:
@@ -1803,6 +1818,8 @@ def find_idx_or_match(args, country:re.Pattern|None=None, director:re.Pattern|No
 				ok = _match_names(series, 'cast', cast)
 			if ok and year:
 				ok = _match_years(series, year)
+			if ok and match_callback:
+				ok = match_callback(series)
 
 			# if ok:
 			# 	print(f'    match {_g}%s{_0}' % series['title'])
@@ -2093,7 +2110,7 @@ def print_series_title(num:int|None, series:dict, width:int=0, imdb_id:str|None=
 
 
 
-def format_episode_title(prefix:str|None, episode:dict, include_season:bool=False, include_time:bool=True, width:int=0, gray:bool=False, seen:bool|None=None, today:bool=False) -> str:
+def format_episode_title(prefix:str|None, episode:dict, include_season:bool=False, include_time:bool=True, width:int=0, gray:bool=False, seen:bool|None=None, today:bool=False, more:int=0) -> str:
 
 	# this function should never touch the BG color
 
@@ -2163,10 +2180,12 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=Fals
 
 		if diff > 24*3600:  # longer than 24 hours
 			ep_time = format_duration(diff, roughly=True)
+			ep_time_w = 16
 			time_style = '\x1b[38;5;244m'
 
 	elif today:
-		ep_time = f'TODAY'
+		ep_time = f'TODAY   '
+		ep_time_w = 16
 		time_style = _g
 
 	elif isinstance(ep_date, str):
@@ -2189,6 +2208,11 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=Fals
 	else:
 		runtime_str = ''
 
+	more_eps = ''
+	if more > 0:
+		more_eps = '+%d more    ' % more
+		width -= len(more_eps)
+
 	s = ''
 	if prefix and prefix is not None:
 		s += f'{prefix}'
@@ -2200,7 +2224,7 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=Fals
 		ep['title'] = ep['title'][:width] + '…'
 		# TODO: to fancy fade to black at the end ;)
 
-	s += f'{season_ep:}{" "*episode_title_margin}{_o}{ep["title"]:{width}}{_f}{runtime_str}{_0}{ep_time}'
+	s += f'{season_ep:}{" "*episode_title_margin}{_o}{ep["title"]:{width}}{_0+_f}{more_eps}{_o+_f}{runtime_str}{_0}{ep_time}'
 
 	if gray or seen:
 		s = f'{_0}\x1b[38;5;246m%s{_0}' % strip_ansi(s)
@@ -2387,7 +2411,8 @@ def print_seen_status(series:dict, gray: bool=False, summary=True, next=True, la
 			header = f'{ind}First:'
 		else:
 			header = f'{ind}Next: '
-		s = format_episode_title('', unseen[0], gray=gray, include_season=True, today=True, width=width - len(header))
+		more = len(unseen) - 1
+		s = format_episode_title('', unseen[0], gray=gray, include_season=True, today=True, width=width - len(header), more=more)
 		if s:
 			if gray:
 				print(_f, end='')
