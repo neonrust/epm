@@ -383,7 +383,6 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 	if not series_list:
 		return no_series(ctx.db, filtered=bool(match or filter_director or filter_writer or filter_cast or filter_year))
 
-	print('matched:', len(series_list))
 	if len(series_list) == 1:
 		all_unseen_eps = True
 
