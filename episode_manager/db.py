@@ -609,7 +609,7 @@ def next_unseen_episode(series:dict) -> dict|None:
 			season == last_seen[0] + 1 and episode == 1:
 			return ep
 
-	return {}
+	return None
 
 
 def all_ids(db:dict) -> list[str]:

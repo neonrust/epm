@@ -929,12 +929,19 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 
 	find = ctx.command_arguments.pop(0)
 
-	state_filter = State.PLANNED | State.STARTED
-	if not marking:
-		state_filter = State.STARTED | State.COMPLETED
-
 	def filter_callback(series:dict) -> bool:
-		return series_state(series) & state_filter > 0
+		ser_state = series_state(series)
+
+		if marking:
+			if ser_state & (State.PLANNED | State.STARTED) == 0:
+				return False
+			return next_unseen_episode(series)
+
+		# not marking
+		if ser_state & (State.STARTED | State.COMPLETED) == 0:
+			return False
+		return not last_seen_episode(series)[0]
+
 
 	index, series_id, err = db.find_single_series(ctx.db, find, filter_callback)
 	if series_id is None or err is not None:
