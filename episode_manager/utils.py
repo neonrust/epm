@@ -104,7 +104,7 @@ def print_json(o:dict) -> None:
 		s = orjson.dumps(o, option=orjson.OPT_INDENT_2 | orjson.OPT_SORT_KEYS)
 	else:
 		s = json.dumps(o,indent=2, sort_keys=True)
-	print(s.decode('utf-8'))
+	print(s)
 
 
 _term_size = (0, 0)
