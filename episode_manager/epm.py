@@ -362,15 +362,27 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 	if not all_unseen_eps:
 		ep_limit = 1
 
-	from_date = now_datetime() if not future_eps else None
+	now_dt = now_datetime()
+
+	to_date = now_dt if not future_eps else None
+	#to_date = new_datetime() if not future_eps else None
 	debug('  ep_limit:', ep_limit)
-	debug('  episodes from date:', from_date)
+	debug('  episodes up to date:', to_date)
 
 	def match_series(series):
 		if with_unseen_eps:
-			_, unseen = series_seen_unseen(series, from_date)
+			_, unseen = series_seen_unseen(series, to_date)
 			if not unseen:
 				return False
+
+			if not future_eps:
+				date_stamp = now_dt.date().isoformat()
+				for ep in unseen:
+					print(ep.get('date'))
+					if ep.get('date') < date_stamp:
+						print(series['title'], 'unseen episode available:', ep['season'], ep['episode'])
+						return True # at least one episode already released
+				return False  # no episodes already released
 
 		return True
 
@@ -404,7 +416,7 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 		series = ctx.db[series_id]
 		is_archived = meta_has(series, meta_archived_key)
 
-		seen, unseen = series_seen_unseen(series, from_date)
+		seen, unseen = series_seen_unseen(series, to_date)
 		# debug(f'{_f}"{series["title"]}" seen: {len(seen)} unseen: {len(unseen)}{_0}')
 
 		#if with_unseen_eps and not unseen:
