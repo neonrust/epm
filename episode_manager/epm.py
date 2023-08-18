@@ -378,9 +378,8 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 			if not future_eps:
 				date_stamp = now_dt.date().isoformat()
 				for ep in unseen:
-					print(ep.get('date'))
 					if ep.get('date') < date_stamp:
-						print(series['title'], 'unseen episode available:', ep['season'], ep['episode'])
+						debug('  ', series['title'], 'unseen episode available:', ep['season'], ep['episode'])
 						return True # at least one episode already released
 				return False  # no episodes already released
 
