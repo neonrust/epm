@@ -12,3 +12,4 @@ episode_manager/utils.py
 test.py
 test/test_config.py
 test/test_db.py
+~/.config/episode_manager/series
