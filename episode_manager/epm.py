@@ -1928,7 +1928,7 @@ def last_update(series:dict) -> datetime:
 	if updates:
 		return datetime.fromisoformat(updates[-1])
 
-	return now_datetime()
+	return None
 
 
 def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, affected:dict|None=None) -> tuple[int, int]:
@@ -1946,11 +1946,12 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, 
 
 	to_refresh = list(sorted(to_refresh, key=int))
 
-	# print('force:', force)
-	# print('to_refresh:', len(to_refresh), '|', ' '.join(to_refresh))
-
 	if not to_refresh:
 		return 0, 0
+
+	debug('to_refresh (maybe):', len(to_refresh))
+	for series_id in to_refresh:
+		debug('   %s [%s]' % (db[series_id]['title'], meta_get(db[series_id], meta_list_index_key)))
 
 	# set time of last check (regardless whether there actually were any updates)
 	touched = 0
@@ -1967,7 +1968,6 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, 
 		# check with TMDb if there actually are any updates
 		prog_bar = mk_prog(len(to_refresh))
 		clrline()
-		# print('get changes:', len(to_refresh), '|', ' '.join(to_refresh))
 		print(f'%s{_EOL}' % prog_bar('Checking %d series for updates...' % len(to_refresh)), end='', flush=True)
 
 		def show_ch_progress(completed:int, *_) -> None:
@@ -1992,7 +1992,16 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, 
 				debug('  %s (%d items)' % (ch['key'], len(ch['items'])))
 
 			if not changes:
-				to_refresh.remove(series_id)
+				last_update_time = last_update(series)
+				if last_update_time:
+					update_age = datetime.now() - last_update_time
+					if update_age.total_seconds() < 2*m_db.WEEK:
+						# no changes, but there was an update within the age cap, so we can wait a bit more
+						to_refresh.remove(series_id)
+
+					else:
+						debug('no changes, but update too old: %s [%s]  %s (%s days ago)' % (db[series_id]['title'], meta_get(db[series_id], meta_list_index_key), last_update_time.isoformat(' '), update_age.days))
+
 			else:
 				for chg in changes:
 					items = chg.get('items', [])
@@ -2020,10 +2029,7 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, 
 		latest_update_time_str = latest_update_time.isoformat(' ')
 
 
-	# print('with changes:', len(to_refresh), '|', ' '.join(to_refresh))
-	# sys.exit(42)
-
-	# remember each series status
+	# remember each series status before we do the refresh (to detect whether the status changed after)
 	previous_status = {
 		series_id: db[series_id].get('status')
 		for series_id in to_refresh
@@ -2045,6 +2051,10 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, 
 
 	num_episodes = 0
 	max_history = config.get_int('num-update-history')
+
+	debug('to_refresh (for real):', len(to_refresh))
+	for series_id in to_refresh:
+		debug('   %s [%s]' % (db[series_id]['title'], meta_get(db[series_id], meta_list_index_key)))
 
 	for series_id, (details, episodes) in zip(to_refresh, result):
 

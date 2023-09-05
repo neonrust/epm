@@ -497,7 +497,7 @@ def indexed_series(db:dict, index=None, match=None, state:State|None=None, sort_
 	return list(filter_map(db, filter=flt, map=index_and_series, sort_key=sort_key))
 
 
-def find_single_series(db:dict, needle:str, filter_callback=Callable[[dict],bool]|None) -> tuple[int|None, str|None, str|None]:
+def find_single_series(db:dict, needle:str, filter_callback:Callable[[dict],bool]|None=None) -> tuple[int|None, str|None, str|None]:
 	nothing_found = None, None, f'Series not found: {needle}'
 
 	if not needle:
@@ -651,7 +651,7 @@ def should_update(series:dict) -> bool:
 
 	# never updated -> True
 	# archived -> False
-	# ended -> False
+	# ended -> False   (assumes, as we got the "ended" status, we also got all the episodes)
 	# if update history > 2, AGE = interval between last two updates, cap: 2 weeks
 	# else: AGE = age of last update, cap: 2 days
 	# ---
@@ -676,7 +676,7 @@ def should_update(series:dict) -> bool:
 		return False
 
 	last_check = datetime.fromisoformat(last_check)
-	simple_age_cap = 4*DAY
+	simple_age_cap = 2*WEEK
 
 	update_history = meta_get(series, meta_update_history_key)
 	if not update_history:
@@ -694,14 +694,14 @@ def should_update(series:dict) -> bool:
 		for idx in range(1, len(update_history)):
 			update_interval_sum += datetime.fromisoformat(update_history[idx]) - datetime.fromisoformat(update_history[idx - 1])
 		update_interval = update_interval_sum/(len(update_history) - 1)
-		if update_interval.total_seconds() >= 2*WEEK:
-			update_interval = timedelta(seconds=2*WEEK)
+		if update_interval.total_seconds() >= simple_age_cap:
+			update_interval = timedelta(seconds=simple_age_cap)
 			capped = 'cap'
 		debug(f' history interval:{update_interval.total_seconds()/DAY:.1f}d \x1b[33;1m{capped}\x1b[m', end='')
 	else:
 		update_interval = now_datetime() - last_update
-		if update_interval.total_seconds() >= 2*WEEK:
-			update_interval = timedelta(seconds=2*WEEK)
+		if update_interval.total_seconds() >= simple_age_cap:
+			update_interval = timedelta(seconds=simple_age_cap)
 			capped = 'cap'
 		debug(f' last interval:{update_interval.total_seconds()/DAY:.1f}d \x1b[33;1m{capped}\x1b[m', end='')
 
