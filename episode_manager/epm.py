@@ -1701,7 +1701,7 @@ def is_released(target, fallback=True):
 
 
 def format_state_change(before:State, after:State) -> str:
-	return f'[\x1b[38;5;202m{before.name.lower()}{_0} ⯈ \x1b[38;5;112m{after.name.lower()}{_0}]'  # type: ignore  # todo: enum
+	return f'[\x1b[38;5;208m{before.name.lower()}{_0} ⯈ \x1b[38;5;113m{after.name.lower()}{_0}]'  # type: ignore  # todo: enum
 
 
 def format_title(series, width:int|None=None):
