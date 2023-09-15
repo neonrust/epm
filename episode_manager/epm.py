@@ -369,6 +369,8 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 	debug('  ep_limit:', ep_limit)
 	debug('  episodes up to date:', to_date)
 
+	date_stamp = now_dt.date().isoformat()
+
 	def match_series(series):
 		if with_unseen_eps:
 			_, unseen = series_seen_unseen(series, to_date)
@@ -376,9 +378,8 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 				return False
 
 			if not future_eps:
-				date_stamp = now_dt.date().isoformat()
 				for ep in unseen:
-					if ep.get('date') < date_stamp:
+					if ep.get('date') <= date_stamp:
 						debug('  ', series['title'], 'unseen episode available:', ep['season'], ep['episode'])
 						return True # at least one episode already released
 				return False  # no episodes already released
@@ -2211,7 +2212,7 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=Fals
 			time_style = '\x1b[38;5;244m'
 
 	elif today:
-		ep_time = f'TODAY   '
+		ep_time = 'TODAY   '
 		ep_time_w = 16
 		time_style = _g
 
