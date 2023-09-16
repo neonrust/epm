@@ -563,7 +563,11 @@ def last_seen_episode(series:dict) -> tuple[dict|None, str|None]:
 	last_seen = (0, 0)
 	seen_time = None
 	for seen_key in seen.keys():
-		season, episode = [int(n) for n in seen_key.split(':')]
+		season, episode = seen_key.split(':')
+		if season == 'S':
+			continue
+		season = int(season)
+		episode = int(episode)
 		if season > last_seen[0] or episode > last_seen[1]:
 			last_seen = (season, episode)
 			seen_time = seen[seen_key]

@@ -943,17 +943,18 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 	def filter_callback(series:dict) -> bool:
 		ser_state = series_state(series)
 
-
 		if marking:
 			if ser_state & (State.PLANNED | State.STARTED) == 0:
 				return False
 			_, unseen = series_seen_unseen(series)
 			return bool(unseen)
 
-		# not marking
+		# unmarking
 		if ser_state & (State.STARTED | State.COMPLETED) == 0:
 			return False
-		return not last_seen_episode(series)[0]
+
+		last_seen = last_seen_episode(series)[0]
+		return bool(last_seen)
 
 
 	index, series_id, err = db.find_single_series(ctx.db, find, filter_callback)
@@ -1057,7 +1058,7 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 				if len(rng) == 2:
 					season = range(min(rng), max(rng) + 1)
 				else:
-					if rng[0].upper() == 'S':
+					if rng[0] == 'S' or rng[0] == 's':
 						season = 'S'
 					else:
 						season = (int(rng[0]), )
@@ -2213,7 +2214,7 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=Fals
 			ep_time_w = 16
 		else:
 			ep_time = 'tomorrow'
-			ep_time_w = len(ep_time) + 2
+			ep_time_w = 10
 
 	elif today:
 		ep_time = 'TODAY   '
