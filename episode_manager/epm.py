@@ -943,10 +943,12 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 	def filter_callback(series:dict) -> bool:
 		ser_state = series_state(series)
 
+
 		if marking:
 			if ser_state & (State.PLANNED | State.STARTED) == 0:
 				return False
-			return next_unseen_episode(series)
+			_, unseen = series_seen_unseen(series)
+			return bool(unseen)
 
 		# not marking
 		if ser_state & (State.STARTED | State.COMPLETED) == 0:

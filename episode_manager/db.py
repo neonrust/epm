@@ -520,6 +520,8 @@ def find_single_series(db:dict, needle:str, filter_callback:Callable[[dict],bool
 
 	if find_title:
 		debug('find_title:', find_title)
+	elif find_index:
+		debug('find_index:', find_index)
 
 	def flt(_, series:dict) -> bool:
 		passed = True
