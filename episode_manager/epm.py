@@ -2206,12 +2206,14 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=Fals
 	time_style = ''
 	if future:
 		ep_time = f'{dt}'
-		time_style = _b
+		time_style = '\x1b[38;5;244m'
 
 		if diff > 24*3600:  # longer than 24 hours
 			ep_time = format_duration(diff, roughly=True)
 			ep_time_w = 16
-			time_style = '\x1b[38;5;244m'
+		else:
+			ep_time = 'tomorrow'
+			ep_time_w = len(ep_time) + 2
 
 	elif today:
 		ep_time = 'TODAY   '
@@ -2220,7 +2222,6 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=Fals
 
 	elif isinstance(ep_date, str):
 		ep_time = f'{ep_date}'
-		#ep_time = ''
 		time_style = ''
 
 	if not ep_time or not include_time:
