@@ -707,7 +707,7 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> Error|None:
 	if ctx.option('comment'):
 		comment = ctx.option('comment').strip()
 	else:
-		comment = input('Write a comment (empty to skip): ').strip()
+		comment = input('Write a comment (optional): ').strip()
 
 	if comment:
 		meta_set(new_series, meta_add_comment_key, comment)
