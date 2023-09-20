@@ -406,7 +406,7 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 	else: print(f'{_u}non-archived{_0} ', end='')
 	print('series', end='')
 	if with_unseen_eps: print(f' with {_u}unseen{_0} episodes', end='')
-	if match: print(', matching: %s' % getattr(match, 'styled_description'), end='')
+	if match and getattr(match, 'styled_description', None): print(', matching: %s' % getattr(match, 'styled_description'), end='')
 	print(f'{_0}.')
 
 	num_shown = 0
@@ -1858,7 +1858,10 @@ def find_idx_or_match(args, country:re.Pattern|None=None, director:re.Pattern|No
 			'year': '-'.join(str(y) for y in year) if year else None,
 		}
 		setattr(match, 'description', ' '.join('%s=%s' % (n, v) for n, v in filter_parts.items() if v))
-		setattr(match, 'styled_description', _c + ' '.join(f'%s{_g}={_0}{_b}%s{_0}' % (n, v) for n, v in filter_parts.items() if v))
+		if filter_parts:
+			filter_parts =  list((n, v) for n, v in filter_parts.items() if v)
+			if filter_parts:
+				setattr(match, 'styled_description', _c + ' '.join(f'%s{_g}={_0}{_b}%s{_0}' % (n, v) for n, v in filter_parts))
 
 		return None, match
 
