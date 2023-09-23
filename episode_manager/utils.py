@@ -5,6 +5,7 @@ import os
 from subprocess import run
 from tempfile import mkstemp
 import sys
+import re
 
 from typing import Any, TypeVar
 from types import ModuleType as Module
@@ -207,14 +208,17 @@ def now_datetime() -> datetime:
 		_now_datetime = datetime.now()
 	return _now_datetime
 
-now_datetime()
+today_date = date.today()
 
+now_datetime()
 
 def fake_now(value:date) -> None:
 	global _now_datetime
 	_now_datetime = _now_datetime.replace(year=value.year, month=value.month, day=value.day)
 	global _now_datetime_faked
 	_now_datetime_faked = True
+	global today_date
+	today_date = value
 
 
 def faked_now() -> bool:
@@ -231,6 +235,9 @@ def calltrace(num_frames:int=2):
 		fname = basename(fr.filename)
 		debug(f'  {_f}from{_0} {_B}{fr.function}{_o}(){_0}  {_f}{fname}{_c}:{_0}{_f}{fr.lineno}{_0}')
 
+
+def strip_ansi(s: str):
+	return re.sub('\x1b\\[[0-9;]*[mJ]', '', s)
 
 
 def _init():

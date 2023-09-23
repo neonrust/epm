@@ -4,6 +4,7 @@ episode_manager/__init__.py
 episode_manager/config.py
 episode_manager/context.py
 episode_manager/db.py
+episode_manager/display.py
 episode_manager/epm.py
 episode_manager/progress.py
 episode_manager/styles.py
