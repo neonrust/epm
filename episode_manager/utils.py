@@ -10,11 +10,15 @@ import re
 from typing import Any, TypeVar
 from types import ModuleType as Module
 
-from .styles import _0, _00, _0B, _c, _i, _b, _B, _f, _fi, _K, _E, _o, _g, _L, _S, _u, _EOL
+from .styles import _0, _00, _c, _b, _B, _f, _K, _E, _o
 
 # use orjson if available
 orjson:Module|None = None
 try:
+	# when using "poetry shell" the user's "site-packages" isn't inherited by the new environment.
+	user_dist_path = expanduser('~/.local/lib/python%d.%d/site-packages' % (sys.version_info.major, sys.version_info.minor))
+	if user_dist_path not in sys.path:
+		sys.path.append(user_dist_path)
 	import orjson as _orjson
 	orjson = _orjson
 except ImportError:
