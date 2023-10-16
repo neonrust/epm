@@ -2232,8 +2232,8 @@ def print_usage(exit_code:int=0) -> None:
 	print()
 	print('Remarks:')
 	print(f'  # = Series listing number, e.g. as listed by the {_b}l{_0}ist command.')
-	print(f'  If an argument does not match a command, it will be used as argument to the default command.')
-	print(f'  Shortest unique prefix of a command is enough, e.g. "ar"  for "archive".')
+	print( '  If an argument does not match a command, it will be used as argument to the default command.')
+	print( '  Shortest unique prefix of a command is enough, e.g. "ar"  for "archive".')
 	if utils.json_serializer() != 'json':
 		print(f'  {_f}Using {_b}{utils.json_serializer()}{_0}{_f} for faster load/save.')
 	else:

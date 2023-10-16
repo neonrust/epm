@@ -1,5 +1,5 @@
 from datetime import datetime, date
-from os.path import basename, dirname, expandvars, expanduser, exists as pexists, getsize as psize, join as pjoin
+from os.path import basename, dirname, expandvars, expanduser, exists as pexists, getsize as psize
 
 import os
 from subprocess import run

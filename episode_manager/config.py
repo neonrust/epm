@@ -121,6 +121,7 @@ def forget_all(store:Store):
 
 	_config_stores[store].clear()
 	if store == Store.Persistent:
+		global _app_config_dirty
 		_app_config_dirty = True
 
 def print_current():

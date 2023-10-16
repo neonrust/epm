@@ -1,5 +1,4 @@
 import time
-import sys
 import os
 from datetime import datetime, timedelta
 from os.path import dirname, exists as pexists
@@ -9,8 +8,8 @@ import enum
 
 from . import config
 from .config import debug
-from .utils import read_json, write_json, warning_prefix, cap, now_datetime
-from .styles import _0, _00, _0B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _L, _S, _u, _EOL
+from .utils import read_json, write_json, now_datetime
+from .styles import _0, _f, _E
 
 from typing import Any, Callable, TypeVar, Generator
 

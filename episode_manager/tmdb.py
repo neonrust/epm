@@ -1,14 +1,14 @@
 import sys
 import requests
-from requests import ReadTimeout, ConnectTimeout
-from urllib.parse import quote as url_escape
-from http import HTTPStatus
 import json
-import concurrent.futures as futures
-from datetime import datetime, timedelta
 import time
 import os
 import builtins
+from requests import ReadTimeout, ConnectTimeout
+from urllib.parse import quote as url_escape
+from http import HTTPStatus
+import concurrent.futures as futures
+from datetime import datetime, timedelta
 from collections.abc import Iterable
 from typing import Callable, Any
 
@@ -89,7 +89,7 @@ def _query(url:str) -> dict[str, Any]|None:
 	try:
 		resp = requests.get(url, headers=global_headers, timeout=10)
 		# print('\x1b[2mquery: DONE %s\x1b[m' % url)
-	except (ReadTimeout, ConnectTimeout) as to:
+	except (ReadTimeout, ConnectTimeout):
 		# print('\x1b[41;97;1mquery: TIMEOUT %s\x1b[m' % url)
 		return None
 
