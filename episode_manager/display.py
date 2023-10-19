@@ -104,7 +104,7 @@ def print_episodes(series:dict, episodes:list[dict], width:int, pre_print:Callab
 				print(f'{_c}%{indent}s{_0}\r' % (f's{season}'), end='')
 			current_season = season
 
-		s = format_episode_title(None, ep, width=ep_width, today=True, seen=has_seen)
+		s = format_episode_title(None, ep, include_season=False, width=ep_width, today=True, seen=has_seen)
 
 		# moving cursor instead of writing spaces so we don't overwrite the season label
 		print(f'\x1b[{indent + margin}C{s}')
@@ -168,7 +168,7 @@ def print_seen_status(series:dict, gray:bool=False, summary:bool=True, next:bool
 			print(_f, end='')
 		header = f'{ind}Last: '
 		print(header, end='')
-		print(format_episode_title('', seen[-1], gray=gray, include_season=True, today=True, width=width - len(header)))
+		print(format_episode_title('', seen[-1], today=True, width=width - len(header), gray=gray))
 
 	if next and unseen:
 		if not seen:
@@ -176,7 +176,7 @@ def print_seen_status(series:dict, gray:bool=False, summary:bool=True, next:bool
 		else:
 			header = f'{ind}Next: '
 		more = len(unseen) - 1
-		s = format_episode_title('', unseen[0], gray=gray, include_season=True, today=True, width=width - len(header), more=more)
+		s = format_episode_title('', unseen[0], gray=gray, today=True, width=width - len(header), more=more)
 		if s:
 			if gray:
 				print(_f, end='')
@@ -201,7 +201,7 @@ def format_title(series, width:int|None=None):
 	return s
 
 
-def format_episode_title(prefix:str|None, episode:dict, include_season:bool=False, include_time:bool=True, width:int=0, gray:bool=False, seen:bool|None=None, today:bool=False, more:int=0) -> str:
+def format_episode_title(prefix:str|None, episode:dict, include_season:bool=True, include_time:bool=True, width:int=0, gray:bool=False, seen:bool|None=None, today:bool=False, more:int=0) -> str:
 
 	# this function should never touch the BG color (b/c the list might have alternating bg color)
 

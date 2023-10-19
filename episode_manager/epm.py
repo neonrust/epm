@@ -601,7 +601,7 @@ def cmd_calendar(ctx:Context, width:int) -> Error|None:
 
 			episodes = episodes_by_date.get(mdate, [])
 			for series, ep in episodes:
-				ep_title = format_episode_title(series['title'], ep, include_season=True, include_time=False, width=width - 9)
+				ep_title = format_episode_title(series['title'], ep, include_time=False, width=width - 9)
 				print(f'{_f}┃{_0}      {_c}•{_0} {ep_title}')
 
 			if days_todo <= 0 and wday_idx == SUNDAY:
@@ -1137,7 +1137,7 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 		else:
 			print(f'{_f}Not marked:{_0}')
 		for ep in already:
-			print(format_episode_title('  ', ep, include_season=True, include_time=False, width=width, gray=True))
+			print(format_episode_title('  ', ep, include_time=False, width=width, gray=True))
 
 
 	state_before = series_state(series)
@@ -1185,7 +1185,7 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 			msg += 's%de%02d' % (ep['season'], ep['episode'])
 
 		changelog_add(ctx.db, msg, series_id)
-		print('  %s' % format_episode_title(None, ep, include_season=True, width=width - 2))
+		print('  %s' % format_episode_title(None, ep, width=width - 2))
 
 
 	if not incremental:
