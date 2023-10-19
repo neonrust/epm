@@ -479,6 +479,7 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 				summary=(not show_next or not all_unseen_eps) and not no_summary,
 				last=not show_next and not all_unseen_eps,
 				next=show_next or not all_unseen_eps,
+				include_future=future_eps,
 				width=width,
 				gray=is_archived and not only_archived,
 			)

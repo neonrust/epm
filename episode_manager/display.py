@@ -127,10 +127,10 @@ def print_archive_status(series:dict) -> None:
 		print(f'{_0}')
 
 
-def print_seen_status(series:dict, gray:bool=False, summary:bool=True, next:bool=True, last:bool=True, width:int=0):
+def print_seen_status(series:dict, gray:bool=False, summary:bool=True, next:bool=True, last:bool=True, include_future=False, width:int=0):
 	ind = '       '
 
-	seen, unseen = series_seen_unseen(series)
+	seen, unseen = series_seen_unseen(series, before=now_datetime() if not include_future else None)
 	all_seen = seen and len(seen) == len(series.get('episodes', []))
 
 	s = ''
