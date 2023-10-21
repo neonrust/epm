@@ -14,7 +14,7 @@ from typing import Callable, Any
 from . import tmdb, progress, config, utils, db, db as m_db
 from .context import Context, BadUsageError
 from .config import Store, debug
-from .styles import _0, _00, _0B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _u, _EOL
+from .styles import _0, _00, _0B, _B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _u, _EOL
 from .display import \
     print_series_title, \
 	print_episodes, \
@@ -61,8 +61,8 @@ import sys
 
 PRG = basename(sys.argv[0])
 
-VERSION = '0.19'
-VERSION_DATE = '2023-07-23'
+VERSION = '0.20'
+VERSION_DATE = '2023-10-21'
 
 
 def start():
@@ -695,7 +695,7 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> Error|None:
 	if len(hits) > max_hits:
 		hits = hits[: max_hits]
 
-	print(f'{_g}Found {_00}{_b}%d{_00} {_g}series:{_00}' % len(hits))
+	print(f'{_b}\x1b[48;2;50;70;50mSearch "%s"; found {_0}{_B}%d{_0} {_b}series:{_0}{_K}{_00}' % (search, len(hits)))
 
 	print(f'{_f}Enriching search hits...{_00}', end='', flush=True)
 	hit_details = tmdb.details(hit['id'] for hit in hits)
@@ -716,21 +716,21 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> Error|None:
 			else:
 				tail = '%5d episodes' % item['total_episodes']
 		if current:
-			print(f'\x1b[48;2;60;70;90m{_K}', end='')
+			print(f'\x1b[48;2;50;50;70m{_K}', end='')
 		print_series_title(idx + 1, item, imdb_id=imdb_id, width=width, tail=tail)
 		print(f'{_0B}{_K}', end='')
 
-	selected = menu_select(hits, width, print_menu_entry, force_selection=-1 if not add else None)
-	if selected == -1:
+	selected_index = menu_select(hits, width, print_menu_entry, force_selection=-1 if not add else None)
+	if selected_index == -1:
 		return None
 
 
-	if selected is None:
+	if selected_index is None:
 		return Error('Nothing selected or cancelled')
 
 	# TODO: move actual "add" to a separate function
 
-	new_series = hits[selected]
+	new_series = hits[selected_index]
 	series_id = new_series['id']
 
 	meta_set(new_series, meta_seen_key, {})
@@ -778,63 +778,78 @@ def menu_select(items:list[dict], width:int, item_print:Callable, force_selectio
 			if is_current:
 				print('\x1b[1A⯈\r\x1b[1B', end='') # move up, print, then down again
 
-	def print_info(idx):
-		print(f'{_f}┏%s{_0}' % ('━'*(width-1)), end=f'{_K}\n\r')
-		print(f'{_f}┃{_0} {_o}Overview:{_0} ', end='')
+	def print_info(item):
 
-		item = items[idx]
+		_box = _o + _f
+
+		num_lines = 0
+
+		print(f'{_box}┏%s{_0}' % ('━'*(width-1)), end=f'{_K}\n\r')
+		print(f'{_box}┃{_0} {_o}Overview:{_0} ', end='')
+		num_lines += 1  # overview lines counted below
 
 		if not item.get('overview'):
 			overview = [ f'{_i}{_f}no overview available{_0}' ]
+			num_lines += 1
 		else:
-			overview = textwrap.wrap(item['overview'], width=width - 1, initial_indent=' '*11)
+			overview = textwrap.wrap(item['overview'], width=width - 3, initial_indent=' '*11)
 			if overview and len(overview[0]) > 11:
 				overview[0] = overview[0][11:]
 
 		for idx, line in enumerate(overview):
+			num_lines += 1
 			if idx > 0:
-				print(f'{_f}┃{_0}', end='')
+				print(f'{_box}┃{_0}  ', end='')
 			print(line, end=f'{_K}\n\r')
 
 		if 'genre' in item:
-			print(f'{_f}┃{_0} {_o}Genre:{_0} ', end='')
-			print(item['genre'])
+			print(f'{_box}┃{_0} {_o}Genre:{_0} ', end='')
+			print(item['genre'], end=f'{_K}\n\r')
+			num_lines += 1
 
-		print(f'{_f}┃{_0} {_o}Episodes:{_0} ', end='')
-		print('%d (%d season%s)' % (item['total_episodes'], item['total_seasons'], 's' if item['total_seasons'] != 1 else ''))
+		print(f'{_box}┃{_0} {_o}Episodes:{_0} ', end='')
+		print('%d (%d season%s)' % (item['total_episodes'], item['total_seasons'], 's' if item['total_seasons'] != 1 else ''), end=f'{_K}\n\r')
+		num_lines += 1
 
-		print(f'{_f}┗%s{_0}' % ('━'*(width-1)), end=f'{_K}\n\r')
+		print(f'{_box}┗%s{_0}' % ('━'*(width-1)), end=f'{_K}\n\r')
+		num_lines += 1
+		print(_00, end=_K)
 
-		return 1 + len(overview) + 1
+		return num_lines
 
-	selected:int|None = 0
+	selected_index:int|None = 0
 	last_info_lines = None
 
 	def draw_menu():
+		clrline()
+
 		nonlocal last_info_lines
 		if last_info_lines is not None:
 			# move up to beginning of menu
 			print('\x1b[%dA' % (len(items) + last_info_lines), end='')
 
-		print_items(selected)
+		print_items(selected_index)
 
-		info_lines = print_info(selected)
+		info_lines = print_info(items[selected_index])
+
 		if last_info_lines is not None and info_lines < last_info_lines:
-			print(_00, end=_K)
+			# if the previous info box was longer, clear lines after this info box
+			print('\r', end='')
 			for n in range(info_lines, last_info_lines):
-				print(f'\n{_K}', end='')
+				print(f'{_K}\r\x1b[1B', end='')
 			print('\x1b[%dA' % (last_info_lines - info_lines), end='', flush=True)
+
 		last_info_lines = info_lines
 
-		# print "status bar"
-		print(f' \x1b[97;48;2;60;60;90m ', end='')
+		# print "status bar" at the  bottom
+		print(' \x1b[48;2;50;50;70m ', end='')
 		if len(items) > 1:
-			print(f' 🠕 and 🠗 keys to select   ', end='')
+			print(f' {_B}🠕🠗{_0} Select   ', end='')
 
 		if force_selection is None:
-			print(f'[RET] to add   [ESC] to cancel', end='')
+			print(f'{_B}Return{_0} Add   {_B}Escape{_0} Cancel', end='')
 		else:
-			print(f'[RET]/[ESC] to exit', end='')
+			print(f'{_B}Return{_0}/{_B}Escape{_0} Exit', end='')
 		print(f'{_K}{_00}', end='\r')
 
 	draw_menu()
@@ -847,6 +862,8 @@ def menu_select(items:list[dict], width:int, item_print:Callable, force_selectio
 	DOWN = '\x1b[B'
 	RETURN = ('\x0a', '\x0d')
 	CTRL_C = '\x03'
+	HOME = '\x1b[H'
+	END = '\x1b[F'
 	ESC = '\x1b'
 
 	import fcntl
@@ -864,22 +881,32 @@ def menu_select(items:list[dict], width:int, item_print:Callable, force_selectio
 			# TODO: append (and consume below)
 			buf = sys.stdin.read(avail)
 
-			if buf in (CTRL_C, ESC):
-				selected = None  # canceled
+			if buf in (CTRL_C, ESC, 'q'):
+				selected_index = None  # canceled
 
-			if selected is None: # explicit type check for mypy
+			if selected_index is None: # explicit type check for mypy
 				break
 
 			if buf in RETURN:
 				break
 
-			if buf == UP and selected > 0:
-				selected -= 1
+			prev_index = selected_index
+
+			if buf == UP and selected_index > 0:
+				selected_index -= 1
+
+			elif buf == DOWN and selected_index < len(items) - 1:
+				selected_index += 1
+
+			elif buf == HOME and selected_index > 0:
+				selected_index = 0
+
+			elif buf == END and selected_index < len(items) - 2:
+				selected_index = len(items) - 1
+
+			if selected_index != prev_index:
 				draw_menu()
 
-			elif buf == DOWN and selected < len(items) - 1:
-				selected += 1
-				draw_menu()
 	finally:
 		termios.tcsetattr(infd, termios.TCSADRAIN, old_settings)
 
@@ -888,7 +915,7 @@ def menu_select(items:list[dict], width:int, item_print:Callable, force_selectio
 	if force_selection is not None:
 		return force_selection
 
-	return selected
+	return selected_index
 
 
 def _add_help() -> None:
