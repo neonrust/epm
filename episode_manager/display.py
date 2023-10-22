@@ -504,7 +504,6 @@ def menu_select(items:list[dict], width:int, item_print:Callable, force_selectio
 			# wait for input on the file descriptor
 			events = epoll.poll(1)
 			if not events:
-				time.sleep(1)
 				continue
 
 			# check how much is available to read
