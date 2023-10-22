@@ -310,10 +310,10 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=True
 
 	runtime = ep.get('runtime')
 	if runtime and isinstance(runtime, int):
-		runtime_str = ' %dmin' % runtime  # could use fmt_duration() but we only want minutes here
-		width -= len(runtime_str)
+		runtime_str = '%3dmin' % runtime  # could use fmt_duration() but we only want minutes here
 	else:
-		runtime_str = ''
+		runtime_str = '      '
+	width -= len(runtime_str)
 
 	more_eps = ''
 	if more > 0:
