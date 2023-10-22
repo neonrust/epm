@@ -514,6 +514,7 @@ def menu_select(items:list[dict], width:int, item_print:Callable, force_selectio
 
 			# TODO: append (and consume below)
 			buf = sys.stdin.read(avail)
+			debug('pressed: "%s" (%d bytes)' % (buf.replace('\x1b', r'\e'), len(buf)))
 
 			if buf in (CTRL_C, ESC, 'q'):
 				selected_index = None  # canceled
@@ -537,6 +538,13 @@ def menu_select(items:list[dict], width:int, item_print:Callable, force_selectio
 
 			elif buf == END and selected_index < len(items) - 1:
 				selected_index = len(items) - 1
+
+			elif buf in ('1', '2', '3', '4', '5', '6', '7', '8', '9', '0'):
+				if buf == '0':
+					buf = '10'
+				jump_index = int(buf) - 1
+				if jump_index < len(items):
+					selected_index = jump_index
 
 			if selected_index != prev_index:
 				draw_menu()
