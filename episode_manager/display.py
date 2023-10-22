@@ -469,7 +469,7 @@ def menu_select(items:list[dict], width:int, item_print:Callable, force_selectio
 
 	draw_menu()
 
-	import sys, tty, termios, array
+	import sys, tty, termios, array, fcntl, select
 	infd = sys.stdin.fileno()
 
 	# some keys we want to detect
@@ -481,18 +481,25 @@ def menu_select(items:list[dict], width:int, item_print:Callable, force_selectio
 	END = '\x1b[F'
 	ESC = '\x1b'
 
-	import fcntl
 	old_settings = termios.tcgetattr(infd)
 	try:
 		tty.setraw(sys.stdin.fileno())
 		avail_buf = array.array('i', [0])
 
+		epoll = select.epoll()
+		epoll.register(infd, select.EPOLLIN | select.EPOLLERR | select.EPOLLHUP | select.EPOLLPRI)
+
 		while True:
+			# wait for input on the file descriptor
+			events = epoll.poll(1)
+			if not events:
+				time.sleep(1)
+				continue
+
 			# check how much is available to read
 			fcntl.ioctl(infd, termios.FIONREAD, avail_buf, True)
 			avail = avail_buf[0]
 			if avail == 0:
-				time.sleep(0.1)
 				continue
 
 			# TODO: append (and consume below)
@@ -525,6 +532,7 @@ def menu_select(items:list[dict], width:int, item_print:Callable, force_selectio
 				draw_menu()
 
 	finally:
+		epoll.close()
 		termios.tcsetattr(infd, termios.TCSADRAIN, old_settings)
 
 	print(_K)
