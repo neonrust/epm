@@ -674,23 +674,28 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> Error|None:
 	if not hits:
 		return Error('Nothing found. Try generalizing your search.')
 
-	if add:
-		# exclude ones we already have in our config
-		already = list(filter(lambda H: H['id'] in ctx.db, hits))
-		if already:
-			print(f'{_f}Already added: %d{_0}' % len(already))
-			for new_series in already:
-				if meta_has(ctx.db[new_series['id']], meta_archived_key):
-					arch_tail = f'  \x1b[33m(archived){_0}'
-				else:
-					arch_tail = None
+	exists_in_db = list(filter(lambda H: H['id'] in ctx.db, hits))
 
-				imdb_id = ctx.db[new_series['id']].get('imdb_id')
-				print_series_title(None, ctx.db[new_series['id']], imdb_id=imdb_id, gray=True, tail=arch_tail, width=width)
+	if exists_in_db:
+		if add:
+			print(f'{_f}Already added %d series:{_0}' % len(exists_in_db))
+		else:
+			print(f'{_f}Exists in the database: %d{_0}' % len(exists_in_db))
 
-		hits = list(filter(lambda H: H['id'] not in ctx.db, hits))
+		for new_series in exists_in_db:
+			if meta_has(ctx.db[new_series['id']], meta_archived_key):
+				arch_tail = f'  \x1b[33m(archived){_0}'
+			else:
+				arch_tail = None
 
-		if not hits:
+			imdb_id = ctx.db[new_series['id']].get('imdb_id')
+			print_series_title(None, ctx.db[new_series['id']], imdb_id=imdb_id, gray=True, tail=arch_tail, width=width)
+
+		if add:
+			# exclude ones we already have in our config
+			hits = list(filter(lambda H: H['id'] not in ctx.db, hits))
+
+		if add and not hits:
 			return Error('No new series found. Try generalizing your search.')
 
 	if len(hits) > max_hits:
