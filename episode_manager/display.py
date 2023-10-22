@@ -35,19 +35,19 @@ def print_series_title(list_index:int|None, series:dict, width:int=0, imdb_id:st
 
 		left = f'{list_index_style}{list_index:>{list_index_w}}{_0} '
 
-	r_offset = 0
+	right_w = 0
 
 	if imdb_id:
 		id_w = 11
 		right += f'  {_f}{imdb_id:<{id_w}}{_0}'
 		width -= 2 + id_w
-		r_offset += 2 + id_w
+		right_w += 2 + id_w
 
 	if tail:
 		tail_style = tail_style or ''
 		right += f'{tail_style}{tail}{_0}'
 		width -= len(tail)
-		r_offset += len(tail)
+		right_w += len(tail)
 
 	left += format_title(series, width=width)
 
@@ -62,8 +62,8 @@ def print_series_title(list_index:int|None, series:dict, width:int=0, imdb_id:st
 		right = f'{_0}\x1b[38;5;246m%s' % strip_ansi(right)
 
 	print(left, end='')
-	# first move to the right edge, then 'r_offset' left
-	print(f'{_EOL}\x1b[{r_offset}D{right}', end='')
+	# first move to the right edge, then 'right_w' left
+	print(f'{_EOL}\x1b[{right_w}D{right}', end='')
 
 	print(_K)
 
@@ -104,7 +104,7 @@ def print_episodes(series:dict, episodes:list[dict], width:int, pre_print:Callab
 			if season == 'S':
 				print(f'{_b}%{indent}s {_0}\r' % 'SP ', end='')
 			else:
-				print(f'{_c}%{indent}s{_0}\r' % (f's{season}'), end='')
+				print(f'{_c}%{indent}s{_0}\r' % f'S{season}', end='')
 			current_season = season
 
 		s = format_episode_title(None, ep, include_season=False, width=ep_width, today=True, seen=has_seen)
@@ -229,11 +229,11 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=True
 	is_special = season == 'S'
 
 	if include_season:
-		s_ep_max_w = len('s99e999')
-		s_ep_w = len(f's{season}e{episode:02}')
+		s_ep_max_w = len('99:999')
+		s_ep_w = len(f'{season}:{episode}')
 	else:
-		s_ep_max_w = len('e999')
-		s_ep_w = len(f'e{episode:02}')
+		s_ep_max_w = len('999')
+		s_ep_w = len(f'{episode}')
 
 	# left-pad to fill the max width
 	left_pad = ' '*(s_ep_max_w - s_ep_w)
@@ -241,19 +241,19 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=True
 		if season == 'S':
 			season_ep = f'{_b}SP {_0}\x1b[33m{_b}{episode}'
 		else:
-			season_ep = f'\x1b[33ms{_b}{season}{_0}\x1b[33me{_b}{episode:02}'
+			season_ep = f'\x1b[33m{_b}{season}{_0}\x1b[33m:{_b}{episode}'
 
 	elif is_special:
 		season_ep = f'\x1b[33m{_b}{episode}'
 
 	else:
-		season_ep = f'\x1b[33me{_b}{episode:02}'
+		season_ep = f'\x1b[33m{_b}{episode}'
 
 	season_ep = f'{left_pad}{_0}{season_ep}{_0}'
 	width -= s_ep_max_w + episode_title_margin
 
 	# Depending on episode release date:
-	#   in the future    -> show how long until release (or nothing if only_released=True)
+	#   in the future    -> show how long until released
 	#   in th past       -> show the date
 	#   same date as now -> show 'TODAY'
 
