@@ -95,6 +95,31 @@ def print_episodes(series:dict, episodes:list[dict], width:int, pre_print:Callab
 	num_printed = 0
 	stop_at_date_after = None
 
+	bg_blend_0 = 40
+	bg_blend_1 = 10  # TODO: this should be the default BG of the terminal. config parameter?
+
+	episodes_per_season = {}
+
+	# count episodes per season, for BG gradient calculation
+	count = 0
+	for ep in episodes:
+		if stop_at_date_after is not None and stop_at_date_after != ep.get('date'):
+			break
+
+		count += 1
+		season = ep['season']
+		if season != current_season:
+			if current_season != 0:
+				episodes_per_season[current_season] = count
+				count = 1
+			current_season = season
+
+		if not (also_future or is_released(ep)):
+			stop_at_date_after = ep.get('date')
+
+	episodes_per_season[current_season] = count
+
+	count = 0
 	for ep in episodes:
 
 		if limit is not None and num_printed >= limit and stop_at_date_after is not None:
@@ -111,17 +136,30 @@ def print_episodes(series:dict, episodes:list[dict], width:int, pre_print:Callab
 		has_seen = episode_key(ep) in seen_keys
 
 		season = ep['season']
+		count += 1
+		if season != current_season:
+			count = 1
+
+		# make BG gradient
+		bg_alpha = (episodes_per_season[season] - count)/episodes_per_season[season]
+		bg_r = int(bg_blend_0*bg_alpha + bg_blend_1*(1 - bg_alpha))
+		bg_g = bg_b = bg_r
+		bg = f'48;2;{bg_r};{bg_g};{bg_b}'
+		debug(bg_alpha, '->', bg)
+
+		print(f'\x1b[{bg}m{_K}', end='')
 		if season != current_season:
 			if season == 'S':
-				print(f'{_b}%{indent}s {_0}\r' % 'SP ', end='')
+				print(f'{_b}%{indent}s{_0}\r' % 'SP', end='')
 			else:
 				print(f'{_c}%{indent}s{_0}\r' % f'S{season}', end='')
 			current_season = season
 
-		s = format_episode_title(None, ep, include_season=False, width=ep_width, today=True, seen=has_seen)
+
+		s = format_episode_title(None, ep, include_season=False, width=ep_width, today=True, seen=has_seen, bg=bg)
 
 		# moving cursor instead of writing spaces so we don't overwrite the season label
-		print(f'\x1b[{indent + margin}C{s}')
+		print(f'\x1b[{bg}m\x1b[{indent + margin}C{s}')
 
 		keys.append(episode_key(ep))
 
@@ -218,7 +256,7 @@ def format_title(series, width:int|None=None):
 	return s
 
 
-def format_episode_title(prefix:str|None, episode:dict, include_season:bool=True, include_time:bool=True, width:int=0, gray:bool=False, seen:bool|None=None, today:bool=False, more:int=0) -> str:
+def format_episode_title(prefix:str|None, episode:dict, include_season:bool=True, include_time:bool=True, width:int=0, gray:bool=False, seen:bool|None=None, today:bool=False, more:int=0, bg:str|None=None) -> str:
 
 	# this function should never touch the BG color (b/c the list might have alternating bg color)
 
@@ -249,19 +287,20 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=True
 		s_ep_max_w = len('999')
 		s_ep_w = len(f'{episode}')
 
+	_num = f'\x1b[33m{_b}'
 	# left-pad to fill the max width
 	left_pad = ' '*(s_ep_max_w - s_ep_w)
 	if include_season:
 		if season == 'S':
-			season_ep = f'{_b}SP {_0}\x1b[33m{_b}{episode}'
+			season_ep = f'{_b}SP {_0}{_num}{episode}'
 		else:
-			season_ep = f'\x1b[33m{_b}{season}{_0}\x1b[33m:{_b}{episode}'
+			season_ep = f'{_num}{season}{_0}{_B}:{_0}{_num}{episode}'
 
 	elif is_special:
-		season_ep = f'\x1b[33m{_b}{episode}'
+		season_ep = f'{_num}{episode}'
 
 	else:
-		season_ep = f'\x1b[33m{_b}{episode}'
+		season_ep = f'{_num}{episode}'
 
 	season_ep = f'{left_pad}{_0}{season_ep}{_0}'
 	width -= s_ep_max_w + episode_title_margin
@@ -335,6 +374,10 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=True
 		width -= len(more_eps)
 
 	s = ''
+
+	if bg is not None:
+		s += f'\x1b[{bg}m'
+
 	if prefix and prefix is not None:
 		s += f'{prefix}'
 		width -= len(prefix)
@@ -348,7 +391,10 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=True
 	s += f'{season_ep:}{" "*episode_title_margin}{_o}{ep["title"]:{width}}{_0+_f}{more_eps}{_o+_f}{runtime_str}{_0}{ep_time}'
 
 	if gray or seen:
-		s = f'{_0}\x1b[38;5;246m%s{_0}' % strip_ansi(s)
+		s = f'{_0}\x1b[38;5;246m%s' % strip_ansi(s)
+
+	if bg is not None or gray or seen:
+		s += _0
 
 	return s
 
