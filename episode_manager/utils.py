@@ -187,9 +187,6 @@ class ListIndex:
 		return f'{self._h}{self._l}'
 
 
-def clrline():
-	print(f'{_00}\r{_K}', end='')
-
 T = TypeVar('T')
 def cap(v:T, lower:T|None, upper:T|None) -> T:
 	if lower is not None and v < lower:  # type: ignore
