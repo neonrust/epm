@@ -386,12 +386,9 @@ def menu_select(items:list[dict], width:int, item_print:Callable, force_selectio
 
 	def print_items(current):
 		for idx, item in enumerate(items):
-			is_current = idx == current
 			print(_K, end='')
-			item_print(idx, item, current=is_current)
+			item_print(idx, item, current=idx == current)
 			print('\r', end='')
-			if is_current:
-				print('\x1b[1A⯈\r\x1b[1B', end='') # move up, print, then down again
 
 	def print_info(item):
 

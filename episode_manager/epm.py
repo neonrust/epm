@@ -717,8 +717,10 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> Error|None:
 			else:
 				tail = '%5d episodes' % item['total_episodes']
 		if current:
-			print(f'\x1b[48;2;50;50;70m{_K}', end='')
-		print_series_title(idx + 1, item, imdb_id=imdb_id, width=width, tail=tail)
+			print(f'\x1b[48;2;50;50;70m{_K}⯈', end='')
+		else:
+			print(' ', end='')
+		print_series_title(idx + 1, item, imdb_id=imdb_id, width=width - 1, tail=tail)
 		print(f'{_0B}{_K}', end='')
 
 	selected_index = menu_select(hits, width, print_menu_entry, force_selection=-1 if not add else None)
