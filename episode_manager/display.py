@@ -19,21 +19,21 @@ from .utils import \
 from .styles import _0, _00, _i, _b, _B, _c, _f, _K, _o, _g, _w, _EOL
 
 
-list_index_style = '\x1b[3;38;2;200;160;100m'
+list_index_style = '\x1b[3;38;2;160;140;60m'
 
 
-def print_series_title(num:int|None, series:dict, width:int=0, imdb_id:str|None=None, gray:bool=False, tail: str|None=None, tail_style:str|None=None) -> None:
+def print_series_title(list_index:int|None, series:dict, width:int=0, imdb_id:str|None=None, gray:bool=False, tail: str|None=None, tail_style:str|None=None) -> None:
 
 	# this function should never touch the BG color (b/c the list might have alternating bg color)
 
 	left = ''    # parts relative to left edge (num, title, years)
 	right = ''   # parts relative to right edge (IMDbID, tail)
 
-	if num is not None:
-		num_w = 5
-		width -= num_w
+	if list_index is not None:
+		list_index_w = 5
+		width -= list_index_w
 
-		left = f'{list_index_style}{num:>{num_w}}{_0} '
+		left = f'{list_index_style}{list_index:>{list_index_w}}{_0} '
 
 	r_offset = 0
 
@@ -49,7 +49,7 @@ def print_series_title(num:int|None, series:dict, width:int=0, imdb_id:str|None=
 		width -= len(tail)
 		r_offset += len(tail)
 
-	left += format_title(series, width=width) #f' \x1b[38;5;253m{title}{_0}{years}'
+	left += format_title(series, width=width)
 
 	series_status = series.get('status')
 	if series_status in ('ended', 'canceled'):
