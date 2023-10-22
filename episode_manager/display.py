@@ -37,6 +37,15 @@ def print_series_title(list_index:int|None, series:dict, width:int=0, imdb_id:st
 
 	right_w = 0
 
+	series_status = series.get('status')
+
+	if series_status in ('ended', 'canceled', 'concluded'):
+		seen, unseen = series_seen_unseen(series, now_datetime())
+		if unseen:
+			percent = len(seen)*100 / len(series.get('episodes'))
+			right += f'{percent:2.0f}{_b}%  '
+			right_w += 5
+
 	if imdb_id:
 		id_w = 11
 		right += f'  {_f}{imdb_id:<{id_w}}{_0}'
@@ -49,12 +58,14 @@ def print_series_title(list_index:int|None, series:dict, width:int=0, imdb_id:st
 		width -= len(tail)
 		right_w += len(tail)
 
+
 	left += format_title(series, width=width)
 
 	series_status = series.get('status')
 	if series_status in ('ended', 'canceled'):
 		width -= 2 + 5
 		left += f'  {_w}{_i}{series_status}{_0}'
+
 
 	if gray:
 		# remove all escape sequences and print in faint-ish gray
@@ -197,7 +208,10 @@ def format_title(series, width:int|None=None):
 
 	years = series.get("year")
 	if years is not None:
-		s += f'  {_0}\x1b[38;5;245m({years[0]}-{years[1] if len(years) == 2 else ""})'
+		#s += f'  {_0}\x1b[38;5;245m({years[0]}-{years[1] if len(years) == 2 else ""})'
+		_punct = '\x1b[38;2;100;100;100m'
+		_year = '\x1b[38;2;140;140;140m'
+		s += f'  {_0}{_punct}({_year}{years[0]}-{years[1] if len(years) == 2 else ""}{_punct}){_0}'
 
 	s += _0
 
