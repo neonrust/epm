@@ -118,6 +118,7 @@ def print_episodes(series:dict, episodes:list[dict], width:int, pre_print:Callab
 			stop_at_date_after = ep.get('date')
 
 	episodes_per_season[current_season] = count
+	current_season = 0
 
 	count = 0
 	for ep in episodes:
