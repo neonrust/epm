@@ -1081,7 +1081,7 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 	state_after = series_state(series)  # will not cover the auto-archive/restore below
 
 	if marking and num_marked_before == 0 and len(series['episodes']) > len(touched_episodes):
-		print(f'{_c}First episode{plural(len(touched_episodes))} marked:{_0} {format_state_change(state_before, state_after)}')
+		print(f'{_c}First episode{plural(len(touched_episodes))} marked!{_0}   {format_state_change(state_before, state_after)}')
 	elif not marking and len(seen_state) == 0:
 		print(f'{_c}No marked episode left:{_0} {format_state_change(state_before, state_after)}')
 
