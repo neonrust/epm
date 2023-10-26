@@ -1245,7 +1245,7 @@ def cmd_refresh(ctx:Context, width:int) -> Error|None:
 		ctx.save()
 
 	if not num_series and not num_episodes:
-		return Error(f'Nothing to update')
+		return Error('Nothing to update')
 
 	return None
 
@@ -1269,7 +1269,7 @@ def cmd_config(ctx:Context, width:int) -> Error|None:
 		command = resolve_cmd(command)
 
 	if command and not ctx.command_options:
-		return Error(f'and...?')
+		return Error('and...?')
 
 	cmd_args = ctx.command_options.get('command-args')
 	if cmd_args is not None:
@@ -1311,7 +1311,7 @@ def cmd_config(ctx:Context, width:int) -> Error|None:
 			return Error(f'{warning_prefix(ctx.command)} bad option "api key" for "{command}".')
 		# TODO: "encrypt" ?
 		config.set('lookup/api-key', api_key)
-		print(f'API key set.')
+		print('API key set.')
 
 	return None
 
@@ -1410,7 +1410,7 @@ def _help_help() -> None:
 	print_cmd_usage('help', '[<topic>]')
 	print('Topics:')
 	print(f'    {_o}env          {_0} Environment variables')
-	print(f'    (none)    ▶   General usage')
+	print('    (none)    ▶   General usage')
 
 setattr(cmd_help, 'help', _help_help)
 
@@ -1885,7 +1885,7 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, 
 
 	prog_bar = mk_prog(len(to_refresh))
 	clrline()
-	print(f'%s{_EOL}' % prog_bar(f'Refreshing %d series...' % len(to_refresh)), end='', flush=True)
+	print(f'%s{_EOL}' % prog_bar('Refreshing %d series...' % len(to_refresh)), end='', flush=True)
 	# TODO: show 'spinner'
 
 	def show_up_progress(completed:int, *_) -> None:
