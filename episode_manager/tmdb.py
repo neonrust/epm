@@ -316,12 +316,14 @@ def episodes(series_id:str|list[str]|Iterable, with_details=False, progress:Call
 				'air_date': 'date',
 				'season_number': 'season',
 				'episode_number': 'episode',
+				'episode_type': 'finale',
 			})
 			_set_values(data, {
 				'director': lambda ep: _job_people(ep.get('crew', []), 'Director'),
 				'writer': lambda ep: _job_people(ep.get('crew', []), 'Writer'),
 				'guest_cast': lambda ep: list(map(lambda p: p.get('name') or '', ep.get('guest_stars', []))),
 				'season': lambda ep: 'S' if ep.get('season') == 0 else ep.get('season'),
+				'finale': lambda ep: None if (ep.get('finale') == 'standard' or ep.get('season') == 'S') else ep.get('finale').replace('mid_season', 'mid-season'),
 			})
 			_del_keys(data, [
 				'id',
@@ -351,6 +353,24 @@ def episodes(series_id:str|list[str]|Iterable, with_details=False, progress:Call
 		for promise in promises
 		for episode in promise.result()
 	]
+
+	last_season = 0
+	last_episode = None
+	season = None
+	for ep in all_episodes:
+		season = ep.get('season')
+		if season == 'S':
+			break
+		if last_season > 0 and season != last_season:
+			last_episode['finale'] = 'season'
+		last_episode = ep
+		last_season = season
+	if ser_details.get('status') != 'active':
+		if last_episode and last_episode.get('finale') == 'finale':
+			last_episode['finale'] = 'series'
+	else:
+		last_episode.pop('finale', None)
+
 
 	# set runtime of each episode, if needed and known
 	if standard_ep_runtime:

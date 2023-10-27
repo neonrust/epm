@@ -374,6 +374,17 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=True
 		more_eps = '+%d more    ' % more
 		width -= len(more_eps)
 
+	finale = ep.get('finale', '')
+	if finale == 'series':
+		finale = 'THE END'
+	elif finale == 'season':
+		finale = 'END SEASON'
+	elif finale == 'mid-season':
+		finale = 'MID SEASON'
+	if finale:
+		finale = f'{_w}{finale:>12} {_0}'
+		width -= 12 + 1
+
 	s = ''
 
 	if bg is not None:
@@ -389,7 +400,7 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=True
 		ep['title'] = ep['title'][:width] + '…'
 		# TODO: to fancy fade to black at the end ;)
 
-	s += f'{season_ep:}{" "*episode_title_margin}{_o}{ep["title"]:{width}}{_0+_f}{more_eps}{_o+_f}{runtime_str}{_0}{ep_time}'
+	s += f'{season_ep:}{" "*episode_title_margin}{_o}{ep["title"]:{width}}{_0}{finale}{_0+_f}{more_eps}{_o+_f}{runtime_str}{_0}{ep_time}'
 
 	if gray or seen:
 		s = f'{_0}\x1b[38;5;246m%s' % strip_ansi(s)
