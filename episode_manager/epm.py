@@ -1462,7 +1462,7 @@ known_commands:dict[str,dict[str,tuple|Callable|str]] = {
 	'unmark': {
 		'alias': ('M', 'um'),
 		'handler': cmd_unmark,
-		'help': f'Unmark a series/season/episode - reverse of {_c}mark{_0}.',
+		'help': f'Unmark a series/season/episode - reverse of {_b}mark{_0}.',
 	},
 	'archive': {
 		'alias': ('A', ),
@@ -1492,7 +1492,7 @@ known_commands:dict[str,dict[str,tuple|Callable|str]] = {
 	'undo': {
 		'alias': (),
 		'handler': cmd_undo,
-		'help': 'Undo last change.'
+		'help': f'Undo last change.  {_c}permanent!{_0}'
 	},
 	'help': {
 		'alias': (),
