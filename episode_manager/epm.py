@@ -521,7 +521,7 @@ def cmd_calendar(ctx:Context, width:int) -> Error|None:
 		ctx.save()
 
 	cal = Calendar(MONDAY)
-	begin_date:date = today_date()
+	begin_date:date = now_datetime().date()
 	num_weeks = 2
 
 	if ctx.command_arguments:
@@ -564,6 +564,8 @@ def cmd_calendar(ctx:Context, width:int) -> Error|None:
 	wday_idx = -1
 	days_todo = num_weeks*7
 	def ordinal_suffix(n):
+		if n in range(10, 20):  # the teens is an exception to the rule
+		    return 'th'
 		digit = n % 10
 		return {1: 'st', 2: 'nd', 3: 'rd'}.get(digit, 'th')
 
