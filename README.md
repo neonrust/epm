@@ -10,19 +10,19 @@ Inspired by [Episode Calendar](https://episodecalendar.com).
 Series that have been added to epm can have one of these user states:
 
 - `planned`  Just added, nothing seen.
-- `started`  Some episodes seen, but not all.
+- `started`  At least one episode seen, but not all.
 - `completed` All episodes seen but not archived (or explicitly restored).
 - `archived`  All episodes seen and series is "ended" or "cancelled". 
-- `abandoned` Archived but only partially seen.
+- `abandoned` Archived, but not all episodes seen.
 
-Transitions between these states are mostly implicit and automatic. 
-However, the `archived` state can be manually controlled by the `archive` and `restore` commands.
+Transitions between these states are implicit and automatic. 
+However, the `archived` (or `abandoned`) state can be manually controlled by the `archive` command, and undone with the `restore` command.
 
 How a series moves between the states is hopefully quite obvious when using the tool.
 
-However, a few "trickier" ones exist:
+A few notable transitions:
 
-- Command `mark`: If in `planned` state, it moves to `started`. If the last episode was marked (and the series is ended/cancelled), it moves to `archived` state.
+- Command `mark`: If the last episode of a series was marked (and it's ended/cancelled), it moves to `archived` state.
 - Command `unmark`: If in `archived` state, it moves to `started`. If no episode marked at all afterwards, it moves to `planned` state.
 
 
@@ -40,11 +40,11 @@ Requires Python 3.9 (type hints are used, the lower-case variants).
 
 ## File locations
 
-All of EPM's stored data and configuration is located in:
+EPM's data and configuration is located in:
 
     ~/.config/episode_manager/
 
-Mainly the database file `series` but also its backups.
+Mainly the database file `series` (and its backups).
 If this data is important to you, backing up this directory is highly recommended.
 
 Run-time configuration is stored in the file `config`.
@@ -53,6 +53,9 @@ Arguably, the database file should be under ~/.local/share but I preferred to ke
 
 
 ## TMDb API key
+
+To use EPM, an API key is required. Apply for this here: https://developer.themoviedb.org.
+Since this is a open-source (and its source is literally open on the client, since it's written in Python), it's not possible to use a shared key.
 
 Key is read from the environment:
 
@@ -73,7 +76,7 @@ Add a series you'd like to monitor:
 
     ⯈epm add twin peaks 
     Found 10 series:
-       #1 Twin Peaks                             1990-1991
+    >  #1 Twin Peaks                             1990-1991  <
        #2 Twin Peaks                             2017-    
        #3 Twin                                   2019-    
        #4 Georgia Coffee: Twin Peaks             1993-    
@@ -83,22 +86,24 @@ Add a series you'd like to monitor:
        #8 Lexi & Lottie: Trusty Twin Detectives  2016-2017
        #9 Twin Hearts                            2003-2004
       #10 Twin My Heart                          2019-    
-    Select series (1 - 10) to add --> 1    [user input]
-    Series added:  (series renumbered)
-       #1 Twin Peaks  1990-1991  tt0098936
+    
+    <series selected in interactive menu>
+    
+    Series added:
+        1 Twin Peaks  1990-1991  tt0098936
 
 Now the series is added.
 
 All added series can be listed by using the `list` / `ls` command:
 
     ⯈epm ls
-       #1 Twin Peaks              1990-1991  tt0098936
+        1 Twin Peaks              1990-1991  tt0098936
            Total: Unseen: 30  1d 53min
-           Next: s1e01 Pilot  
+           Next:  1:01 Pilot  
 
 Mark episodes that has been watched:
 
-    ⯈epm mark 1 s1
+    ⯈epm mark 1
     Marked 8 episodes as seen:  7h
        <list of episodes cut out>
 
@@ -109,10 +114,10 @@ Mark episodes that has been watched:
 Then, show current status, using no arguments (or the `unseen` command):
 
     ⯈epm
-       #1 Twin Peaks                                                                      1990-1991   1 unseen
-           Next:   s2e22 Episode #2.22                                                        46min 1991-06-10
+        1 Twin Peaks  (1990-1991)   1 unseen
+           Next:   2:22 Episode #2.22                   46min 1991-06-10
 
-For a bit more "fancy" display of future episodes, use the `calendar` command:
+For a bit more "fancy" display of future episodes, use the `calendar` command, e.g.:
 
     ⯈epm cal 2
     ┏━━━━━━━━━━━━┥ August 2022  week 31
@@ -120,33 +125,33 @@ For a bit more "fancy" display of future episodes, use the `calendar` command:
     ┃  2nd Tuesday
     ┃  3rd Wednesday
     ┃  4th Thursday
-    ┃      • The Orville  s3e10 Future Unknown                                                          
-    ┃      • For All Mankind  s3e09 Coming Home                                                    46min
+    ┃      • The Orville   3:10 Future Unknown                                                          
+    ┃      • For All Mankind   3:09 Coming Home                       46min
     ┃  5th Friday
     ┃  6th Saturday
     ┃  7th Sunday
-    ┃      • Westworld  s4e07 Metanoia                                                             52min
+    ┃      • Westworld   4:07 Metanoia                                52min
     ┠──────── week 32
     ┃  8th Monday
     ┃  9th Tuesday
     ┃ 10th Wednesday
     ┃ 11st Thursday
-    ┃      • For All Mankind  s3e10 Han                                                                 
+    ┃      • For All Mankind   3:10 Han                                                                 
     ┃ 12nd Friday
     ┃ 13rd Saturday
     ┃ 14th Sunday
-    ┃      • Westworld  s4e08 Que Será, Será                                                       59min
+    ┃      • Westworld   4:08 Que Será, Será                          59min
 
 
 Sadly, these examples doesn't show that all output from epm is colorized
 for clarity and emphasis.
 
-But here's a screenshot of the menu shown by the `search` command (similar to `add`):
+But here's a screenshot of the menu shown by the `search` command (very similar to `add`):
 
 ![search](screenshots/search.png)
 
 Basically the difference when using the `add` command is that the bottom text `... to exit` 
-then says `[RET] to add  [ESC] to exit`. 
+then says `RET to add   ESC to exit`. 
 
 
 ## Usage
