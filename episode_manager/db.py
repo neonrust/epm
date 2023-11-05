@@ -753,6 +753,28 @@ def episode_key(episode:dict):
 	return f'{episode["season"]}:{episode["episode"]}'
 
 
+def series_index(index_number:int):
+	if index_number < 100:
+		return (None, str(index_number))
+
+	low = index_number % 100
+	high = index_number // 100
+
+	high_digits = []
+	while True:
+		digit = high % 26
+		high -= digit
+		if not digit:
+			break
+		digit = chr(digit - 1 + ord('a'))
+		high_digits.insert(0, digit)
+
+	high_digits = ''.join(high_digits)
+	low_digits = '%02d' % low
+
+	return (high_digits, low_digits)
+
+
 # def series_num_archived(db:dict) -> int:
 # 	return sum(1 if meta_has(series, meta_archived_key) else 0 for series in db.values())
 
