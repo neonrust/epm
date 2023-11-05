@@ -35,7 +35,7 @@ Requires Python 3.9 (type hints are used, the lower-case variants).
 - [orjson](https://pypi.org/project/orjson) (highly recommended, but optional)
 - `zstd` command-line tool. For compressing backups. (optional)
 
-<img alt="TMDb" src="https://www.themoviedb.org/assets/2/v4/logos/v2/blue_short-8e7b30f73a4020692ccca9c88bafe5dcb6f8a62a4c6bc55cd9ba82bb2cd95f6c.svg" width="50%">
+<img alt="TMDb" src="https://www.themoviedb.org/assets/2/v4/logos/v2/blue_short-8e7b30f73a4020692ccca9c88bafe5dcb6f8a62a4c6bc55cd9ba82bb2cd95f6c.svg" width="30%">
 
 
 ## File locations
@@ -55,7 +55,7 @@ Arguably, the database file should be under ~/.local/share but I preferred to ke
 ## TMDb API key
 
 To use EPM, an API key is required. Apply for this here: https://developer.themoviedb.org.
-Since this is a open-source (and its source is literally open on the client, since it's written in Python), it's not possible to use a shared key.
+Since EPM is open-source and its source is literally open on the client (being written in Python), it's not possible to use a shared key.
 
 Key is read from the environment:
 
@@ -68,7 +68,7 @@ Or set it in the configuration:
 
 ## Examples
 
-Note, the exact appearance of these output examples might change. 
+Note, the exact appearance of these output examples might not be accurate.
 They're continuously being tweaked and improved.
 
 
@@ -115,7 +115,7 @@ Then, show current status, using no arguments (or the `unseen` command):
 
     ⯈epm
         1 Twin Peaks  (1990-1991)   1 unseen
-           Next:   2:22 Episode #2.22                   46min 1991-06-10
+           Next:   2:22 Episode #2.22                      46min 1991-06-10
 
 For a bit more "fancy" display of future episodes, use the `calendar` command, e.g.:
 
