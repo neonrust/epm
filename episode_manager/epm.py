@@ -1546,7 +1546,7 @@ __opt_max_hits = {
 	}
 }
 
-_opt_sort_names = _opt_list(',', ['title', 'year', 'earliest', 'latest', 'added', 'archived'])  # TODO: e.g. "earliest"
+_opt_sort_names = _opt_list(',', ['title', 'year', 'earliest', 'latest', 'added', 'archived'])
 
 __opt_series_sorting = {
 	'sorting': {
