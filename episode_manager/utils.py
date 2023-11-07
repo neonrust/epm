@@ -106,9 +106,9 @@ def write_json(filepath:str, data:Any) -> Exception|None:
 
 def print_json(o:dict) -> None:
 	if orjson is not None:
-		s = orjson.dumps(o, option=orjson.OPT_INDENT_2 | orjson.OPT_SORT_KEYS)
+		s = str(orjson.dumps(o, option=orjson.OPT_INDENT_2 | orjson.OPT_SORT_KEYS), 'utf-8')
 	else:
-		s = json.dumps(o,indent=2, sort_keys=True)
+		s = json.dumps(o, indent=2, sort_keys=True)
 	print(s)
 
 
