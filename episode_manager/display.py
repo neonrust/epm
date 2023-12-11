@@ -250,7 +250,12 @@ def format_title(series, width:int|None=None):
 		#s += f'  {_0}\x1b[38;5;245m({years[0]}-{years[1] if len(years) == 2 else ""})'
 		_punct = '\x1b[38;2;100;100;100m'
 		_year = '\x1b[38;2;140;140;140m'
-		s += f'  {_0}{_punct}({_year}{years[0]}-{years[1] if len(years) == 2 else ""}{_punct}){_0}'
+		s += f'  {_0}{_punct}({_year}{years[0]}'
+		if len(years) == 1:
+			s += '-'
+		elif years[1] != years[0]:
+			s += f'-{years[1]}'
+		s += f'{_punct}){_0}'
 
 	s += _0
 
