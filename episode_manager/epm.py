@@ -1943,8 +1943,9 @@ def print_series_details(index:int, series:dict, width:int, gray:bool=False) -> 
 
 	tail = None
 	if series.get('imdb_id'):
-		tail = f'    {_o}{_u}%s{_0}' % (imdb_url_tmpl % series["imdb_id"])
-	print_series_title(index, series, width, gray=gray, tail=tail)
+		tail = imdb_url_tmpl % series["imdb_id"]
+		tail_style = f'{_o}{_u}'
+	print_series_title(index, series, width, gray=gray, tail=tail, tail_style=tail_style)
 
 	print_archive_status(series)
 

@@ -22,7 +22,7 @@ from .styles import _0, _00, _i, _b, _B, _c, _f, _K, _o, _g, _w, _EOL
 list_index_style = '\x1b[3;38;2;160;140;60m'
 
 
-def print_series_title(list_index:int|None, series:dict, width:int=0, imdb_id:str|None=None, gray:bool=False, tail: str|None=None, tail_style:str|None=None) -> None:
+def print_series_title(list_index:int|None, series:dict, width:int=0, imdb_id:str|None=None, gray:bool=False, tail: str|None=None, tail_style:str|None=None, show_progress:bool=True) -> None:
 
 	# this function should never touch the BG color (b/c the list might have alternating bg color)
 
@@ -39,7 +39,7 @@ def print_series_title(list_index:int|None, series:dict, width:int=0, imdb_id:st
 
 	series_status = series.get('status')
 
-	if series_status in ('ended', 'canceled', 'concluded'):
+	if show_progress and series_status in ('ended', 'canceled', 'concluded'):
 		seen, unseen = series_seen_unseen(series, now_datetime())
 		if unseen:
 			percent = len(seen)*100 / len(series.get('episodes'))
@@ -57,7 +57,6 @@ def print_series_title(list_index:int|None, series:dict, width:int=0, imdb_id:st
 		right += f'{tail_style}{tail}{_0}'
 		width -= len(tail)
 		right_w += len(tail)
-
 
 	left += format_title(series, width=width)
 
