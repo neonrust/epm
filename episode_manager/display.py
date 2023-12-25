@@ -285,28 +285,26 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=True
 
 	is_special = season == 'S'
 
+	s_ep_max_w = len('999')
+	s_ep_w = len(f'{episode}')
+
 	if include_season:
-		s_ep_max_w = len('99:999')
-		s_ep_w = len(f'{season}:{episode}')
-	else:
-		s_ep_max_w = len('999')
-		s_ep_w = len(f'{episode}')
+		s_ep_max_w += len('99:')
 
 	_num = f'\x1b[33m{_b}'
 	# left-pad to fill the max width
-	left_pad = ' '*(s_ep_max_w - s_ep_w)
 	if include_season:
-		if season == 'S':
+		if is_special:
 			season_ep = f'{_b}SP {_0}{_num}{episode}'
+			s_ep_w += len('SP ')
 		else:
 			season_ep = f'{_num}{season}{_0}{_B}:{_0}{_num}{episode}'
-
-	elif is_special:
-		season_ep = f'{_num}{episode}'
+			s_ep_w += len(f'{season}:')
 
 	else:
 		season_ep = f'{_num}{episode}'
 
+	left_pad = ' '*(s_ep_max_w - s_ep_w)
 	season_ep = f'{left_pad}{_0}{season_ep}{_0}'
 	width -= s_ep_max_w + episode_title_margin
 
