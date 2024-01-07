@@ -1183,7 +1183,7 @@ def _do_archive(db:dict, series_id:str, width:int, mode:str|None=None, print_sta
 
 	state_before = series_state(series)
 	seen, unseen = series_seen_unseen(series)
-	partly_seen = seen and unseen
+	partly_seen = bool(unseen)
 	archiving = mode is None or mode == 'archiving'
 
 	if archiving:

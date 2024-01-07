@@ -634,7 +634,7 @@ def series_state(series:dict) -> State:
 	num_unseen = num_episodes - num_seen
 
 	if is_archived:
-		if num_seen and num_unseen:  # partially seen
+		if num_unseen > 0:  # partially seen
 			return State.ABANDONED
 
 		return State.ARCHIVED
