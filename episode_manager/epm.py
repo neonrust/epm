@@ -62,8 +62,8 @@ import sys
 
 PRG = basename(sys.argv[0])
 
-VERSION = '0.20'
-VERSION_DATE = '2023-10-21'
+VERSION = '0.21'
+VERSION_DATE = '2024-01-12'
 
 
 def start():
@@ -469,7 +469,7 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 		if show_details:
 			print_series_details(index, series,width=width, gray=is_archived and not only_archived)
 		else:
-			print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width, gray=is_archived and not only_archived)
+			print_series_title(index, series, width=width, gray=is_archived and not only_archived)
 			if not show_terse:
 				print_archive_status(series)
 
