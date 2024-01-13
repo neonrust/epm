@@ -367,6 +367,7 @@ def _rotate_backups(base_name:str):
 		org_file = _filename_slot(base_name, idx)
 		if pexists(org_file):
 			shifted_file = _filename_slot(base_name, idx + 1)
+			debug(f'db: [rotate] rename {org_file} -> {shifted_file}')
 			os.rename(org_file, shifted_file)
 
 
@@ -398,10 +399,9 @@ def save(db:dict) -> None:
 	# TODO: spawn background process to compress to make it appear faster?
 	#   might run into (more) race-conditions of course
 
-	# backup active files to the '.1' backup slot
-	os.rename(active_file(), _filename_slot(base_name, 1))
-
 	tmp_name2 = mkstemp(dir=db_path)[1]
+	debug(f'db: compressing {tmp_name} -> {tmp_name2}')
+
 	if not compress_file(tmp_name, tmp_name2):
 		os.remove(tmp_name)
 		os.remove(tmp_name2)
@@ -409,12 +409,17 @@ def save(db:dict) -> None:
 
 	_rotate_backups(base_name)
 
+	# backup active files to the '.1' backup slot
+	debug(f'db: rename active {active_file()} -> {_filename_slot(base_name, 1)}')
+	os.rename(active_file(), _filename_slot(base_name, 1))
+
+	debug(f'db: rename new compressed {tmp_name2} {active_file()}')
 	os.rename(tmp_name2, active_file())
 	t1 = time.time()
 
 	if debug:
 		ms = (t1 - t0)*1000
-		debug(f'{_f}db: wrote %d entries in %.1fms; v%d{_0}' % (len(db) - 1, ms, meta_get(db, meta_version_key)))
+		debug('db: wrote %d entries in %.1fms; v%d' % (len(db) - 1, ms, meta_get(db, meta_version_key)))
 
 
 def list_backups() -> list[str]:
@@ -435,24 +440,28 @@ def list_backups() -> list[str]:
 def rollback():
 	"""Restore the most recent backup and shift all backups indices"""
 
-	db_file = active_file()
+	base_name= base_filename()
 
-	first_backup = _filename_slot(db_file, 1)
+	first_backup = _filename_slot(base_name, 1)
 	if not pexists(first_backup):
-		return None, f'Backup "{first_backup}" does not exist', None
+		return None, f'No backup to restore ({first_backup})', None
 
 	change_log = meta_get(load(), meta_changes_log_key, [])
 
-	os.rename(first_backup, db_file)
+	#debug('db: re-activate 1st backup: {first_backup} -> {db_file}')
+	#os.rename(first_backup, db_file)
 
-	# decreease the index of all other backups
+	# decreease the index of all backups
 	num_remaining = 0
-	for idx in range(2, config.get_int('num-backups') + 1):
-		org_file = _filename_slot(idx)
+	for idx in range(1, config.get_int('num-backups') + 1):
+		org_file = _filename_slot(base_name, idx)
 		if pexists(org_file):
 			num_remaining += 1
-			unshifted_file = _filename_slot(idx - 1)
+			unshifted_file = _filename_slot(base_name, idx - 1)
+			debug(f'db: un-rotate {org_file} -> {unshifted_file}')
 			os.rename(org_file, unshifted_file)
+
+	num_remaining -= 1  # one backup was removed/restored
 
 	return num_remaining, first_backup, change_log
 
