@@ -1,5 +1,5 @@
 from datetime import datetime, date
-from os.path import basename, dirname, expandvars, expanduser, exists as pexists, getsize as psize
+from os.path import basename, dirname, expandvars, expanduser
 
 import os
 from subprocess import run
@@ -10,7 +10,7 @@ import re
 from typing import Any, TypeVar
 from types import ModuleType as Module
 
-from .styles import _0, _00, _c, _b, _B, _f, _K, _E, _o
+from .styles import _0, _00, _c, _b, _B, _f, _E, _o
 
 _SIZE_THRESHOLD = 32
 
