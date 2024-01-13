@@ -1,15 +1,18 @@
+import sys
 import time
 import os
 from datetime import datetime, timedelta
 from os.path import dirname, exists as pexists
-from subprocess import run
+from subprocess import run, PIPE, Popen
+import shutil
+import io
 from tempfile import mkstemp
 import enum
 
 from . import config
 from .config import debug
-from .utils import read_json, write_json, now_datetime
-from .styles import _0, _f, _E
+from .utils import read_json_obj, write_json, now_datetime
+from .styles import _0, _f, _E, _00
 
 from typing import Any, Callable, TypeVar, Generator
 
@@ -24,33 +27,65 @@ def set_dirty(dirty:bool=True):
 	global _dirty
 	_dirty = dirty
 
+
 def code_version() -> int:
 	return DB_VERSION
 
-def active_file() -> str:
+def base_filename():
 	return str(config.get('paths/series-db'))
 
-def load() -> dict:
+def active_file(uncompressed:bool=False) -> str:
+	return _filename_slot(base_filename(), 0)
 
-	db_file = active_file()
+
+def load(db_file:str|None=None) -> dict:
+
+	if not db_file:
+		db_file = active_file()
 
 	if not db_file or not isinstance(db_file, str) or len(db_file) < 2:
 		raise RuntimeError('Invalid series db file path: %r' % db_file)
 
+
 	if not pexists(db_file):
-		old_db_file = db_file.replace('/episode_manager/', '/epm/')
-		if pexists(old_db_file):
-			os.makedirs(dirname(db_file), exist_ok=True)
-			shutil.copy(old_db_file, db_file)
-			print(f'{_f}[db: imported from old location: {old_db_file}]')
+		debug('db: standard file doesn\'t exist: %s' % db_file)
+
+		if _compressor:
+			# also try the uncompressed filename
+			# TODO: actually, we need the uncompressed variant of 'db_file'
+			uncompressed_file = str(config.get('paths/series-db'))
+
+		debug('db: trying uncompressed file: %s' % uncompressed_file)
+		if pexists(uncompressed_file):
+			t0 = time.time()
+			mk_backup(uncompressed_file, db_file)
+			t1 = time.time()
+			ms = (t1 - t0)*1000
+			debug(f'db: compressed uncompressed file: {uncompressed_file} in %.1fms' % ms)
+
+		if not pexists(db_file):
+			# try old location
+			old_db_file = uncompressed_file.replace('/episode_manager/', '/epm/')
+			debug('db: trying old location: %s' % old_db_file)
+			if pexists(old_db_file):
+				os.makedirs(dirname(uncompressed_file), exist_ok=True)
+				shutil.copy(old_db_file, uncompressed_file)
+				print(f'{_f}[db: copied from old location: {old_db_file} -> {uncompressed_file}]{_0}')
+
+
+	if not pexists(db_file):
+		# brand new database
+		print(f'{_f}[db: new database]{_0}')
+		return {}
+
 
 	t0 = time.time()
-	db = read_json(db_file)
+	db = read_json_obj(compressed_open(db_file))
 	t1 = time.time()
 
 	if debug:
 		ms = (t1 - t0)*1000
-		debug(f'{_f}[db: read %d entries in %.1fms; v%d]{_0}' % (len(db) - 1, ms, meta_get(db, meta_version_key)))
+		debug(f'{_f}db: read %d entries in %.1fms; v%d{_0}' % (len(db) - 1, ms, meta_get(db, meta_version_key)))
 
 	set_dirty(False)
 
@@ -183,178 +218,214 @@ def _migrate(db:dict):
 		print(f'{_f}Removed {fixed_update_history_dups} duplicate update history entries{_0}')
 		set_dirty()
 
-_compressor: dict | None = None
 _compressors:list[dict[str, str | list[str]]] = [
-	{
-		'binary': 'zstd',
+    {
+	    'binary': 'zstd',
 		'extension': '.zst',
-		'args': ['-7', '--quiet', '--threads=0'],
+		'args': ['-15', '--quiet', '--threads=0'],
 		'unargs': ['--decompress', '--quiet', '--threads=0'],
+		'pipe': ['--stdout'],
 	},
 	{
-		'binary': 'lz4',
+	    'binary': 'lz4',
 		'extension': '.lz4',
 		'args': ['-9', '--quiet'],
 		'unargs': ['--decompress', '--quiet'],
+		'pipe': ['--stdout'],
 	},
 	{
-		'binary': 'plzip',
-		'extension': '.lz',
-		'args': ['-1', '--quiet'],  # parallel by default
+	    'binary': 'xz',
+		'extension': '.xz',
+		'args': ['-5', '--quiet'],
 		'unargs': ['--decompress', '--quiet'],
+		'pipe': ['--stdout'],
 	},
 	{
-		'binary': 'lzip',
+	    'binary': 'plzip',
 		'extension': '.lz',
-		'args': ['-1', '--quiet'],
+		'args': ['-5', '--quiet'],  # parallel by default
 		'unargs': ['--decompress', '--quiet'],
+		'pipe': ['--stdout'],
 	},
 	{
-		'binary': 'gzip',
+	    'binary': 'lzip',
+		'extension': '.lz',
+		'args': ['-5', '--quiet'],
+		'unargs': ['--decompress', '--quiet'],
+		'pipe': ['--stdout'],
+	},
+	{
+	    'binary': 'gzip',
 		'extension': '.gz',
-		'args': ['-8', '--quiet'],
+		'args': ['-9', '--quiet'],
 		'unargs': ['--decompress', '--quiet'],
+		'pipe': ['--stdout'],
 	},
 ]
 
-import shutil
+# detect which of the above compressor are available (in order of desirability)
+_compressor:dict|None = None
 for method in _compressors:
-	if shutil.which(method['binary']): # type: ignore
+	if shutil.which(method['binary']):
 		_compressor = method
 		break
+
+if not _compressor:
+	raise RuntimeError('no compressor available (tried: %s)' % (', '.join(c['binary'] for c in _compressors)))
 
 def compressor():
 	return _compressor['binary'] if _compressor else None
 
 # TODO: 'mk_backup' should return a waitable promise (so we can do it in parallel with the serialization)
 
-def mk_uncompressed_backup(source:str, destination:str) -> bool:
+def _run_compressor(source:str, destination:str|None, compress:bool=True) -> bool|io.BufferedReader:
+
+	# copy file access & mod timestamps from source
+	source_info = os.stat(source)
+
+	success = False  # always assume failure  ;)
+
+	args = _compressor['args' if compress else 'unargs']
+	command_line = [_compressor['binary']] + args # type: ignore
+
+	try:
+		infp = open(source, 'rb')
+		outfp = open(destination, 'wb')
+
+		comp = run(command_line, stdin=infp, stdout=outfp)
+		success = comp.returncode == 0
+
+		infp.close()
+		outfp.close()
+
+		if not success:
+			raise RuntimeError('exit code: %d' % comp.returncode)
+
+		# file compressed into destination
+
+		# we can safely remove the source(s)
+		os.remove(source)
+		# copy timestamps from source file
+		os.utime(destination, (source_info.st_atime, source_info.st_mtime))
+
+	except Exception as e:
+		# (de)compression failed, just fall back to uncomrpessed
+		verb = 'Compressing' if compress else 'Decompressing'
+
+		print(f'{_E}ERROR{_00} {verb} file failed: {e}')
+
+	return success
+
+
+def _mk_uncompressed_backup(source:str, destination:str) -> bool:
 	os.rename(source, destination)
 	return True
 
-def unmk_uncompressed_backup(source:str, destination:str) -> bool:
+def _unmk_uncompressed_backup(source:str, destination:str) -> bool:
 	os.rename(source, destination)
 	return True
 
-if _compressor:
-	def _run_compressor(source:str, destination:str, args:list[str], label:str) -> bool:
-		# copy file access & mod timestamps from source
-		file_info = os.stat(source)
+def mk_backup(source:str, destination:str) -> bool:
+	if not _compressor or not _run_compressor(source, destination, compress=True):
+		_mk_uncompressed_backup(source, destination)
+		return False
 
-		command_line = [_compressor['binary']] + args # type: ignore
+	return True
 
-		try:
-			infp = open(source, 'rb')
-			outfp = open(destination, 'wb')
+def unmk_backup(source:str, destination:str) -> bool:
+	if not _compressor or not _run_compressor(source, destination, compress=False):
+		_unmk_uncompressed_backup(source, destination)
+		return False
 
-			comp = run(command_line, stdin=infp, stdout=outfp, universal_newlines=False)
-			success = comp.returncode == 0
+	return True
 
-			infp.close()
-			outfp.close()
 
-			if not success:
-				raise RuntimeError('exit code: %d' % comp.returncode)
-
-			# file compressed into destination
-
-			# we can safely remove the source(s)
-			os.remove(source)
-			# copy timestamps from source file
-			os.utime(destination, (file_info.st_atime, file_info.st_mtime))
-
-		except Exception as e:
-			# (de)compression failed, just fall back to uncomrpessed
-			print(f'{_E}ERROR{_00} {label} backup failed: {e}')
-			success = False
-
-		return success
-
-	def mk_backup(source:str, destination:str) -> bool:
-		if not _run_compressor(source, destination, _compressor['args'], 'Compressing'):
-			mk_uncompressed_backup(source, destination)
-			return False
-
+def compress_file(source:str, destination:str) -> bool:
+	if not _compressor:
+		os.rename(source, destination)
 		return True
 
-	def unmk_backup(source:str, destination:str) -> bool:
-		if not _run_compressor(source, destination, _compressor['unargs'], 'Decompressing'):
-			unmk_uncompressed_backup(source, destination)
-			return False
-
-		return True
-
-else:
-	mk_backup = mk_uncompressed_backup
-	unmk_backup = unmk_uncompressed_backup
+	return _run_compressor(source, destination, compress=True)
 
 
-def _backup_name(idx:int) -> str:
+def compressed_open(source:str) -> io.BufferedReader:
+	if not _compressor:
+		return open(source, 'rb')
+	command_line = [_compressor['binary']] + _compressor['unargs'] + _compressor['pipe'] # type: ignore
+	return Popen(command_line, stdin=open(source, 'rb'), stdout=PIPE).stdout
+
+
+def _filename_slot(base_name:str, idx:int) -> str:
 	if _compressor:
-		return '%s.%d%s' % (active_file(), idx, _compressor['extension'])
+		return '%s.%d%s' % (base_name, idx, _compressor['extension'])
 
-	return '%s.%d' % (active_file(), idx)
+	return '%s.%d' % (base_name, idx)
+
+
+def _rotate_backups(base_name:str):
+	for idx in range(config.get_int('num-backups') - 1, 0, -1):
+		org_file = _filename_slot(base_name, idx)
+		if pexists(org_file):
+			shifted_file = _filename_slot(base_name, idx + 1)
+			os.rename(org_file, shifted_file)
 
 
 def save(db:dict) -> None:
 
 	if not is_dirty():
-		debug(f'{_f}[db: save ignored; not dirty]{_0}')
+		debug(f'{_f}db: save ignored; not dirty{_0}')
 		return
 
 	set_dirty(False)
 
-	# utils.calltrace()
+	base_name = base_filename()
+	db_path = dirname(base_name)
 
-	db_file = active_file()
-
-	if not pexists(db_file):
-		os.makedirs(dirname(db_file), exist_ok=True)
+	os.makedirs(db_path, exist_ok=True)
 
 	# write to a temp file and then rename it afterwards
-	tmp_name = mkstemp(dir=dirname(db_file))[1]
+	tmp_name = mkstemp(dir=db_path)[1]
+
 	t0 = time.time()
 	err = write_json(tmp_name, db)
-	t1 = time.time()
 
 	if err is not None:
-		print(f'{_E}ERROR{_00} Failed saving series database: %s' % str(err))
+		print(f'{_E}ERROR{_00} Failed saving series database: %s' % str(err), file=sys.stderr)
 		os.remove(tmp_name)
 		return
-
-	# rotate backups
-	for idx in range(config.get_int('num-backups') - 1, 0, -1):
-		org_file = _backup_name(idx)
-		if pexists(org_file):
-			shifted_file = _backup_name(idx + 1)
-			os.rename(org_file, shifted_file)
 
 	# current file becomes first backup (<name>.1)
 	# TODO: spawn background process to compress to make it appear faster?
 	#   might run into (more) race-conditions of course
 
-	# backup existing(old) db file to 'series.1'
-	t2 = time.time()
-	mk_backup(db_file, _backup_name(1))
-	t3 = time.time()
+	# backup active files to the '.1' backup slot
+	os.rename(active_file(), _filename_slot(base_name, 1))
 
-	os.rename(tmp_name, db_file)
+	tmp_name2 = mkstemp(dir=db_path)[1]
+	if not compress_file(tmp_name, tmp_name2):
+		os.remove(tmp_name)
+		os.remove(tmp_name2)
+		return
+
+	_rotate_backups(base_name)
+
+	os.rename(tmp_name2, active_file())
+	t1 = time.time()
 
 	if debug:
 		ms = (t1 - t0)*1000
-		ms2 = (t3 - t2)*1000
-		debug(f'{_f}[db: wrote %d entries in %.1fms (%.1fms); v%d]{_0}' % (len(db) - 1, ms, ms2, meta_get(db, meta_version_key)))
+		debug(f'{_f}db: wrote %d entries in %.1fms; v%d{_0}' % (len(db) - 1, ms, meta_get(db, meta_version_key)))
 
 
-def backups() -> list[str]:
+def list_backups() -> list[str]:
 	"""Returns a list of existing backups, most recent first."""
 
-	db_file = active_file()
+	base_name = base_filename()
 
 	bups = []
 
 	for idx in range(1, config.get_int('num-backups') + 1):
-		bup_name = _backup_name(idx)
+		bup_name = _filename_slot(base_name, idx)
 		if pexists(bup_name):
 			bups.append(bup_name)
 
@@ -362,29 +433,28 @@ def backups() -> list[str]:
 
 
 def rollback():
-	"""Restore the most recent backup (and shift all backups indices)"""
+	"""Restore the most recent backup and shift all backups indices"""
 
 	db_file = active_file()
 
-	first_backup = _backup_name(1)
+	first_backup = _filename_slot(db_file, 1)
 	if not pexists(first_backup):
 		return None, f'Backup "{first_backup}" does not exist', None
 
-	db = load()
-	log = meta_get(db, meta_changes_log_key, [])
+	change_log = meta_get(load(), meta_changes_log_key, [])
 
-	unmk_backup(first_backup, db_file)
+	os.rename(first_backup, db_file)
 
 	# decreease the index of all other backups
 	num_remaining = 0
 	for idx in range(2, config.get_int('num-backups') + 1):
-		org_file = _backup_name(idx)
+		org_file = _filename_slot(idx)
 		if pexists(org_file):
 			num_remaining += 1
-			unshifted_file = _backup_name(idx - 1)
+			unshifted_file = _filename_slot(idx - 1)
 			os.rename(org_file, unshifted_file)
 
-	return num_remaining, first_backup, log
+	return num_remaining, first_backup, change_log
 
 
 def meta_get(obj:dict, key:str, def_value:Any=None) -> Any:

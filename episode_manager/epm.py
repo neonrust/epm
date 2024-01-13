@@ -1,6 +1,7 @@
 #! /usr/bin/env python3
 
 import re
+import sys
 import shlex
 import time
 import atexit
@@ -10,8 +11,12 @@ from calendar import Calendar, day_name, month_name, MONDAY, SUNDAY
 import textwrap
 
 from typing import Callable, Any
-
-from . import tmdb, progress, config, utils, db, db as m_db
+try:
+	from . import db as m_db
+except RuntimeError as rte:
+	print('ERROR: %s; can not continue' % str(rte), file=sys.stderr)
+	sys.exit(1)
+from . import tmdb, progress, config, utils, db
 from .context import Context, BadUsageError
 from .config import Store, debug
 from .styles import _0, _00, _0B, _B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _u, _EOL
@@ -57,8 +62,6 @@ from .db import \
 	episode_key, \
 	next_unseen_episode, \
 	last_seen_episode
-
-import sys
 
 PRG = basename(sys.argv[0])
 
