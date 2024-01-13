@@ -82,7 +82,7 @@ def load() -> bool:
 		_app_config.update(config)
 
 	db_file = get('paths/series-db')
-	if not db_file or not isinstance(db_file, str):
+	if not isinstance(db_file, str):
 		db_file = os.getenv(env_series_db_path) \
 		          or \
 		          pjoin(user_config_home, 'episode_manager', 'series')

@@ -12,6 +12,8 @@ from types import ModuleType as Module
 
 from .styles import _0, _00, _c, _b, _B, _f, _K, _E, _o
 
+_SIZE_THRESHOLD = 32
+
 # use orjson if available
 orjson:Module|None = None
 try:
@@ -44,45 +46,59 @@ def warning_prefix(context_name:str|None=None) -> str:
 
 
 def read_json(filepath:str) -> dict:
-	if pexists(filepath) and psize(filepath) > 1:
-		try:
-			if orjson is not None:
-				with open(filepath, 'rb') as fp:
-					return orjson.loads(fp.read())
-			else:
-				with open(filepath, 'r') as fp:
-					return json.load(fp)
+	try:
+		file_size = os.stat(filepath).st_size
+	except FileNotFoundError:
+		return {}
 
-		except json.JSONDecodeError as jde:
-			_dump_decode_error(jde, filepath)
-			raise FatalJSONError(jde)
+	if file_size > _SIZE_THRESHOLD:
+		return read_json_obj(open(filepath, 'rb'))
 
 	return {}
 
 
-def _dump_decode_error(err, filepath:str) -> None:
+def read_json_obj(fileobj) -> dict:
+	try:
+		if orjson is not None:
+			# orjson doesn't support reading from file object :(
+			return orjson.loads(fileobj.read())
+		else:
+			return json.load(fileobj)
+
+	except json.JSONDecodeError as jde:
+		_dump_decode_error(jde)
+		raise FatalJSONError(jde)
+
+	return {}
+
+
+def _dump_decode_error(err, filepath:str|None=None) -> None:
 	if hasattr(err, 'lineno') and hasattr(err, 'colno'):
 		line_num = 0
 		print(f'{_E}ERROR{_00} Failed to read JSON ({filepath}:{err.lineno}:{err.colno}): {err.msg}', file=sys.stderr)
-		with open(filepath) as fp:
-			for line in fp:
-				line_num += 1
-				if line_num in (err.lineno - 1, err.lineno + 1):
-					print(f'   {line}', end='')
-				elif line_num == err.lineno:
-					N = err.colno - 1
-					line = line.rstrip()
-					# print('N:', N, 'len:', len(line))
-					left = line[:N - 1]
-					# print(f'left>{left}<')
-					bad_part = line[N - 1]
-					rest = line[N - 1:]
-					right = rest[1:] if rest else ''
-					print(f'{_f}>>{_0} {left}{_E}{bad_part}{_00}{right} {_f}<<{_0}', file=sys.stderr)
-					#print(f'{_b}{"^":>{err.colno + 3}}{_0}', file=sys.stderr)
 
-				if line_num == err.lineno + 1:
-					break
+		if filepath:
+			with open(filepath) as fp:
+				for line in fp:
+					line_num += 1
+
+					if line_num in (err.lineno - 1, err.lineno + 1):
+						print(f'   {line}', end='')
+
+					elif line_num == err.lineno:
+						N = err.colno - 1
+						line = line.rstrip()
+						# print('N:', N, 'len:', len(line))
+						left = line[:N - 1]
+						# print(f'left>{left}<')
+						bad_part = line[N - 1]
+						rest = line[N - 1:]
+						right = rest[1:] if rest else ''
+						print(f'{_f}>>{_0} {left}{_E}{bad_part}{_00}{right} {_f}<<{_0}', file=sys.stderr)
+						#print(f'{_b}{"^":>{err.colno + 3}}{_0}', file=sys.stderr)
+
+						if line_num == err.lineno + 1:
+							break
 
 
 def write_json(filepath:str, data:Any) -> Exception|None:
