@@ -363,12 +363,34 @@ def _filename_slot(base_name:str, idx:int) -> str:
 
 
 def _rotate_backups(base_name:str):
-	for idx in range(config.get_int('num-backups') - 1, 0, -1):
-		org_file = _filename_slot(base_name, idx)
+	num_backups = 0
+
+	# loop through all file slots, including 0
+	for idx in range(config.get_int('num-backups'), 0, -1):
+		org_file = _filename_slot(base_name, idx - 1)
 		if pexists(org_file):
-			shifted_file = _filename_slot(base_name, idx + 1)
+			num_backups += 1
+			shifted_file = _filename_slot(base_name, idx)
 			debug(f'db: [rotate] rename {org_file} -> {shifted_file}')
 			os.rename(org_file, shifted_file)
+
+	return num_backups
+
+
+def _unrotate_backups(base_name:str):
+	num_backups = 0
+
+	for idx in range(0, config.get_int('num-backups')):
+		org_file = _filename_slot(base_name, idx + 1)
+		if pexists(org_file):
+			num_backups += 1
+			unshifted_file = _filename_slot(base_name, idx)
+			debug(f'db: [un-rotate] {org_file} -> {unshifted_file}')
+			os.rename(org_file, unshifted_file)
+
+	num_backups -= 1  # one backup was removed/restored
+
+	return num_backups
 
 
 def save(db:dict) -> None:
@@ -409,10 +431,6 @@ def save(db:dict) -> None:
 
 	_rotate_backups(base_name)
 
-	# backup active files to the '.1' backup slot
-	debug(f'db: rename active {active_file()} -> {_filename_slot(base_name, 1)}')
-	os.rename(active_file(), _filename_slot(base_name, 1))
-
 	debug(f'db: rename new compressed {tmp_name2} {active_file()}')
 	os.rename(tmp_name2, active_file())
 	t1 = time.time()
@@ -448,20 +466,8 @@ def rollback():
 
 	change_log = meta_get(load(), meta_changes_log_key, [])
 
-	#debug('db: re-activate 1st backup: {first_backup} -> {db_file}')
-	#os.rename(first_backup, db_file)
-
 	# decreease the index of all backups
-	num_remaining = 0
-	for idx in range(1, config.get_int('num-backups') + 1):
-		org_file = _filename_slot(base_name, idx)
-		if pexists(org_file):
-			num_remaining += 1
-			unshifted_file = _filename_slot(base_name, idx - 1)
-			debug(f'db: un-rotate {org_file} -> {unshifted_file}')
-			os.rename(org_file, unshifted_file)
-
-	num_remaining -= 1  # one backup was removed/restored
+	num_remaining = _unrotate_backups(base_name)
 
 	return num_remaining, first_backup, change_log
 
