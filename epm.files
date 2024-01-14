@@ -1,6 +1,7 @@
 LICENSE
 README.md
 episode_manager/__init__.py
+episode_manager/compression.py
 episode_manager/config.py
 episode_manager/context.py
 episode_manager/db.py

@@ -3,13 +3,11 @@ import time
 import os
 from datetime import datetime, timedelta
 from os.path import dirname, exists as pexists
-from subprocess import run, PIPE, Popen
 import shutil
-import io
 from tempfile import mkstemp
 import enum
 
-from . import config
+from . import config, compression
 from .config import debug
 from .utils import read_json_obj, write_json, now_datetime
 from .styles import _0, _f, _E, _00
@@ -50,15 +48,15 @@ def load(db_file:str|None=None) -> dict:
 	if not pexists(db_file):
 		debug('db: standard file doesn\'t exist: %s' % db_file)
 
-		if _compressor:
+		if compression.method():
 			# also try the uncompressed filename
-			# TODO: actually, we need the uncompressed variant of 'db_file'
+			# TODO: in fact, we need the uncompressed variant of 'db_file' (if given as argument)
 			uncompressed_file = str(config.get('paths/series-db'))
 
 		debug('db: trying uncompressed file: %s' % uncompressed_file)
 		if pexists(uncompressed_file):
 			t0 = time.time()
-			mk_backup(uncompressed_file, db_file)
+			make_backup(uncompressed_file, db_file)
 			t1 = time.time()
 			ms = (t1 - t0)*1000
 			debug(f'db: compressed uncompressed file: {uncompressed_file} in %.1fms' % ms)
@@ -80,7 +78,7 @@ def load(db_file:str|None=None) -> dict:
 
 
 	t0 = time.time()
-	db = read_json_obj(compressed_open(db_file))
+	db = read_json_obj(compression.open(db_file))
 	t1 = time.time()
 
 	if debug:
@@ -218,146 +216,20 @@ def _migrate(db:dict):
 		print(f'{_f}Removed {fixed_update_history_dups} duplicate update history entries{_0}')
 		set_dirty()
 
-_compressors:list[dict[str, str | list[str]]] = [
-    {
-	    'binary': 'zstd',
-		'extension': '.zst',
-		'args': ['-15', '--quiet', '--threads=0'],
-		'unargs': ['--decompress', '--quiet', '--threads=0'],
-		'pipe': ['--stdout'],
-	},
-	{
-	    'binary': 'lz4',
-		'extension': '.lz4',
-		'args': ['-9', '--quiet'],
-		'unargs': ['--decompress', '--quiet'],
-		'pipe': ['--stdout'],
-	},
-	{
-	    'binary': 'xz',
-		'extension': '.xz',
-		'args': ['-5', '--quiet'],
-		'unargs': ['--decompress', '--quiet'],
-		'pipe': ['--stdout'],
-	},
-	{
-	    'binary': 'plzip',
-		'extension': '.lz',
-		'args': ['-5', '--quiet'],  # parallel by default
-		'unargs': ['--decompress', '--quiet'],
-		'pipe': ['--stdout'],
-	},
-	{
-	    'binary': 'lzip',
-		'extension': '.lz',
-		'args': ['-5', '--quiet'],
-		'unargs': ['--decompress', '--quiet'],
-		'pipe': ['--stdout'],
-	},
-	{
-	    'binary': 'gzip',
-		'extension': '.gz',
-		'args': ['-9', '--quiet'],
-		'unargs': ['--decompress', '--quiet'],
-		'pipe': ['--stdout'],
-	},
-]
-
-# detect which of the above compressor are available (in order of desirability)
-_compressor:dict|None = None
-for method in _compressors:
-	if shutil.which(method['binary']):
-		_compressor = method
-		break
-
-if not _compressor:
-	raise RuntimeError('no compressor available (tried: %s)' % (', '.join(c['binary'] for c in _compressors)))
-
-def compressor():
-	return _compressor['binary'] if _compressor else None
-
-# TODO: 'mk_backup' should return a waitable promise (so we can do it in parallel with the serialization)
-
-def _run_compressor(source:str, destination:str|None, compress:bool=True) -> bool|io.BufferedReader:
-
-	# copy file access & mod timestamps from source
-	source_info = os.stat(source)
-
-	success = False  # always assume failure  ;)
-
-	args = _compressor['args' if compress else 'unargs']
-	command_line = [_compressor['binary']] + args # type: ignore
-
-	try:
-		infp = open(source, 'rb')
-		outfp = open(destination, 'wb')
-
-		comp = run(command_line, stdin=infp, stdout=outfp)
-		success = comp.returncode == 0
-
-		infp.close()
-		outfp.close()
-
-		if not success:
-			raise RuntimeError('exit code: %d' % comp.returncode)
-
-		# file compressed into destination
-
-		# we can safely remove the source(s)
-		os.remove(source)
-		# copy timestamps from source file
-		os.utime(destination, (source_info.st_atime, source_info.st_mtime))
-
-	except Exception as e:
-		# (de)compression failed, just fall back to uncomrpessed
-		verb = 'Compressing' if compress else 'Decompressing'
-
-		print(f'{_E}ERROR{_00} {verb} file failed: {e}')
-
-	return success
 
 
-def _mk_uncompressed_backup(source:str, destination:str) -> bool:
-	os.rename(source, destination)
-	return True
 
-def _unmk_uncompressed_backup(source:str, destination:str) -> bool:
-	os.rename(source, destination)
-	return True
-
-def mk_backup(source:str, destination:str) -> bool:
-	if not _compressor or not _run_compressor(source, destination, compress=True):
-		_mk_uncompressed_backup(source, destination)
-		return False
-
-	return True
-
-def unmk_backup(source:str, destination:str) -> bool:
-	if not _compressor or not _run_compressor(source, destination, compress=False):
-		_unmk_uncompressed_backup(source, destination)
-		return False
-
-	return True
-
-
-def compress_file(source:str, destination:str) -> bool:
-	if not _compressor:
+def make_backup(source:str, destination:str) -> bool:
+	if not compression.method() or not compression.compress_file(source, destination):
 		os.rename(source, destination)
-		return True
+		return False
 
-	return _run_compressor(source, destination, compress=True)
-
-
-def compressed_open(source:str) -> io.BufferedReader:
-	if not _compressor:
-		return open(source, 'rb')
-	command_line = [_compressor['binary']] + _compressor['unargs'] + _compressor['pipe'] # type: ignore
-	return Popen(command_line, stdin=open(source, 'rb'), stdout=PIPE).stdout
+	return True
 
 
 def _filename_slot(base_name:str, idx:int) -> str:
-	if _compressor:
-		return '%s.%d%s' % (base_name, idx, _compressor['extension'])
+	if compression.method():
+		return '%s.%d%s' % (base_name, idx, compression.method()['extension'])
 
 	return '%s.%d' % (base_name, idx)
 
@@ -385,7 +257,7 @@ def _unrotate_backups(base_name:str):
 		if pexists(org_file):
 			num_backups += 1
 			unshifted_file = _filename_slot(base_name, idx)
-			debug(f'db: [un-rotate] {org_file} -> {unshifted_file}')
+			debug(f'db: [unrotate] {org_file} -> {unshifted_file}')
 			os.rename(org_file, unshifted_file)
 
 	num_backups -= 1  # one backup was removed/restored
@@ -424,7 +296,7 @@ def save(db:dict) -> None:
 	tmp_name2 = mkstemp(dir=db_path)[1]
 	debug(f'db: compressing {tmp_name} -> {tmp_name2}')
 
-	if not compress_file(tmp_name, tmp_name2):
+	if not compression.compress_file(tmp_name, tmp_name2):
 		os.remove(tmp_name)
 		os.remove(tmp_name2)
 		return
