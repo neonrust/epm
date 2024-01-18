@@ -420,6 +420,7 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 				return False
 
 			if not future_eps:
+				# TODO: can we do this without fetching the series data?  maybe not... :(
 				series = ctx.db.series(series_id)
 				if series:
 					_, unseen = series_seen_unseen(series, meta)
@@ -1849,12 +1850,16 @@ def refresh_series(db:Database, width:int, subset:list|None=None, force:bool=Fal
 		)
 
 	if not force:
-		# only refresh if there's actual external data stored
+		# only refresh if there's currently any data stored
+		before = len(subset)
 		subset = list(
 		    series_id
 			for series_id in subset
 			if db.has_data(series_id)
 		)
+		after = len(subset)
+		if after < before:
+			debug(f'{before - after} series removed from refresh; no data stored')
 
 	if force:
 		to_refresh = subset
