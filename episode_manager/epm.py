@@ -1215,6 +1215,7 @@ def _do_archive(db:db.Database, series_id:str, width:int, mode:str|None=None, pr
 			print(' (abandoned)', end='')
 		print(f':{_00}')
 		meta_set(meta, meta_archived_key, now_stamp())
+		db.remove_series(series_id)
 		changelog_add(db, 'Archived series', series_id)
 
 	else:
@@ -1224,7 +1225,7 @@ def _do_archive(db:db.Database, series_id:str, width:int, mode:str|None=None, pr
 		print(f':{_00}')
 		meta_del(meta, meta_archived_key)
 		changelog_add(db, 'Restored series', series_id)
-		refresh_series(db, width, subset=[series_id])
+		refresh_series(db, width, subset=[series_id], force=True)
 
 	index = meta.get(meta_list_index_key)
 	print_series_title(index, meta, imdb_id=meta.get('imdb_id'), width=width)
@@ -1847,12 +1848,13 @@ def refresh_series(db:Database, width:int, subset:list|None=None, force:bool=Fal
 			for series_id, _ in db.items()
 		)
 
-	# only refresh if there's actual external data stored
-	subset = list(
-	    series_id
-		for series_id in subset
-		if db.has_data(series_id)
-	)
+	if not force:
+		# only refresh if there's actual external data stored
+		subset = list(
+		    series_id
+			for series_id in subset
+			if db.has_data(series_id)
+		)
 
 	if force:
 		to_refresh = subset

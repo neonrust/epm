@@ -110,12 +110,13 @@ class SeriesCache:
 
 
 	def remove(self, title_id:str) -> bool:
-		series = self._cache.pop(title_id, _not_in_cache)
+		self._cache.pop(title_id, _not_in_cache)
 
-		if series is _not_in_cache:
-			return False
+		try:
+			os.remove(self._series_file(title_id))
+		except FileNotFoundError:
+			pass
 
-		os.remove(self._series_file(title_id))
 		return True
 
 
