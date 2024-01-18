@@ -855,8 +855,8 @@ def cmd_delete(ctx:Context, width:int) -> Error|None:
 		return cmd_archive(ctx, width)  # also checks for abandon
 
 
-	# delete it
-	del ctx.db[series_id]
+	# delete it, permanently
+	ctx.db.remove(series_id)
 
 	changelog_add(ctx.db, 'Deleted series "%s" (%d)' % (meta['title'], meta['year']))
 
