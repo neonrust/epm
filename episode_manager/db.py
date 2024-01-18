@@ -604,13 +604,15 @@ def _filename_slot(base_name:str, idx:int) -> str:
 def _rotate_backups(base_name:str):
 	num_backups = 0
 
+	debug('db: rotating backups')
+
 	# loop through all file slots, including 0
 	for idx in range(config.get_int('num-backups'), 0, -1):
 		org_file = _filename_slot(base_name, idx - 1)
 		if pexists(org_file):
 			num_backups += 1
 			shifted_file = _filename_slot(base_name, idx)
-			debug(f'db: [rotate] rename {org_file} -> {shifted_file}')
+			# debug(f'db: [rotate] rename {org_file} -> {shifted_file}')
 			os.rename(org_file, shifted_file)
 
 	return num_backups
@@ -619,12 +621,14 @@ def _rotate_backups(base_name:str):
 def _unrotate_backups(base_name:str):
 	num_backups = 0
 
+	debug('db: unrotating backups')
+
 	for idx in range(0, config.get_int('num-backups')):
 		org_file = _filename_slot(base_name, idx + 1)
 		if pexists(org_file):
 			num_backups += 1
 			unshifted_file = _filename_slot(base_name, idx)
-			debug(f'db: [unrotate] {org_file} -> {unshifted_file}')
+			# debug(f'db: [unrotate] {org_file} -> {unshifted_file}')
 			os.rename(org_file, unshifted_file)
 
 	num_backups -= 1  # one backup was removed/restored
