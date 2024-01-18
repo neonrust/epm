@@ -1841,7 +1841,18 @@ def refresh_series(db:Database, width:int, subset:list|None=None, force:bool=Fal
 	if not config.get_bool('refresh-enabled', True):
 		return 0, 0
 
-	subset = subset or list(series_id for series_id, _ in db.items())
+	if subset is None:
+		subset = list(
+		    series_id
+			for series_id, _ in db.items()
+		)
+
+	# only refresh if there's actual external data stored
+	subset = list(
+	    series_id
+		for series_id in subset
+		if db.has_data(series_id)
+	)
 
 	if force:
 		to_refresh = subset

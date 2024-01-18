@@ -12,7 +12,7 @@ from multiprocessing.pool import ApplyResult
 
 from . import config, compression, tmdb
 from .config import debug
-from .utils import read_json_obj, write_json, now_datetime
+from .utils import read_json_obj, write_json, now_datetime, now_stamp
 from .styles import _0, _b, _f, _E, _00
 
 from typing import Any, Callable, TypeVar, Generator
@@ -20,6 +20,8 @@ from typing import Any, Callable, TypeVar, Generator
 DB_VERSION = 5
 
 _SAVE_DISABLED = True
+
+_REMOVE_DATA_AFTER = timedelta(days=30)
 
 _dirty = True
 
@@ -74,6 +76,16 @@ class SeriesCache:
 	def __contains__(self, title_id) -> bool:
 		return title_id in self._cache
 
+
+	def exists(self, title_id:str) -> bool:
+		try:
+			os.stat(self._series_file(title_id))
+			return True
+
+		except FileNotFoundError:
+			return False
+
+
 	def get(self, title_id:str) -> dict|None:
 		data = self._cache.get(title_id, _not_in_cache)
 
@@ -107,12 +119,24 @@ class SeriesCache:
 		return True
 
 
+	def mtime(self, title_id:str) -> datetime|None:
+		filename = self._series_file(title_id)
+
+		try:
+			info = os.stat(filename)
+			return datetime.fromtimestamp(info.st_mtime)
+
+		except FileNotFoundError:
+			return None
+
+
 	def _series_file(self, title_id:str) -> str:
 		return pjoin(self._path, title_id)
 
 
 	def _load_series(self, title_id:str) -> dict|None:
 		try:
+			debug(f'loading series data from disk: {title_id}')
 			fp = compression.open(self._series_file(title_id))
 			return read_json_obj(fp)
 		except:
@@ -174,6 +198,22 @@ class Database(UserDict):
 		return self[meta_key]
 
 
+	def remove(self, title_id:str) -> bool:
+		if title_id not in self:
+			return False
+
+		del self[title_id]
+		self.remove_series(title_id)
+
+		return True
+
+
+	def has_data(self, title_id:str) -> bool:
+		assert s_series_cache is not None, 'no series cache instance!?!'
+
+		return s_series_cache.exists(title_id)
+
+
 	def series(self, title_id:str) -> dict:
 		assert s_series_cache is not None, 'no series cache instance!?!'
 
@@ -185,6 +225,9 @@ class Database(UserDict):
 		if not exists:
 			# the entry was just (down)loaded
 			self._update_meta(title_id, data)
+		else:
+			self[title_id][meta_last_used_key] = now_stamp()
+			set_dirty()
 
 		return data
 
@@ -201,6 +244,7 @@ class Database(UserDict):
 		assert s_series_cache is not None, 'no series cache instance!?!'
 
 		return s_series_cache.remove(title_id)
+
 
 	def _update_meta(self, title_id:str, data:dict):
 		meta = self.get(title_id, {})
@@ -239,7 +283,44 @@ class Database(UserDict):
 				meta_next['date'] = next_ep['date']
 			meta[meta_next_episode_key] = meta_next
 
+		meta[meta_last_used_key] = now_stamp()
+
 		# TODO: anything else?
+
+
+	def clean_unused(self):
+		"""Remove series data of rarely used (archived) series"""
+
+		assert s_series_cache is not None, 'no series cache instance!?!'
+
+		removed = 0
+		for title_id, meta in self.items():
+			if series_state(meta) & State.ARCHIVED:
+				last_used = meta.get(meta_last_used_key)
+
+				if not last_used:
+					# get the file's modification time stamp (access time might not be available/reliable)
+					mtime = s_series_cache.mtime(title_id)
+					if mtime is None:
+						# file diesn't exist, set "last used" to an already-expired time stamp
+						meta[meta_last_used_key] = (now_datetime() - _REMOVE_DATA_AFTER).isoformat(' ', timespec='seconds')
+						set_dirty()
+						continue
+
+					last_used = mtime.isoformat(' ', timespec='seconds')
+					meta[meta_last_used_key] = last_used
+					set_dirty()
+
+				age = now_datetime() - datetime.fromisoformat(last_used)
+				if age > _REMOVE_DATA_AFTER:
+					self.remove_series(title_id)
+					removed += 1
+					print(title_id, meta)
+					debug(f'''{title_id:>8} "{meta['title']}" {age.days} days -> {_b}removed{_0}''')
+
+		if removed:
+			debug(f'Series data removed for {removed} series (older than {_REMOVE_DATA_AFTER.days})')
+
 
 
 s_series_cache:SeriesCache|None = None
@@ -298,6 +379,8 @@ def load(db_file:str|None=None) -> Database:
 
 	ms = (t1 - t0)*1000
 	debug(f'{_f}db: read %d entries in %.1fms; v%d{_0}' % (len(mig_db), ms, mig_db.version))
+
+	mig_db.clean_unused()
 
 	if is_dirty():
 		save(mig_db)
@@ -391,7 +474,7 @@ def _migrate(db:dict) -> Database:
 
 		# remove duplicate history entries
 		if db_version < 5:
-			history = legacy_meta_get(series, meta_update_history_key)
+			history = legacy_meta_get(meta, meta_update_history_key)
 		else:
 			history = meta.get(meta_update_history_key, [])
 
@@ -419,14 +502,17 @@ def _migrate(db:dict) -> Database:
 		# assign list index in added time order
 		list_index = 1
 		for series in sorted(db.values(), key=lambda series: legacy_meta_get(series, meta_added_key)):
-			meta_set(series, meta_list_index_key, list_index)
+			legacy_meta_set(series, meta_list_index_key, list_index)
 			list_index += 1
 		set_dirty()
 
 	# if no version exists, set to current version
 	if db_version != DB_VERSION:
 		print(f'{_f}Set DB version: %s -> %s{_0}' % (legacy_meta_get(db, meta_version_key), DB_VERSION))
-		meta_set(db, meta_version_key, DB_VERSION)
+		if db_version < 5:
+			legacy_meta_set(db, meta_version_key, DB_VERSION)
+		else:
+			meta_set(db, meta_version_key, DB_VERSION)
 
 	if db_version < 2:
 		legacy_meta_set(db, meta_next_list_index_key, list_index)
@@ -451,9 +537,13 @@ def _migrate(db:dict) -> Database:
 			# TODO: show progress bar: (count + 1) / len(idList)
 			entry = old_db[series_id]   # series data & meta
 			meta = entry.pop(meta_key, {})
-			series_data = entry
 			mig_db[series_id] = meta
-			mig_db.set_series(series_id, series_data)  # updates meta
+			# write external series data file only for non-archived series
+			series_data = entry
+			if meta_archived_key not in meta:
+				mig_db.set_series(series_id, series_data)  # updates meta
+			else:
+				mig_db._update_meta(series_id, series_data)
 
 		# wait for the pool jobs to complete
 		for p in s_mp_writer_pool_results:
@@ -1020,6 +1110,7 @@ meta_list_index_key = 'list_index'
 meta_next_list_index_key = 'next_list_index'
 meta_update_check_key = 'update_check'
 meta_update_history_key = 'update_history'
+meta_last_used_key = 'last-used'
 meta_rating_key = 'rating'
 meta_rating_comment_key = 'rating_comment'
 meta_version_key = 'version'
