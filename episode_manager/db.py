@@ -19,7 +19,7 @@ from typing import Any, Callable, TypeVar, Generator
 
 DB_VERSION = 5
 
-_SAVE_DISABLED = True
+_SAVE_DISABLED = False #True
 
 _REMOVE_DATA_AFTER = timedelta(days=30)
 
