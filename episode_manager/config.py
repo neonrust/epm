@@ -14,9 +14,11 @@ default_max_hits = 10
 
 env_config_path = 'EPM_CONFIG'
 env_series_db_path = 'EPM_SERIES_DB'
+env_series_cache_path = 'EPM_SERIES_CACHE'
 env_debug = 'EPM_DEBUG'
 
 user_config_home = os.getenv('XDG_CONFIG_HOME') or pexpand(pjoin('$HOME', '.config'))
+user_cache_home = os.getenv('XDG_CACHE_HOME') or pexpand(pjoin('$HOME', '.cache'))
 
 app_config_file = ''  # set in _init()
 PRG = ''              # set in _init()
@@ -83,14 +85,21 @@ def load() -> bool:
 
 	db_file = get('paths/series-db')
 	if not isinstance(db_file, str):
-		db_file = os.getenv(env_series_db_path) \
-		          or \
-		          pjoin(user_config_home, 'episode_manager', 'series')
+		db_file = os.getenv(env_series_db_path)
+		if not db_file:
+			db_file = pjoin(user_config_home, 'episode_manager', 'series')
 		set('paths/series-db', db_file, store=Store.Memory)
+
+	cache_path = get('paths/series-cache')
+	if not isinstance(cache_path, str):
+		cache_path = os.getenv(env_series_cache_path)
+		if not cache_path:
+			cache_path = pjoin(user_cache_home, 'episode_manager')
+		set('paths/series-cache', cache_path, store=Store.Memory)
 
 	paths = _app_config.get('paths', {})
 	if not isinstance(paths, dict):
-		raise RuntimeError(f'{warning_prefix()} Config key "paths" is not an object')
+		raise RuntimeError(f'{warning_prefix()} Config key "paths" is not a dict')
 
 	for key in paths.keys():
 		paths[key] = pexpand(paths[key])
@@ -194,7 +203,7 @@ def get_list(path:str, default_value:list|None=None) -> list|None:
 def set(path:str, value:Any, store:Store|None=Store.Persistent) -> None:
 	# path: key/key/key
 	keys = path.split('/')
-	if not keys:
+	if not keys or any(len(key) == 0 for key in keys):
 		raise RuntimeError('Empty key path')
 
 	store = store or Store.Memory
@@ -254,11 +263,11 @@ if __name__ == '__main__':
 	load()
 
 	def dump_stores():
-		print('\x1b[33;1mMEMORY\x1b[m')
+		print('\x1b[33;1mMEMORY %s\x1b[m' % ('-'*30))
 		print_json(_memory_config)
-		print('\x1b[33;1mAPP\x1b[m')
+		print('\x1b[33;1mAPP %s\x1b[m' % ('-'*30))
 		print_json(_app_config)
-		print('\x1b[33;1mDEFAULTS\x1b[m')
+		print('\x1b[33;1mDEFAULTS %s\x1b[m' % ('-'*30))
 		print_json(_configuration_defaults)
 
 	dump_stores()
@@ -267,6 +276,7 @@ if __name__ == '__main__':
 		'lookup/max-hits',
 		'commands/default',
 		'paths/series-db',
+		'paths/series-cache',
 	]
 	print('='*40)
 	for path in paths:

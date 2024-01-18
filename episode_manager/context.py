@@ -12,7 +12,7 @@ class Context:
 		self._eat_option = eo
 		self._resolve_cmd = rc
 
-		self.global_options = {}
+		self.global_options:dict = {}
 		self.command:str|None = None
 		self.command_options:dict[str, Any] = {}
 		self.command_arguments:list[str] = []
@@ -21,7 +21,7 @@ class Context:
 		self.default_command_arguments:list = []
 
 		self.handler:Callable = self._no_command
-		self.db:dict[str,dict] = {}
+		self.db:db.Database = db.Database()
 
 	def invoke(self, width:int) -> str|None:
 		load_db = getattr(self.handler, 'load_db', True)

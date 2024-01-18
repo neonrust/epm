@@ -1,15 +1,15 @@
 
-import time
 from datetime import date
 from typing import Callable
 import textwrap
 
 from .config import debug
 from .db import \
-    meta_get, \
-	meta_has, \
 	meta_archived_key, \
+	meta_active_status_key, \
+	meta_total_episodes_key, \
 	series_seen_unseen, \
+	series_num_seen_unseen, \
 	episode_key
 from .utils import \
     strip_ansi, \
@@ -22,15 +22,13 @@ from .styles import _0, _00, _i, _b, _B, _c, _f, _K, _o, _g, _w, _EOL
 list_index_style = '\x1b[3;38;2;160;140;60m'
 
 
-def print_series_title(list_index:int|None, series:dict, width:int=0, imdb_id:str|None=None, gray:bool=False, tail: str|None=None, tail_style:str|None=None, show_progress:bool=True) -> None:
+def print_series_title(list_index:int|None, meta:dict, width:int=0, imdb_id:str|None=None, gray:bool=False, tail: str|None=None, tail_style:str|None=None, show_progress:bool=True) -> None:
 
 	# this function should never touch the BG color (b/c the list might have alternating bg color)
 
 	left = ''    # parts relative to left edge (num, title, years)
 	right = ''   # parts relative to right edge (IMDbID, tail)
 	right_w = 0
-
-	series_status = series.get('status')
 
 	if list_index is not None:
 		list_index_w = 5
@@ -50,17 +48,18 @@ def print_series_title(list_index:int|None, series:dict, width:int=0, imdb_id:st
 		width -= len(tail)
 		right_w += len(tail)
 
-	left += format_title(series, width=width)
+	left += format_title(meta, width=width)
 
-	series_status = series.get('status')
+	series_status = meta.get(meta_active_status_key)
 	if series_status in ('ended', 'canceled'):
 		width -= 2 + 5
 		left += f'  {_w}{_i}{series_status}{_0}'
 
 	if show_progress and series_status in ('ended', 'canceled', 'concluded'):
-		seen, unseen = series_seen_unseen(series, now_datetime())
-		if unseen:
-			percent = len(seen)*100 / len(series.get('episodes'))
+		num_episodes = meta.get(meta_total_episodes_key, 0)
+		num_seen = len(meta.get('seen', []))
+		if num_seen < num_episodes:
+			percent = 100*num_seen / num_episodes
 			left += f'  {_f}{percent:2.0f}{_b}%{_0}'
 			width -= 5
 
@@ -76,10 +75,10 @@ def print_series_title(list_index:int|None, series:dict, width:int=0, imdb_id:st
 	print(_K)
 
 
-def print_episodes(series:dict, episodes:list[dict], width:int, pre_print:Callable|None=None, also_future:bool=False, limit:int|None=None) -> list[str]:
+def print_episodes(series:dict, meta:dict, episodes:list[dict], width:int, pre_print:Callable|None=None, also_future:bool=False, limit:int|None=None) -> list[str]:
 
-	seen, unseen = series_seen_unseen(series)
-	seen_keys = {episode_key(ep) for ep in seen}
+	seen, _ = series_seen_unseen(series, meta)
+	seen_keys = { episode_key(ep) for ep in seen }
 
 	indent = 6  # nice and also space to print the season "grouping labels"
 	current_season = 0
@@ -167,20 +166,22 @@ def print_episodes(series:dict, episodes:list[dict], width:int, pre_print:Callab
 	return keys
 
 
-def print_archive_status(series:dict) -> None:
-	if meta_has(series, meta_archived_key):
+def print_archive_status(meta:dict) -> None:
+	if meta_archived_key in meta:
 		print(f'{_f}       Archived', end='')
-		seen, unseen = series_seen_unseen(series)
-		if seen and unseen:  # some has been seen, but not all
+		num_seen, num_unseen = series_num_seen_unseen(meta)
+		if num_seen > 0 and num_unseen > 0:  # some has been seen, but not all
 		    print(' / Abandoned', end='')
-		print('  ', meta_get(series, meta_archived_key).split()[0], end='')
+		archived = meta.get(meta_archived_key)
+		if isinstance(archived, str):
+			print('  ', archived.split()[0], end='')
 		print(f'{_0}')
 
 
-def print_seen_status(series:dict, gray:bool=False, summary:bool=True, next:bool=True, last:bool=True, include_future=False, width:int=0):
+def print_seen_status(series:dict, meta:dict, gray:bool=False, summary:bool=True, next:bool=True, last:bool=True, include_future=False, width:int=0):
 	ind = '       '
 
-	seen, unseen = series_seen_unseen(series, before=now_datetime() if not include_future else None)
+	seen, unseen = series_seen_unseen(series, meta, before=now_datetime() if not include_future else None)
 	all_seen = seen and len(seen) == len(series.get('episodes', []))
 
 	s = ''
@@ -233,16 +234,16 @@ def print_seen_status(series:dict, gray:bool=False, summary:bool=True, next:bool
 			print(f'{header}{s}')
 
 
-def format_title(series, width:int|None=None):
+def format_title(meta:dict, width:int|None=None):
 
-	title = series['title']
+	title = meta['title']
 	if width is not None and len(title) > width: # title is too wide
 	    # truncate and add ellipsis
 		title = title[:width - 1] + '…'
 
 	s = f'\x1b[38;5;253m{title}'
 
-	years = series.get("year")
+	years = meta.get("year")
 	if years is not None:
 		#s += f'  {_0}\x1b[38;5;245m({years[0]}-{years[1] if len(years) == 2 else ""})'
 		_punct = '\x1b[38;2;100;100;100m'

@@ -2,19 +2,24 @@ import sys
 import time
 import os
 from datetime import datetime, timedelta
-from os.path import dirname, exists as pexists
+from os.path import dirname, exists as pexists, join as pjoin
+from collections import UserDict
 import shutil
 from tempfile import mkstemp
 import enum
+import multiprocessing as mp
+from multiprocessing.pool import ApplyResult
 
-from . import config, compression
+from . import config, compression, tmdb
 from .config import debug
 from .utils import read_json_obj, write_json, now_datetime
-from .styles import _0, _f, _E, _00
+from .styles import _0, _b, _f, _E, _00
 
 from typing import Any, Callable, TypeVar, Generator
 
-DB_VERSION = 4
+DB_VERSION = 5
+
+_SAVE_DISABLED = True
 
 _dirty = True
 
@@ -30,13 +35,219 @@ def code_version() -> int:
 	return DB_VERSION
 
 def base_filename():
-	return str(config.get('paths/series-db'))
+	path = config.get('paths/series-db')
+	assert path, 'series-db is falsy: %r' % path
+	return str(path)
+
+def cache_path():
+	path = config.get('paths/series-cache')
+	assert path, 'series-cache is falsy: %r' % path
+	return str(path)
 
 def active_file(uncompressed:bool=False) -> str:
 	return _filename_slot(base_filename(), 0)
 
 
-def load(db_file:str|None=None) -> dict:
+s_mp_writer_pool = None
+s_mp_writer_pool_results:list[ApplyResult] = []
+
+def _write_series_file(title_id:str, data:dict, series_file:str):
+	tmp_name = write_json_tmp(data, dirname(series_file))
+	err = None
+	if tmp_name:
+		os.rename(tmp_name, series_file)
+		debug(f'db: wrote series file {title_id} -> {series_file}')
+	else:
+		err = f'{_E}Failed{_00} writing series file for {title_id}'
+
+	return err or True
+
+_not_in_cache = object()
+
+class SeriesCache:
+
+	def __init__(self, path:str):
+		self._cache:dict = {}
+		self._path = path
+		os.makedirs(path, exist_ok=True)
+
+	def __contains__(self, title_id) -> bool:
+		return title_id in self._cache
+
+	def get(self, title_id:str) -> dict|None:
+		data = self._cache.get(title_id, _not_in_cache)
+
+		if data is _not_in_cache:
+			data = self._load_series(title_id)
+			if not data:
+				data = tmdb.details(title_id)
+			if data:
+				self._cache[title_id] = data
+
+		return data
+
+
+	def set(self, title_id:str, data:dict):
+		self._cache[title_id] = data
+
+		if _SAVE_DISABLED:
+			print(f'db: {_E}SAVE DISABLED{_00} (series)')
+			return
+		if not self._save_series(title_id, data):
+			raise RuntimeError(f'failed serialization of {title_id}')
+
+
+	def remove(self, title_id:str) -> bool:
+		series = self._cache.pop(title_id, _not_in_cache)
+
+		if series is _not_in_cache:
+			return False
+
+		os.remove(self._series_file(title_id))
+		return True
+
+
+	def _series_file(self, title_id:str) -> str:
+		return pjoin(self._path, title_id)
+
+
+	def _load_series(self, title_id:str) -> dict|None:
+		try:
+			fp = compression.open(self._series_file(title_id))
+			return read_json_obj(fp)
+		except:
+			return None
+
+
+	def _save_series(self, title_id:str, data:dict) -> bool:
+		if s_mp_writer_pool:
+			promise = s_mp_writer_pool.apply_async(_write_series_file, (title_id, data, self._series_file(title_id)))
+			s_mp_writer_pool_results.append(promise)
+			return True
+
+		return _write_series_file(title_id, data, self._series_file(title_id))
+
+
+class Database(UserDict):
+
+	def __init__(self, initialdata=None):
+		super().__init__(initialdata)
+		# TODO: remove unreferencds entries in s_series_cache
+
+	def __len__(self):
+		if meta_key in self:
+			return super().__len__() - 1  # exclude epm:meta
+		return 0
+
+	def __nonzero__(self):
+		return len(self) > 0
+
+	@property
+	def version(self) -> int:
+		version = self.meta.get(meta_version_key)
+		if not isinstance(version, int):
+			return 0
+		return version
+
+	@property
+	def next_list_index(self):
+		next_index = self.meta.get(meta_next_list_index_key)
+		if not isinstance(next_index, int):
+			return 1
+		return next_index
+
+	@next_list_index.setter
+	def next_list_index(self, next_index):
+		self.meta[meta_next_list_index_key] = next_index
+
+	def items(self):
+		return (
+	        (series_id, meta)
+			for series_id, meta in super().items()
+			if series_id != meta_key
+		)
+
+	@property
+	def meta(self) -> dict[str, str|int|float|dict|list]:
+		if meta_key not in self:
+			self[meta_key] = {}
+		return self[meta_key]
+
+
+	def series(self, title_id:str) -> dict:
+		assert s_series_cache is not None, 'no series cache instance!?!'
+
+		exists = title_id in s_series_cache
+		data = s_series_cache.get(title_id)
+		if not data:
+			raise KeyError(title_id);
+
+		if not exists:
+			# the entry was just (down)loaded
+			self._update_meta(title_id, data)
+
+		return data
+
+
+	def set_series(self, title_id:str, data:dict):
+		assert s_series_cache is not None, 'no series cache instance!?!'
+
+		s_series_cache.set(title_id, data)
+
+		self._update_meta(title_id, data)
+
+
+	def remove_series(self, title_id:str) -> bool:
+		assert s_series_cache is not None, 'no series cache instance!?!'
+
+		return s_series_cache.remove(title_id)
+
+	def _update_meta(self, title_id:str, data:dict):
+		meta = self.get(title_id, {})
+
+		meta['title'] = data['title']
+		if 'year' in data:
+			meta['year'] = data['year']
+		if 'imdb_id' in data:
+			meta['imdb_id'] = data['imdb_id']
+
+		if data.get('status'):
+			meta[meta_active_status_key] = data.get('status')
+
+		meta[meta_total_episodes_key] = len(data.get('episodes', []))
+		meta[meta_total_seasons_key] = len(set(ep['season'] for ep in data['episodes']))
+
+		last_ep, seen_time = last_seen_episode(data, meta)
+
+		if last_ep and seen_time:
+			meta_last = {
+			    'episode': episode_key(last_ep),
+				'title': last_ep.get('title', ''),
+				'date': last_ep['date'],
+				'seen': seen_time,
+			}
+			meta_last['date'] = last_ep['date']
+			meta[meta_last_episode_key] = meta_last
+
+		next_ep = next_unseen_episode(data, meta)
+		if next_ep:
+			meta_next = {
+			    'episode': episode_key(next_ep),
+				'title': next_ep.get('title', ''),
+			}
+			if 'date' in next_ep:
+				meta_next['date'] = next_ep['date']
+			meta[meta_next_episode_key] = meta_next
+
+		# TODO: anything else?
+
+
+s_series_cache:SeriesCache|None = None
+
+def load(db_file:str|None=None) -> Database:
+
+	global s_series_cache
+	s_series_cache = SeriesCache(pjoin(cache_path(), 'series'))
 
 	if not db_file:
 		db_file = active_file()
@@ -68,34 +279,33 @@ def load(db_file:str|None=None) -> dict:
 			if pexists(old_db_file):
 				os.makedirs(dirname(uncompressed_file), exist_ok=True)
 				shutil.copy(old_db_file, uncompressed_file)
-				print(f'{_f}[db: copied from old location: {old_db_file} -> {uncompressed_file}]{_0}')
+				print(f'{_f}[{_b}db{_0}{_f}: copied from old location: {old_db_file} -> {uncompressed_file}]{_0}')
 
 
 	if not pexists(db_file):
 		# brand new database
-		print(f'{_f}[db: new database]{_0}')
-		return {}
+		print(f'{_f}[{_b}db{_0}{_f}: new database]{_0}')
+		return Database()
 
 
 	t0 = time.time()
 	db = read_json_obj(compression.open(db_file))
 	t1 = time.time()
 
-	if debug:
-		ms = (t1 - t0)*1000
-		debug(f'{_f}db: read %d entries in %.1fms; v%d{_0}' % (len(db) - 1, ms, meta_get(db, meta_version_key)))
-
 	set_dirty(False)
 
-	_migrate(db)
+	mig_db = _migrate(db)
+
+	ms = (t1 - t0)*1000
+	debug(f'{_f}db: read %d entries in %.1fms; v%d{_0}' % (len(mig_db), ms, mig_db.version))
 
 	if is_dirty():
-		save(db)
+		save(mig_db)
 
-	return db
+	return mig_db
 
 
-def _migrate(db:dict):
+def _migrate(db:dict) -> Database:
 	# no db meta data, yikes!
 	if meta_key not in db:
 		db[meta_key] = {}
@@ -103,45 +313,61 @@ def _migrate(db:dict):
 
 	db_version = db[meta_key].get('version', 0)
 
+	fixed_external_data = 0
 	fixed_legacy_meta = 0
 	fixed_archived = 0
 	fixed_update_history = 0
 	fixed_nulls = 0
 	fixed_update_history_dups = 0
 
-	for series_id in all_ids(db):
-		series = db[series_id]
+	def legacy_meta_get(series:dict, key:str):
+		return series.get(meta_key, {}).get(key)
+	def legacy_meta_set(series:dict, key:str, value):
+		meta = series.get(meta_key, {})
+		meta[key] = value
+		series[meta_key] = meta
+	def legacy_meta_del(series:dict, key:str):
+		meta = series.get(meta_key, {})
+		meta.pop(key, None)
+		series[meta_key] = meta
+
+	for series_id in db.keys():
+		if series_id == meta_key:
+			continue
+
+		meta = db[series_id]
 
 		if db_version < 1:
+			series = meta
 			if meta_key not in series:
 				series[meta_key] = {
-						key: series.pop(key)
+				        key: series.pop(key)
 						for key in meta_legacy_keys
 						if key in series
 				}
 				fixed_legacy_meta += 1
 
-			if meta_get(series, meta_archived_key) == True:
+			if legacy_meta_get(series, meta_archived_key) == True:
 				# fix all "archived" values to be dates (not booleans)
-				seen = meta_get(series, meta_seen_key)
+				seen = legacy_meta_get(series, meta_seen_key)
 				last_seen = '0000-00-00 00:00:00'
 				# use datetime from last marked episode
 				for dt in seen.values():
 					if dt > last_seen:
 						last_seen = dt
 
-				meta_set(series, meta_archived_key, last_seen)
+				legacy_meta_set(series, meta_archived_key, last_seen)
 				fixed_archived += 1
 
 		if db_version < 3:
-			last_update = meta_get(series, 'updated')
+			last_update = legacy_meta_get(series, 'updated')
 			if last_update:
-				meta_set(series, meta_update_check_key, last_update)
-				meta_del(series, 'updated')
+				legacy_meta_set(series, meta_update_check_key, last_update)
+				legacy_meta_del(series, 'updated')
 
-			update_history = meta_get(series, meta_update_history_key)
+			update_history = legacy_meta_get(series, meta_update_history_key)
 			if not update_history and last_update:
-				meta_set(series, meta_update_history_key, [last_update])
+				legacy_meta_set(series, meta_update_history_key, [last_update])
 				fixed_update_history += 1
 
 			series.pop('id', None)
@@ -163,7 +389,12 @@ def _migrate(db:dict):
 
 			_del_empty(series)
 
-		history = meta_get(series, meta_update_history_key)
+		# remove duplicate history entries
+		if db_version < 5:
+			history = legacy_meta_get(series, meta_update_history_key)
+		else:
+			history = meta.get(meta_update_history_key, [])
+
 		if len(history) >=2:
 			history.sort()
 			idx = 0
@@ -176,45 +407,89 @@ def _migrate(db:dict):
 					idx += 1
 
 			if mods > 0:
-				debug('Removed dup %d history items from %s' % (mods, series['title']))
+				debug(f'Removed {mods} dup history items from %s' % (series['title']))
+				if db_version < 5:
+					legacy_meta_set(series, meta_update_history_key, history)
+				else:
+					meta[meta_update_history_key] = history
 				fixed_update_history_dups += mods
+
 
 	if db_version < 2:
 		# assign list index in added time order
 		list_index = 1
-		for series in sorted(db.values(), key=lambda series: meta_get(series, meta_added_key)):
+		for series in sorted(db.values(), key=lambda series: legacy_meta_get(series, meta_added_key)):
 			meta_set(series, meta_list_index_key, list_index)
 			list_index += 1
 		set_dirty()
 
 	# if no version exists, set to current version
 	if db_version != DB_VERSION:
-		print(f'{_f}Set DB version: %s -> %s{_0}' % (meta_get(db, meta_version_key), DB_VERSION))
+		print(f'{_f}Set DB version: %s -> %s{_0}' % (legacy_meta_get(db, meta_version_key), DB_VERSION))
 		meta_set(db, meta_version_key, DB_VERSION)
 
 	if db_version < 2:
-		meta_set(db, meta_next_list_index_key, list_index)
+		legacy_meta_set(db, meta_next_list_index_key, list_index)
 		print(f'{_f}Built list indexes for all {len(db) - 1} series, next index: {list_index}{_0}')
 
-	if fixed_legacy_meta:
-		print(f'{_f}Migrated legacy meta-data of {fixed_legacy_meta} series{_0}')
+	if db_version < 5:
+		old_db = db
+		mig_db = Database(db)
+		id_list = list(series_id for series_id, _  in old_db.items() if series_id != meta_key)
+
+		print(f'{_f}Migrating database to v{DB_VERSION} ({len(id_list)} series)...{_0}')
+
+		# save series data into external files; see SeriesCache
+		# promote [series_id][emp:meta] -> [series_id]
+		# the global [epm:meta], is unchanged
+
+		# db.set_series will use the MP pool, if  it exists
+		global s_mp_writer_pool
+		s_mp_writer_pool = mp.Pool()
+
+		for count, series_id in enumerate(id_list):
+			# TODO: show progress bar: (count + 1) / len(idList)
+			entry = old_db[series_id]   # series data & meta
+			meta = entry.pop(meta_key, {})
+			series_data = entry
+			mig_db[series_id] = meta
+			mig_db.set_series(series_id, series_data)  # updates meta
+
+		# wait for the pool jobs to complete
+		for p in s_mp_writer_pool_results:
+			err = p.get()
+			if err != True:
+				print(err, file=sys.stderr)
+			else:
+				fixed_external_data += 1
+	else:
+		mig_db = Database(db)
+
+	# ----------------------------------------------------
+
+	def did_migration(msg):
 		set_dirty()
+		print(f'{_f}[\x1b[1mdb{_0}{_f}: {msg}]{_0}')
+
+	if fixed_legacy_meta:
+		did_migration(f'Migrated legacy meta-data; {fixed_legacy_meta} series')
+
+	if fixed_external_data:
+		did_migration(f'Migrated to external data; {fixed_external_data} series')
 
 	if fixed_archived:
-		print(f'{_f}Fixed bad "{meta_archived_key}" value of {fixed_archived} series{_0}')
-		set_dirty()
+		did_migration(f'Fixed bad "{meta_archived_key}" value; {fixed_archived} series')
 
 	if fixed_update_history:
-		print(f'{_f}Fixed empty "{meta_update_history_key}" value of {fixed_update_history} series{_0}')
-		set_dirty()
+		did_migration(f'Fixed empty "{meta_update_history_key}" values; {fixed_update_history} series')
 
 	if fixed_nulls:
-		print(f'{_f}Removed {fixed_nulls} null values{_0}')
-		set_dirty()
+		did_migration(f'Removed null values; {fixed_nulls} series')
 
 	if fixed_update_history_dups:
-		print(f'{_f}Removed {fixed_update_history_dups} duplicate update history entries{_0}')
-		set_dirty()
+		did_migration(f'Removed duplicate entires of update history; {fixed_update_history_dups} series')
+
+	return mig_db
 
 
 
@@ -228,8 +503,9 @@ def make_backup(source:str, destination:str) -> bool:
 
 
 def _filename_slot(base_name:str, idx:int) -> str:
-	if compression.method():
-		return '%s.%d%s' % (base_name, idx, compression.method()['extension'])
+	method = compression.method()
+	if method:
+		return '%s.%d%s' % (base_name, idx, method['extension'])
 
 	return '%s.%d' % (base_name, idx)
 
@@ -265,11 +541,16 @@ def _unrotate_backups(base_name:str):
 	return num_backups
 
 
-def save(db:dict) -> None:
+def save(db:Database) -> bool:
+
+	if _SAVE_DISABLED:
+		print(f'db: {_E}SAVE DISABLED{_00}')
+		set_dirty(False)
+		return True
 
 	if not is_dirty():
 		debug(f'{_f}db: save ignored; not dirty{_0}')
-		return
+		return True
 
 	set_dirty(False)
 
@@ -278,38 +559,45 @@ def save(db:dict) -> None:
 
 	os.makedirs(db_path, exist_ok=True)
 
-	# write to a temp file and then rename it afterwards
-	tmp_name = mkstemp(dir=db_path)[1]
-
 	t0 = time.time()
-	err = write_json(tmp_name, db)
+
+	tmp_name = write_json_tmp(db.data, db_path)
+	if not tmp_name:
+		print(f'{_E}Failed{_00} writing database file', file=sys.stderr)
+		return False
+
+	_rotate_backups(base_name)
+
+	os.rename(tmp_name, active_file())
+	debug(f'db: renamed new compressed {tmp_name} {active_file()}')
+
+	t1 = time.time()
+	ms = (t1 - t0)*1000
+	debug('db: wrote %d entries in %.1fms; v%d' % (len(db), ms, db.version))
+
+	return True
+
+
+def write_json_tmp(data:dict, dir:str) -> str|None:
+	# write to a temp file and then rename it afterwards
+	tmp_name = mkstemp(dir=dir)[1]
+
+	err = write_json(tmp_name, data)
 
 	if err is not None:
-		print(f'{_E}ERROR{_00} Failed saving series database: %s' % str(err), file=sys.stderr)
+		print(f'{_E}ERROR{_00} Failed writing JSON: %s' % str(err), file=sys.stderr)
 		os.remove(tmp_name)
-		return
+		return None
 
-	# current file becomes first backup (<name>.1)
-	# TODO: spawn background process to compress to make it appear faster?
-	#   might run into (more) race-conditions of course
-
-	tmp_name2 = mkstemp(dir=db_path)[1]
+	tmp_name2 = mkstemp(dir=dir)[1]
 	debug(f'db: compressing {tmp_name} -> {tmp_name2}')
 
 	if not compression.compress_file(tmp_name, tmp_name2):
 		os.remove(tmp_name)
 		os.remove(tmp_name2)
-		return
+		return None
 
-	_rotate_backups(base_name)
-
-	debug(f'db: rename new compressed {tmp_name2} {active_file()}')
-	os.rename(tmp_name2, active_file())
-	t1 = time.time()
-
-	if debug:
-		ms = (t1 - t0)*1000
-		debug('db: wrote %d entries in %.1fms; v%d' % (len(db) - 1, ms, meta_get(db, meta_version_key)))
+	return tmp_name2
 
 
 def list_backups() -> list[str]:
@@ -336,7 +624,7 @@ def rollback():
 	if not pexists(first_backup):
 		return None, f'No backup to restore ({first_backup})', None
 
-	change_log = meta_get(load(), meta_changes_log_key, [])
+	change_log = load().meta.get(meta_changes_log_key, [])
 
 	# decreease the index of all backups
 	num_remaining = _unrotate_backups(base_name)
@@ -344,47 +632,40 @@ def rollback():
 	return num_remaining, first_backup, change_log
 
 
-def meta_get(obj:dict, key:str, def_value:Any=None) -> Any:
-	return obj.get(meta_key, {}).get(key, def_value)
-
-
-def meta_has(obj:dict, key:str) -> bool:
-	return meta_get(obj, key, None) is not None
-
-
-def meta_set(obj:dict, key: str, value) -> None:
+def meta_set(meta:dict, key: str, value) -> None:
+	# a bit complex to check whether 'value' differs from existing value
 	set_dirty()
-
-	if meta_key not in obj:
-		obj[meta_key] = {}
-
-	obj[meta_key][key] = value
+	meta[key] = value
 
 
-def meta_del(obj:dict, key: str) -> None:
-	if key in obj.get(meta_key, {}):
+def meta_del(meta:dict, key: str) -> None:
+	if key in meta:
 		set_dirty()
-	obj[meta_key].pop(key, None)
+	meta.pop(key, None)
 
 
-def meta_copy(source:dict, destination:dict) -> None:
-	set_dirty()
-	destination[meta_key] = source.get(meta_key, {})
+def changelog_add(db:Database, message:str, series_id:str|None=None):
+	if series_id is None:
+		log = db.meta.get(meta_changes_log_key)
+	else:
+		log = db[series_id].get(meta_changes_log_key)
+
+	if not isinstance(log, list):
+		log = []
+
+	log.append((message, series_id))
+
+	if series_id is None:
+		db.meta[meta_changes_log_key] = log
+		set_dirty()
+	else:
+		meta_set(db[series_id], meta_changes_log_key, log)
+
+	debug('Logged change:', message, series_id if series_id else '')
 
 
-def changelog_add(obj:dict, message:str, subject:str|None=None):
-	log = meta_get(obj, meta_changes_log_key, [])
-	log.append((message, subject))
-	meta_set(obj, meta_changes_log_key, log)
-	set_dirty()
-
-	debug('Logged change:', message, subject)
-
-
-def changelog_clear(obj:dict):
-	dirtyBefore = is_dirty()
-	meta_del(obj, meta_changes_log_key)
-	set_dirty(dirtyBefore)
+def changelog_clear(db:Database):
+	db.meta.pop(meta_changes_log_key, None)
 
 class State(enum.IntFlag):
 	PLANNED   = 0x01  # added but nothing seen (yet)
@@ -397,63 +678,54 @@ class State(enum.IntFlag):
 
 
 T = TypeVar('T')
-def filter_map(db:dict, sort_key:Callable[[str, dict],Any]|None=None, filter:Callable[[str,dict],bool]|None=None, map:Callable[[str,dict],T]|None=None) -> Generator[T,None,None]:
+def filter_map(db:Database, filter:Callable[[str,dict],bool]|None=None, map:Callable[[str,dict],T]|None=None, sort_key:Callable[[str, dict],Any]|None=None) -> Generator[T,None,None]:
 
-	if filter is None:
-		def no_filter(series_id:str, series:dict):
-			return True
-		filter = no_filter
+	filter = filter or (lambda i, m: True)
+	if not map:
+		def map(series_id:str, meta:dict):
+			return series_id, meta
 
-	if map is None:
-		def identity(series_id:str, series:dict):
-			return series_id, series
-		map = identity
-
-	db_iter:Generator|list = (
-		(series_id, series)
-		for series_id, series in db.items()
-		if series_id != meta_key
-	)
+	db_iter:Generator|list = db.items()
 	if sort_key:
 		db_iter = sorted(db_iter, key=sort_key)  # type: ignore # 'key' expects more generic type than we use
 
 	return (
-		map(series_id, series)
-		for series_id, series in db_iter
-		if filter(series_id, series)
+        map(series_id, meta)
+		for series_id, meta in db_iter
+		if filter(series_id, meta)
 	)
 
 
-def _sortkey_title_and_year(sid_series:tuple[str,dict]) -> Any:
-	series_id, series = sid_series
-	return series['title'].casefold(), series.get('year', [])
+def _sortkey_title_and_year(sid_meta:tuple[str,dict]) -> Any:
+	series_id, meta = sid_meta
+	return meta['title'].casefold(), meta.get('year', [])
 
-def indexed_series(db:dict, index=None, match=None, state:State|None=None, sort_key:Callable|None=None) -> list[tuple[int, str]]:
+def indexed_series(db:Database, index=None, match=None, state:State|None=None, sort_key:Callable|None=None) -> list[tuple[int, str]]:
 	"""Return a list with a predictable sorting, optionally filtered."""
 
-	def flt(_, series:dict) -> bool:
+	def flt(series_id:str, meta:dict) -> bool:
 		passed:bool = True
 
 		if passed and index is not None:
-			passed = meta_get(series, meta_list_index_key) == index
-
-		if passed and match is not None:
-			passed = match(series)
+			passed = meta.get(meta_list_index_key) == index
 
 		if passed and state is not None:
-			passed = (series_state(series) & state) > 0
+			passed = (series_state(meta) & state) > 0
+
+		if passed and match is not None:
+			passed = match(db, series_id, meta)
 
 		return passed
 
-	def index_and_series(series_id:str, series:dict) -> tuple[int, str]:
-		return meta_get(series, meta_list_index_key), series_id
+	def index_and_id(series_id:str, meta:dict) -> tuple[int, str]:
+		return meta[meta_list_index_key], series_id
 
 	sort_key = sort_key or _sortkey_title_and_year
 
-	return list(filter_map(db, filter=flt, map=index_and_series, sort_key=sort_key))
+	return list(filter_map(db, filter=flt, map=index_and_id, sort_key=sort_key))
 
 
-def find_single_series(db:dict, needle:str, filter_callback:Callable[[dict],bool]|None=None) -> tuple[int|None, str|None, str|None]:
+def find_single_series(db:Database, needle:str, filter_callback:Callable[[str,dict],bool]|None=None) -> tuple[int|None, str|None, str|list|None]:
 	nothing_found = None, None, f'Series not found: {needle}'
 
 	if not needle:
@@ -479,25 +751,27 @@ def find_single_series(db:dict, needle:str, filter_callback:Callable[[dict],bool
 	elif find_index:
 		debug('find_index:', find_index)
 
-	def flt(_, series:dict) -> bool:
+	def flt(series_id:str, meta:dict) -> bool:
 		passed = True
 
 		if passed and find_index is not None:
-			passed = meta_get(series, meta_list_index_key) == find_index
-
-		if passed and imdb_id is not None:
-			passed = series.get('imdb_id') == imdb_id
+			passed = meta.get(meta_list_index_key) == find_index
 
 		if passed and find_title is not None:
-			passed = find_title in series.get('title', '').casefold()
+			passed = find_title in meta.get('title', '').casefold()
+
+		if passed and imdb_id is not None:
+			series = db.series(series_id)
+			if series:
+				passed = series.get('imdb_id') == imdb_id
 
 		if passed and filter_callback is not None:
-			passed = filter_callback(series)
+			passed = filter_callback(series_id, meta)
 
 		return passed
 
-	def index_sid(series_id:str, series:dict) -> tuple[int, str]:
-		return meta_get(series, meta_list_index_key), series_id
+	def index_sid(series_id:str, meta:dict) -> tuple[int, str]:
+		return meta[meta_list_index_key], series_id
 
 	found = list(filter_map(db, filter=flt, map=index_sid))
 
@@ -510,12 +784,12 @@ def find_single_series(db:dict, needle:str, filter_callback:Callable[[dict],bool
 	return nothing_found
 
 
-def last_seen_episode(series:dict) -> tuple[dict|None, str|None]:
+def last_seen_episode(series:dict, meta:dict) -> tuple[dict|None, str|None]:
 	episodes = series.get('episodes', [])
 	if not episodes:
 		return None, None
 
-	seen = meta_get(series, meta_seen_key, {})
+	seen = meta.get(meta_seen_key, {})
 	last_seen = (0, 0)
 	seen_time = None
 	for seen_key in seen.keys():
@@ -529,7 +803,7 @@ def last_seen_episode(series:dict) -> tuple[dict|None, str|None]:
 			seen_time = seen[seen_key]
 
 	if last_seen == (0, 0):
-		return 0, None
+		return None, None
 
 	for ep in episodes:
 		season = ep['season']
@@ -541,17 +815,17 @@ def last_seen_episode(series:dict) -> tuple[dict|None, str|None]:
 	return None, None
 
 
-def next_unseen_episode(series:dict) -> dict|None:
+def next_unseen_episode(series:dict, meta:dict) -> dict|None:
 
 	episodes = series.get('episodes', [])
 	if not episodes:
 		return None
 
-	seen = meta_get(series, meta_seen_key, {})
+	seen = meta.get(meta_seen_key, {})
 	last_seen = (0, 0)
 	for seen_key in seen.keys():
 		season, episode = [
-			n if n == 'S' else int(n)
+		    n if n == 'S' else int(n)
 			for n in seen_key.split(':')
 		]
 		if season == 'S':
@@ -567,32 +841,24 @@ def next_unseen_episode(series:dict) -> dict|None:
 		episode = ep['episode']
 		# next episode in same season (checked first) or first in next season
 		if season == last_seen[0] and episode == last_seen[1] + 1 \
-			or\
+		    or\
 			season == last_seen[0] + 1 and episode == 1:
 			return ep
 
 	return None
 
 
-def all_ids(db:dict) -> list[str]:
-	return list(
-		key
-		for key in db.keys()
-		if key != meta_key
-	)
+def series_state(meta:dict) -> State:
+	is_archived = meta_archived_key in meta
+	is_ended = meta.get(meta_active_status_key) in ('ended', 'canceled')
 
-
-def series_state(series:dict) -> State:
-	is_archived = meta_has(series, meta_archived_key)
-	is_ended = series.get('status') in ('ended', 'canceled')
-
-	num_episodes = len(series.get('episodes', []))
-	num_seen = len(meta_get(series, meta_seen_key, {}))
+	num_episodes = meta.get(meta_total_episodes_key, 0)
+	num_seen = len(meta.get(meta_seen_key, {}))
 	num_unseen = num_episodes - num_seen
 
 	if is_archived:
 		if num_unseen > 0:  # partially seen
-			return State.ABANDONED
+		    return State.ABANDONED
 
 		return State.ARCHIVED
 
@@ -609,7 +875,7 @@ HOUR = 3600
 DAY = 24*HOUR
 WEEK = 7*DAY
 
-def should_update(series:dict) -> bool:
+def should_update(meta:dict) -> bool:
 
 	# never updated -> True
 	# archived -> False
@@ -622,16 +888,16 @@ def should_update(series:dict) -> bool:
 
 	# TODO: take seen episodes into account?
 
-	last_check = meta_get(series, meta_update_check_key)
+	last_check = meta.get(meta_update_check_key)
 	if not last_check:  # no updates whatsoever
-		return True
+	    return True
 
-	if series_state(series) & (State.ARCHIVED | State.COMPLETED) > 0:
+	if series_state(meta) & (State.ARCHIVED | State.COMPLETED) > 0:
 		return False
 
-	debug(f'\x1b[33;1m{series["title"]}\x1b[m', end='')
+	debug(f'\x1b[33;1m{meta["title"]}\x1b[m', end='')
 
-	if series.get('status') in ('ended', 'canceled'):
+	if meta.get(meta_active_status_key) in ('ended', 'canceled'):
 		# it's assumed we already have all the necessary info (most importantly the episodes)
 		#debug(f'  \x1b[3m{series["status"]}\x1b[m -> \x1b[31;1mFalse\x1b[m')
 		debug('\r\x1b[K', end='')
@@ -640,7 +906,7 @@ def should_update(series:dict) -> bool:
 	last_check = datetime.fromisoformat(last_check)
 	simple_age_cap = 2*WEEK
 
-	update_history = meta_get(series, meta_update_history_key)
+	update_history = meta.get(meta_update_history_key)
 	if not update_history:
 		debug(' \x1b[35;1mno updates\x1b[m \x1b[32;1mTrue\x1b[m')
 		return True
@@ -679,10 +945,16 @@ def should_update(series:dict) -> bool:
 	return expired
 
 
+def series_num_seen_unseen(meta:dict) -> tuple[int, int]:
+	num_total = meta.get(meta_total_episodes_key, 0)
+	num_seen = len(meta.get(meta_seen_key, []))
 
-def series_seen_unseen(series:dict, before:datetime|None=None) -> tuple[list, list]:
+	return num_seen, num_total - num_seen
+
+
+def series_seen_unseen(series:dict, meta:dict, before:datetime|None=None) -> tuple[list, list]:
 	episodes = series.get('episodes', [])
-	seen = meta_get(series, meta_seen_key, {})
+	seen = meta.get(meta_seen_key, {})
 
 	seen_eps = []
 	unseen_eps = []
@@ -699,7 +971,7 @@ def series_seen_unseen(series:dict, before:datetime|None=None) -> tuple[list, li
 					continue
 
 			elif before is not None:  # we're filtering by date but episode has no date
-				continue
+			    continue
 
 			unseen_eps.append(ep)
 
@@ -717,28 +989,32 @@ def series_index(index_number:int):
 	low = index_number % 100
 	high = index_number // 100
 
-	high_digits = []
+	high_digits:list[str] = []
 	while True:
 		digit = high % 26
 		high -= digit
 		if not digit:
 			break
-		digit = chr(digit - 1 + ord('a'))
-		high_digits.insert(0, digit)
+		high_digits.insert(0, chr(digit - 1 + ord('a')))
 
-	high_digits = ''.join(high_digits)
+	high_digits_str = ''.join(high_digits)
 	low_digits = '%02d' % low
 
-	return (high_digits, low_digits)
+	return (high_digits_str, low_digits)
 
 
-# def series_num_archived(db:dict) -> int:
+# def series_num_archived(db:Database) -> int:
 # 	return sum(1 if meta_has(series, meta_archived_key) else 0 for series in db.values())
 
 
 meta_key = 'epm:meta'
+meta_active_status_key = 'active-status'
 meta_added_key = 'added'
 meta_seen_key = 'seen'
+meta_last_episode_key = 'last-episode'
+meta_next_episode_key = 'next-episode'
+meta_total_episodes_key = 'total-episodes'
+meta_total_seasons_key = 'total-seasons'
 meta_archived_key = 'archived'
 meta_list_index_key = 'list_index'
 meta_next_list_index_key = 'next_list_index'
@@ -752,8 +1028,12 @@ meta_add_comment_key = 'add_comment'
 
 
 meta_legacy_keys = (
-	meta_added_key,
+    meta_added_key,
 	meta_update_check_key,
 	meta_seen_key,
 	meta_archived_key,
 )
+
+if __name__ == '__main__':
+	config.load()
+	load()

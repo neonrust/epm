@@ -10,13 +10,10 @@ from os.path import basename
 from calendar import Calendar, day_name, month_name, MONDAY, SUNDAY
 import textwrap
 
-from typing import Callable, Any
-try:
-	from . import db as m_db
-except RuntimeError as rte:
-	print('ERROR: %s; can not continue' % str(rte), file=sys.stderr)
-	sys.exit(1)
+from typing import Callable, Any, Pattern
 from . import tmdb, progress, config, utils, db
+m_db = db
+from .db import Database
 from .context import Context, BadUsageError
 from .config import Store, debug
 from .styles import _0, _00, _0B, _B, _c, _i, _b, _f, _fi, _K, _E, _o, _g, _u, _EOL
@@ -36,28 +33,28 @@ from .utils import \
 	warning_prefix, \
 	plural, \
 	now_datetime, \
-	now_stamp, \
-	today_date
+	now_stamp
 from .db import \
     State, \
 	set_dirty, \
-	meta_get, \
 	meta_set, \
-	meta_has, \
 	meta_del, \
-	meta_copy, \
 	meta_seen_key, \
 	meta_archived_key, \
-	changelog_add, \
 	meta_added_key, \
+	meta_total_episodes_key, \
+	meta_next_episode_key, \
+	meta_last_episode_key, \
+	meta_active_status_key, \
 	meta_update_check_key, \
 	meta_update_history_key, \
 	meta_rating_key, \
 	meta_rating_comment_key, \
 	meta_list_index_key, \
-	meta_next_list_index_key, \
 	meta_add_comment_key,\
+	changelog_add, \
 	series_state, \
+	series_num_seen_unseen, \
 	series_seen_unseen, \
 	episode_key, \
 	next_unseen_episode, \
@@ -168,8 +165,10 @@ def eat_option(command:str|None, option:str, args:list[str], options:dict, unkno
 
 	# print('arg type:', arg_type.__name__)
 
-	if not arg_type:  # no argument expected
-		if option_arg:  # but an argument was supplied
+	if not arg_type:
+		# no argument expected
+		if option_arg:
+			# but an argument was supplied
 			bad_opt_arg(command, option, option_arg, None)
 
 		set_func(True, key, options)
@@ -315,23 +314,24 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 	if all_unseen_eps:
 		show_next = False
 
-	if debug:
-		def _bool_color(b:bool) -> str:
-			if b:
-				return f'{_g}True{_0}'
-			return f'\x1b[31;1mFalse{_0}'
-		debug('  list_all:       ', _bool_color(list_all))
-		debug('  only_archived:  ', _bool_color(only_archived))
-		debug('  only_started:   ', _bool_color(only_started))
-		debug('  only_planned:   ', _bool_color(only_planned))
-		debug('  only_abandoned: ', _bool_color(only_abandoned))
-		debug('  with_unseen_eps:', _bool_color(with_unseen_eps))
-		debug('  all_unseen_eps: ', _bool_color(all_unseen_eps))
-		debug('  future_eps:     ', _bool_color(future_eps))
-		debug('  seen_eps:       ', _bool_color(seen_eps))
-		debug('  show_next:      ', _bool_color(show_next))
-		debug('  show_details:   ', _bool_color(show_details))
-		debug('  show_terse:     ', _bool_color(show_terse))
+		# ---------------------------------------------------------------------------
+	def _bool_color(b:bool) -> str:
+		if b:
+			return f'{_g}True{_0}'
+		return f'\x1b[31;1mFalse{_0}'
+	debug('  list_all:       ', _bool_color(list_all))
+	debug('  only_archived:  ', _bool_color(only_archived))
+	debug('  only_started:   ', _bool_color(only_started))
+	debug('  only_planned:   ', _bool_color(only_planned))
+	debug('  only_abandoned: ', _bool_color(only_abandoned))
+	debug('  with_unseen_eps:', _bool_color(with_unseen_eps))
+	debug('  all_unseen_eps: ', _bool_color(all_unseen_eps))
+	debug('  future_eps:     ', _bool_color(future_eps))
+	debug('  seen_eps:       ', _bool_color(seen_eps))
+	debug('  show_next:      ', _bool_color(show_next))
+	debug('  show_details:   ', _bool_color(show_details))
+	debug('  show_terse:     ', _bool_color(show_terse))
+	# ---------------------------------------------------------------------------
 
 	find_state:State|None = State.ACTIVE
 	if list_all:
@@ -372,28 +372,30 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 
 	sorting = ctx.command_options.get('sorting', [])
 	if sorting:
-		def _series_key(series:dict, key:str) -> str:
+		def _series_key(meta:dict, key:str) -> str:
 			# possible values are checked by _opt_sort_names
 			if key == 'earliest':
-				next_ep = next_unseen_episode(series)
+				next_ep = meta.get(meta_next_episode_key)
 				if not next_ep:
 					return '\xff'
 				return next_ep.get('date') or ''
+
 			elif key == 'latest':
-				last_ep, marked = last_seen_episode(series)
-				if not last_ep or marked is None:
+				last_ep = meta.get(meta_last_episode_key)
+				if not last_ep:
 					return '\xff'
-				return marked
-			elif key in series:  # possible values are checked by _opt_sort_names
-				return str(series[key])
+				return last_ep['seen']
+
+			elif series and key in series:  # possible values are checked by _opt_sort_names
+			    return str(series[key])
 			else:
 				# possible values are checked by _opt_sort_names
-				return meta_get(series, key) or ''
+				return meta.get(key) or ''
 
 		def _sort_key(item:tuple[str,dict]) -> Any:
 			index, series = item
 			return tuple(
-				_series_key(series, ord) for ord in sorting
+		        _series_key(series, order_by) for order_by in sorting
 			)
 		sort_key = _sort_key
 
@@ -411,17 +413,21 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 
 	date_stamp = now_dt.date().isoformat()
 
-	def match_series(series):
+	def match_series(series_id:str, meta:dict):
 		if with_unseen_eps:
-			_, unseen = series_seen_unseen(series, to_date)
-			if not unseen:
+			_, num_unseen = series_num_seen_unseen(meta)
+			if not num_unseen:
 				return False
 
 			if not future_eps:
-				for ep in unseen:
-					if ep.get('date') <= date_stamp:
-						debug('  ', series['title'], 'unseen episode available:', ep['season'], ep['episode'])
-						return True # at least one episode already released
+				series = ctx.db.series(series_id)
+				if series:
+					_, unseen = series_seen_unseen(series, meta)
+					for ep in unseen:
+						ep_date = ep.get('date')
+						if ep_date and ep_date <= date_stamp:
+							debug('  ', meta['title'], 'unseen episode available:', ep['season'], ep['episode'])
+							return True # at least one episode already released
 				return False  # no episodes already released
 
 		return True
@@ -453,10 +459,10 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 	num_archived = 0
 
 	for index, series_id in series_list:
-		series = ctx.db[series_id]
-		is_archived = meta_has(series, meta_archived_key)
+		meta = ctx.db[series_id]
+		is_archived = meta_archived_key in meta
 
-		seen, unseen = series_seen_unseen(series, to_date)
+		series = ctx.db.series(series_id)
 		# debug(f'{_f}"{series["title"]}" seen: {len(seen)} unseen: {len(unseen)}{_0}')
 
 		#if with_unseen_eps and not unseen:
@@ -470,16 +476,17 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 			print(f'\x1b[48;5;234m{_K}\r', end='')
 
 		if show_details:
-			print_series_details(index, series,width=width, gray=is_archived and not only_archived)
+			print_series_details(index, series, meta, width=width, gray=is_archived and not only_archived)
 		else:
-			print_series_title(index, series, width=width, gray=is_archived and not only_archived)
+			print_series_title(index, meta, width=width, gray=is_archived and not only_archived)
 			if not show_terse:
-				print_archive_status(series)
+				print_archive_status(meta)
 
 		if not show_terse:
 			# don't print "next" if we're printing all unseen episodes anyway
 			print_seen_status(
-				series,
+			    series,
+				meta,
 				summary=(not show_next or not all_unseen_eps) and not no_summary,
 				last=not show_next and not all_unseen_eps,
 				next=show_next or not all_unseen_eps,
@@ -488,11 +495,12 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 				gray=is_archived and not only_archived,
 			)
 
+			seen, unseen = series_seen_unseen(series, meta, to_date)
 			if seen_eps:
-				print_episodes(series, seen, width=width)
+				print_episodes(series, meta, seen, width=width)
 
 			if all_unseen_eps or (future_eps and not show_next):
-				print_episodes(series, unseen, width=width, limit=ep_limit, also_future=future_eps)
+				print_episodes(series, meta, unseen, width=width, limit=ep_limit, also_future=future_eps)
 
 		if hilite:
 			print(f'{_00}{_K}', end='')
@@ -546,11 +554,12 @@ def cmd_calendar(ctx:Context, width:int) -> Error|None:
 	# collect episodes over num_weeks*7
 	#   using margin of one extra week, because it's simpler
 	end_date = start_date + timedelta(days=(num_weeks + 1)*7)
-	for series_id in db.all_ids(ctx.db):
-		series = ctx.db[series_id]
+	for series_id, meta in ctx.db.items():
 
-		if meta_has(series, meta_archived_key):
+		if meta_archived_key in meta:
 			continue
+
+		series = ctx.db.series(series_id)
 
 		# faster to loop backwards?
 		for ep in series.get('episodes', []):
@@ -646,6 +655,7 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> Error|None:
 		max_hits = term_max_hits
 		print(f'{warning_prefix(ctx.command)} limited hits to %d (resize terminal to fit more)' % max_hits)
 
+	year_now = date.today().year
 	args = list(a for a in ' '.join(ctx.command_arguments).split())
 	year = None
 	if len(args) >= 2:
@@ -653,7 +663,8 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> Error|None:
 		m = year_ptn.match(args[-1])
 		if m:
 			y = int(m.group(1) or m.group(2))
-			if y in range(1800, 2100):  # very rough valid range
+			# very rough valid range
+			if y in range(1800, year_now + 10):
 				year = y
 				args.pop()
 
@@ -688,7 +699,9 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> Error|None:
 			print(f'{_f}Exists in the database: %d{_0}' % len(exists_in_db))
 
 		for new_series in exists_in_db:
-			if meta_has(ctx.db[new_series['id']], meta_archived_key):
+			series_id = new_series['id']
+			meta = ctx.db[series_id]
+			if meta_archived_key in meta:
 				arch_tail = f'  \x1b[33m(archived){_0}'
 			else:
 				arch_tail = None
@@ -710,6 +723,8 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> Error|None:
 
 	print(f'{_f}Enriching search hits...{_00}', end='', flush=True)
 	hit_details = tmdb.details(hit['id'] for hit in hits)
+	if not hit_details:
+		return Error('Failed to get title details for all hits (%s)' % ', '.join(hit['id'] for hit in hits))
 
 	clrline()
 
@@ -746,23 +761,26 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> Error|None:
 	new_series = hits[selected_index]
 	series_id = new_series['id']
 
-	meta_set(new_series, meta_seen_key, {})
-	meta_set(new_series, meta_added_key, now_stamp())
-
-	# assign 'list index', and advance the global
-	next_list_index = meta_get(ctx.db, meta_next_list_index_key)
-	meta_set(new_series, meta_list_index_key, next_list_index)
-	meta_set(ctx.db, meta_next_list_index_key, next_list_index + 1)
+	series_index = ctx.db.next_list_index
+	ctx.db.next_list_index = series_index + 1
 
 	if ctx.option('comment'):
 		comment = ctx.option('comment').strip()
 	else:
 		comment = input('Write a comment (optional): ').strip()
 
+	# add series meta to db (enough to refresh_series can fetch the series data)
+	meta = {
+	    'title': new_series['title'],
+		meta_added_key: now_stamp(),
+		meta_list_index_key: series_index,
+	}
+	if 'year' in new_series:
+		meta['year'] = new_series['year'],
 	if comment:
-		meta_set(new_series, meta_add_comment_key, comment)
+		meta[meta_add_comment_key] = comment
 
-	ctx.db[series_id] = new_series
+	ctx.db[series_id] = meta
 
 	changelog_add(ctx.db, 'Added series', series_id)
 
@@ -772,10 +790,11 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> Error|None:
 
 	print(f'{_b}Series added:{_00}')
 
+	# fetch the newly computed meta
+	meta = ctx.db[series_id]
+
 	# need to loop to figure out its list index
-	imdb_id = ctx.db[series_id].get('imdb_id')
-	index = meta_get(ctx.db[series_id], meta_list_index_key)
-	print_series_title(index, new_series, imdb_id=imdb_id, width=width, tail=f'  [{State.PLANNED.name.lower()}]')
+	print_series_title(series_index, meta, imdb_id=meta.get('imdb_id'), width=width, tail=f'  [{State.PLANNED.name.lower()}]')
 
 	return None
 
@@ -800,7 +819,7 @@ def cmd_delete(ctx:Context, width:int) -> Error|None:
 		return Error('Required argument missing: # / <IMDb ID>')
 
 	index, series_id, err = db.find_single_series(ctx.db, ctx.command_arguments.pop(0))
-	if series_id is None or err is not None:
+	if index is None or series_id is None or err is not None:
 		if isinstance(err, list):
 			found = err
 			# TODO: if more than 4, list the "closest" ones
@@ -808,17 +827,17 @@ def cmd_delete(ctx:Context, width:int) -> Error|None:
 			return Error(f'Ambiguous ({len(found)}): %s' % message)
 		return Error(err)
 
-	series = ctx.db[series_id]
+	meta = ctx.db[series_id]
 
 	print(f'{_b}Deleting series:{_00}')
-	print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width)
+	print_series_title(index, meta, imdb_id=meta.get('imdb_id'), width=width)
 
-	seen, unseen = series_seen_unseen(series)
-	partly_seen = seen and unseen
+	num_seen, num_unseen = series_num_seen_unseen(meta)
+	partly_seen = num_seen > 0 and num_unseen > 0
 
 	choices = ['yes']
 	if partly_seen:
-		print('You have seen %d episodes of %d.' % (len(seen), len(seen) + len(unseen)))
+		print('You have seen %d episodes of %d.' % (num_seen, num_seen + num_unseen))
 		choices.append('abandon')
 		question = 'Delete permanently or mark abandoned?'
 		full_answer_a = 'abandon'
@@ -839,17 +858,17 @@ def cmd_delete(ctx:Context, width:int) -> Error|None:
 	# delete it
 	del ctx.db[series_id]
 
-	changelog_add(ctx.db, 'Deleted series "%s"' % series['title'])
+	changelog_add(ctx.db, 'Deleted series "%s" (%d)' % (meta['title'], meta['year']))
 
-	# if we deleted the last series, roll back "next index"
-	next_index = meta_get(ctx.db, meta_next_list_index_key)
+	# niche case: if we happened to delete the last series, we can easily re-use its list index by "rolling back
+	next_index = ctx.db.next_list_index
 	if index + 1 == next_index:
-		meta_set(ctx.db, meta_next_list_index_key, index)
+		ctx.db.next_list_index = index
 
 	ctx.save()
 
 	print(f'{_b}Series deleted:{_b}')
-	print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width)
+	print_series_title(index, meta, imdb_id=meta.get('imdb_id'), width=width)
 
 	return None
 
@@ -866,21 +885,20 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 
 	find = ctx.command_arguments.pop(0)
 
-	def filter_callback(series:dict) -> bool:
-		ser_state = series_state(series)
-
-		if marking:
-			if ser_state & (State.PLANNED | State.STARTED) == 0:
-				return False
-			_, unseen = series_seen_unseen(series)
-			return bool(unseen)
+	def filter_callback(series_id:str, meta:dict) -> bool:
+		ser_state = series_state(meta)
 
 		# unmarking
 		if ser_state & (State.STARTED | State.COMPLETED) == 0:
 			return False
 
-		last_seen = last_seen_episode(series)[0]
-		return bool(last_seen)
+		if marking:
+			if ser_state & (State.PLANNED | State.STARTED) == 0:
+				return False
+			_, num_unseen = series_num_seen_unseen(meta)
+			return num_unseen > 0
+
+		return meta.get(meta_last_episode_key) is not None
 
 
 	index, series_id, err = db.find_single_series(ctx.db, find, filter_callback)
@@ -897,7 +915,8 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 	if max(modified) > 0:
 		ctx.save()
 
-	series = ctx.db[series_id]
+	meta = ctx.db[series_id]
+	series = ctx.db.series(series_id)
 
 	season:None|range|tuple = None
 	episode:None|range|tuple = None
@@ -923,13 +942,13 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 
 	if not args:
 		if marking:   # no season/episode specifier is the same as 'next episode'
-			args = ['next']
+		    args = ['next']
 		else:
 			args = ['last']
 
 	if len(args) == 1 and marking and args[0] in ('next', 'n'):
 		# mark next logical episode
-		next_unseen = next_unseen_episode(series)
+		next_unseen = next_unseen_episode(series, meta)
 		if not next_unseen:
 			return Error('there is no logical next episode')
 		elif next_unseen == (0, 0):
@@ -942,7 +961,7 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 
 	elif len(args) == 1 and not marking and args[0] in ('last', 'l'):
 		# unmark the last marked episode
-		last_seen, _ = db.last_seen_episode(series)
+		last_seen, _ = last_seen_episode(series, meta)
 		if not last_seen:
 			return Error('no episode marked')
 
@@ -957,7 +976,7 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 
 	elif len(args) == 1 and args[0].lower() in ('special', 's'):
 		season = ('S', )
-		seen, unseen = db.series_seen_unseen(series)
+		seen, unseen = series_seen_unseen(series, meta)
 		special_eps = [ep for ep in unseen if ep['season'] == 'S']
 		if special_eps:
 			episode = (special_eps[0]['episode'], )
@@ -985,7 +1004,7 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 					season = range(min(rng), max(rng) + 1)
 				else:
 					if rng[0] == 'S' or rng[0] == 's':
-						season = 'S'
+						season = ('S', )
 					else:
 						season = (int(rng[0]), )
 			except ValueError:
@@ -1006,7 +1025,7 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 		if args:
 			return Error('Unexpected extra arguments: %s' % ' '.join(args))
 
-	seen, unseen = series_seen_unseen(series)
+	seen, unseen = series_seen_unseen(series, meta)
 
 	subset = unseen
 	already_subset = seen
@@ -1016,7 +1035,7 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 		subset, already_subset = already_subset, subset
 
 	already = [
-		ep
+	    ep
 		for ep in already_subset
 		if (season is None or ep['season'] in season) and (episode is None or ep['episode'] in episode)
 	]
@@ -1029,9 +1048,9 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 			print(format_episode_title('  ', ep, include_time=False, width=width, gray=True))
 
 
-	state_before = series_state(series)
+	state_before = series_state(meta)
 
-	seen_state = meta_get(series, meta_seen_key, {})
+	seen_state = meta.get(meta_seen_key, {})
 	num_marked_before = len(seen_state)
 
 	touched_episodes = []
@@ -1064,7 +1083,7 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 	print(f'{_c}{len(touched_episodes)}{_00}', end='')
 	print(f' episode{plural(touched_episodes)} as seen:  {_0}{_f}{format_duration(episodes_runtime)}{_0}')
 
-	print_series_title(index, series, width, imdb_id=series.get('imdb_id'))
+	print_series_title(index, meta, width, imdb_id=meta.get('imdb_id'))
 
 	for ep in touched_episodes:
 		msg = msg = f'{"M" if marking else "Unm"}arked episode '
@@ -1081,18 +1100,18 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 		# TODO: detect if a mark gap was created (e.g. marked eps 1, 2 and 4)
 		pass
 
-	is_archived = meta_has(series, meta_archived_key)
+	is_archived = meta_archived_key in meta
+	state_after = series_state(meta)  # will not cover the auto-archive/restore below
 
-	state_after = series_state(series)  # will not cover the auto-archive/restore below
-
-	if marking and num_marked_before == 0 and len(series['episodes']) > len(touched_episodes):
+	if marking and num_marked_before == 0 and meta.get(meta_total_episodes_key) > len(touched_episodes):
 		print(f'{_c}First episode{plural(len(touched_episodes))} marked!{_0}   {format_state_change(state_before, state_after)}')
 	elif not marking and len(seen_state) == 0:
 		print(f'{_c}No marked episode left:{_0} {format_state_change(state_before, state_after)}')
 
 
-	if marking and series.get('status') in ('ended', 'canceled') and not is_archived:
-		if len(seen_state) == len(series['episodes']): # all marked
+	if marking and meta.get(meta_active_status_key) in ('ended', 'canceled') and not is_archived:
+		# all seen?
+		if len(seen_state) == len(series['episodes']):
 			print()
 			print(f'{_c}Last episode marked of an {series["status"]} series:{_0} {format_state_change(state_before, State.ARCHIVED)}')
 			ctx.command_arguments = [str(index)]
@@ -1156,16 +1175,16 @@ def cmd_archive(ctx:Context, width:int, mode:str|None=None, print_state_change:b
 			return Error(f'Ambiguous ({len(found)}): %s' % message)
 		return Error(err)
 
-	series = ctx.db[series_id]
+	meta = ctx.db[series_id]
 
-	currently_archived = meta_has(series, meta_archived_key)
+	currently_archived = meta_archived_key in meta
 
 	if archiving == currently_archived:
 		# TODO: better presentation of title
 		if archiving:
-			return Error('Already archived: %s' % format_title(series))
+			return Error('Already archived: %s' % format_title(meta))
 		else:
-			return Error('Not archived: %s' % format_title(series))
+			return Error('Not archived: %s' % format_title(meta))
 
 
 	_do_archive(ctx.db, series_id, width, mode=mode, print_state_change=print_state_change)
@@ -1181,12 +1200,13 @@ def _archive_help() -> None:
 setattr(cmd_archive, 'help', _archive_help)
 
 
-def _do_archive(db:dict, series_id:str, width:int, mode:str|None=None, print_state_change:bool=True):
-	series = db[series_id]
+def _do_archive(db:db.Database, series_id:str, width:int, mode:str|None=None, print_state_change:bool=True):
+	meta = db[series_id]
 
-	state_before = series_state(series)
-	seen, unseen = series_seen_unseen(series)
-	partly_seen = bool(unseen)
+	state_before = series_state(meta)
+
+	num_seen, num_unseen = series_num_seen_unseen(meta)
+	partly_seen = num_seen > 0 and num_unseen > 0
 	archiving = mode is None or mode == 'archiving'
 
 	if archiving:
@@ -1194,7 +1214,7 @@ def _do_archive(db:dict, series_id:str, width:int, mode:str|None=None, print_sta
 		if partly_seen:
 			print(' (abandoned)', end='')
 		print(f':{_00}')
-		meta_set(series, meta_archived_key, now_stamp())
+		meta_set(meta, meta_archived_key, now_stamp())
 		changelog_add(db, 'Archived series', series_id)
 
 	else:
@@ -1202,15 +1222,15 @@ def _do_archive(db:dict, series_id:str, width:int, mode:str|None=None, print_sta
 		if partly_seen:
 			print(' (resumed)', end='')
 		print(f':{_00}')
-		meta_del(series, meta_archived_key)
+		meta_del(meta, meta_archived_key)
 		changelog_add(db, 'Restored series', series_id)
 		refresh_series(db, width, subset=[series_id])
 
-	index = meta_get(series, meta_list_index_key)
-	print_series_title(index, series, imdb_id=series.get('imdb_id'), width=width)
+	index = meta.get(meta_list_index_key)
+	print_series_title(index, meta, imdb_id=meta.get('imdb_id'), width=width)
 
 	if print_state_change:
-		print(format_state_change(state_before, series_state(series)))
+		print(format_state_change(state_before, series_state(meta)))
 
 
 def cmd_restore(*args, **kwargs) -> Error|None:
@@ -1225,25 +1245,34 @@ setattr(cmd_restore, 'help', _restore_help)
 
 
 def cmd_refresh(ctx:Context, width:int) -> Error|None:
-	forced = bool(ctx.command_options.get('force'))
+	forced = ctx.has_option('force')
+	refresh_all = ctx.has_option('all')
 
 	find_idx, match = find_idx_or_match(ctx.command_arguments)
 
 	# the user searched for something, they apparently mean it :)
 	forced |= bool(find_idx or match)
 
+	find_states = State.ACTIVE | State.COMPLETED
+	if refresh_all:
+		find_states |= State.ARCHIVED
+
 	# only refresh non-archived series
-	series_list = db.indexed_series(ctx.db, state=State.ACTIVE | State.COMPLETED, index=find_idx, match=match)
+	series_list = db.indexed_series(ctx.db, state=find_states, index=find_idx, match=match)
 
 	if not series_list:
 		return Error('Nothing matched')
 
-	subset = [series_id for index, series_id in series_list]
+	id_list = [
+	    series_id
+		for index, series_id in series_list
+	]
 
 	t0 = time.time()
 
-	num_series, num_episodes = refresh_series(ctx.db, width, subset=subset, force=forced)
-	if num_series > 0:  # can be 1 even if num_episodes is zero
+	num_series, num_episodes = refresh_series(ctx.db, width, subset=id_list, force=forced)
+	# can be 1 even if num_episodes is zero
+	if num_series > 0:
 		if num_episodes > 0:
 			print(f'{_f}Refreshed %d episodes across %d series [%.1fs].{_0}' % (num_episodes, num_series, time.time() - t0), file=sys.stderr)
 
@@ -1347,11 +1376,21 @@ def cmd_undo(ctx:Context, *args, **kw) -> Error|None:
 		print()
 
 	print(f'Remaining backups: {remaining}')
+	return None
 
 def _undo_help() -> None:
 	print_cmd_usage('undo')
 
 setattr(cmd_undo, 'help', _undo_help)
+
+
+def cmd_audit(ctx:Context, *args, **kw) -> Error|None:
+	pass
+
+def _audit_help() -> None:
+	print_cmd_usage('audit')
+
+setattr(cmd_audit, 'help', _audit_help)
 
 
 def cmd_rate(ctx:Context, *args, **kw) -> Error|None:
@@ -1367,31 +1406,34 @@ def cmd_rate(ctx:Context, *args, **kw) -> Error|None:
 			return Error(f'Ambiguous ({len(found)}): %s' % message)
 		return Error(err)
 
-	series = ctx.db[series_id]
-	if not meta_get(series, meta_archived_key):
+	meta = ctx.db[series_id]
+	if meta_archived_key not in meta:
 		return Error('only archived series may be rated')
 
-	rating = ctx.command_arguments.pop(0)
+	rating_str = ctx.command_arguments.pop(0)
 	try:
-		rating = int(rating)
+		rating = int(rating_str)
+
+		meta_set(meta, meta_rating_key, rating)
+		changelog_add(ctx.db, 'Rated series', series_id)
+
 	except ValueError as ve:
 		return Error(f'invalid rating: {ve}')
 
-	meta_set(series, meta_rating_key, rating)
-	changelog_add(ctx.db, 'Rated series', series_id)
 
-	print(f'Rated {format_title(series)}: {_b}{rating}{_0}')
+	print(f'Rated {format_title(meta)}: {_b}{rating}{_0}')
 
 	comment = ctx.option('comment')
 	if comment:
-		meta_set(series, meta_rating_comment_key, comment)
+		meta_set(meta, meta_rating_comment_key, comment)
 		print(f'{_b}Comment:{_0} {comment}')
 	else:
-		comment = meta_get(series, meta_rating_comment_key)
+		comment = meta.get(meta_rating_comment_key)
 		if comment:
 			print(f'{_b}Existing comment:{_0} {comment}')
 
 	ctx.save()
+	return None
 
 def _rate_help() -> None:
 	print_cmd_usage('rate', '<series> <rating>')
@@ -1406,9 +1448,11 @@ def cmd_help(ctx:Context, *args, **kw) -> Error|None:
 	if ctx.command_arguments:
 		arg = ctx.command_arguments.pop(0)
 		if arg in ('env', 'environment'):
-			return print_env_help()
+			print_env_help()
+			return None
 
-	return print_usage()
+	print_usage()
+	return None
 
 
 def _help_help() -> None:
@@ -1422,83 +1466,88 @@ setattr(cmd_help, 'help', _help_help)
 
 # known commands with aliases
 known_commands:dict[str,dict[str,tuple|Callable|str]] = {
-	'search':  {
-		'alias': ('s', ),
+    'search':  {
+	    'alias': ('s', ),
 		'handler': cmd_search,
 		'help': 'Search for a series.',
 	},
- 	'add': {
+	'add': {
 	    'alias': ('a', ),
-	    'handler': cmd_add,
-	    'help': 'Search for a series and (optionally) add it.',
-    },
- 	'delete': {   # shorthand for a destructive operation seems reckless
+		'handler': cmd_add,
+		'help': 'Search for a series and (optionally) add it.',
+		},
+	'delete': {   # shorthand for a destructive operation seems reckless
 	    'alias': (),
-	    'handler': cmd_delete,
-	    'help': 'Remove a series from %s - permanently!' % PRG,
-    },
- 	'show': {
+		'handler': cmd_delete,
+		'help': f'Remove a series from %s (use {_o}undo{_0} to restore)' % PRG,
+		},
+	'show': {
 	    'alias': ('list', 'ls'),
-	    'handler': cmd_show,
-	    'help': 'Show/list series with optional details.',
-    },
+		'handler': cmd_show,
+		'help': 'Show/list series with optional details.',
+		},
 	'calendar': {
-		'alias': ('c',),
+	    'alias': ('c',),
 		'handler': cmd_calendar,
 		'help': 'Show episode releases by date.',
 	},
 	'info': {
-		'alias': ('i',),
+	    'alias': ('i',),
 		'handler': cmd_info,
 		'help': 'Show details series information.'
 	},
 	'unseen': {
-		'alias': ('u', 'us'),
+	    'alias': ('u', 'us'),
 		'handler': cmd_unseen,
 		'help': 'Show unseen episodes of series.',
 	},
 	'mark': {
-		'alias': ('m', ),
+	    'alias': ('m', ),
 		'handler': cmd_mark,
 		'help': 'Mark as seen, a series, season or episode(s).',
 	},
 	'unmark': {
-		'alias': ('M', 'um'),
+	    'alias': ('M', 'um'),
 		'handler': cmd_unmark,
 		'help': f'Unmark a series/season/episode - reverse of {_b}mark{_0}.',
 	},
 	'archive': {
-		'alias': ('A', ),
+	    'alias': ('A', ),
 		'handler': cmd_archive,
 		'help': 'Archving series - hides from default `list` and not refreshed.',
 	},
 	'rate': {
-		'alias': ('comment', ),
+	    'alias': ('comment', ),
 		'handler': cmd_rate,
 		'help': 'Rate archived series, with optional comment.',
 	},
 	'restore': {
-		'alias': ('R', ),
+	    'alias': ('R', ),
 		'handler': cmd_restore,
 		'help': 'Restore an archived series - reverse of `archive`.',
 	},
 	'refresh': {
-		'alias': ('r', ),
+	    'alias': ('r', ),
 		'handler': cmd_refresh,
 		'help': 'Refresh information of non-archived series (all or subset).',
 	},
 	'config': {
-		'alias': (),
+	    'alias': (),
 		'handler': cmd_config,
 		'help': 'Configure aspects of %s, e.g. defaults.' % PRG,
 	},
 	'undo': {
-		'alias': (),
+	    'alias': (),
 		'handler': cmd_undo,
 		'help': f'Undo last change.  {_c}permanent!{_0}'
 	},
+	'audit': {
+	    'alias': (),
+		'handler': cmd_audit,
+		'help': 'List recent changes.'
+	},
 	'help': {
-		'alias': (),
+	    'alias': (),
 		'handler': cmd_help,
 		'help': 'Shows this help page.',
 	},
@@ -1522,10 +1571,12 @@ def _opt_list(sep:str, valid:list[str]) -> Callable[[str, str, dict], str|None]:
 
 def _set_fake_date(value:date, key:str, options:dict) -> str|None:
 	utils.fake_now(value)
+	return None
 
 
 def _disable_refresh(value:date, key:str, options:dict) -> str|None:
 	config.set('refresh-enabled', False, store=Store.Memory)
+	return None
 
 def _valid_int(a:int, b:int) -> Callable[[int], int|None]:
 	assert(a <= b)
@@ -1541,8 +1592,8 @@ def _valid_cmd(name:str) -> str|None:
 	return resolve_cmd(name, fail_ok=True)
 
 __opt_max_hits = {
-	'max-hits': {
-		'name': '-n',
+    'max-hits': {
+	    'name': '-n',
 		'arg': int,
 		'validator': _valid_int(1, 40),
 		'help': 'Limit number of hits [1-40] (default: %d)' % config.get_int('max-hits'),
@@ -1552,8 +1603,8 @@ __opt_max_hits = {
 _opt_sort_names = _opt_list(',', ['title', 'year', 'earliest', 'latest', 'added', 'archived'])
 
 __opt_series_sorting = {
-	'sorting': {
-		'name': '--sort',
+    'sorting': {
+	    'name': '--sort',
 		'arg': str,
 		'help': 'Sort series',
 		'func': _opt_sort_names
@@ -1563,12 +1614,12 @@ __opt_series_sorting = {
 # TODO: merge with 'known_commands' ?  (at least for the command-specific options)
 
 command_options = {
-	None: { # i.e. global options
-		'fake-now':          { 'name': '--fake-now', 'arg': date, 'help': 'Simulate a specific "today" date', 'func': _set_fake_date },
+    None: { # i.e. global options
+	    'fake-now':          { 'name': '--fake-now', 'arg': date, 'help': 'Simulate a specific "today" date', 'func': _set_fake_date },
 		'no-refresh':        { 'name': '--no-refresh',            'help': 'Don\'t refresh any series data', 'func': _disable_refresh },
 	},
 	'show': {
-		'all':               { 'name': ('-a', '--all'),          'help': 'List also archived series' },
+	    'all':               { 'name': ('-a', '--all'),          'help': 'List all series (including archived)' },
 		'archived':          { 'name': ('-A', '--archived'),     'help': 'List only archived series' },
 		'started':           { 'name': ('-s', '--started'),      'help': 'List only series with seen episodes' },
 		'planned':           { 'name': ('-p', '--planned'),      'help': 'List only series without seen episodes' },
@@ -1592,27 +1643,28 @@ command_options = {
 		'country':           { 'name': '--country', 'arg': str,  'help': 'Filter by country (two letters; ISO 3166)' },
 	},
 	'unseen': {
-		'started':           { 'name': ('-s', '--started'),      'help': 'List only series with seen episodes' },
+	    'started':           { 'name': ('-s', '--started'),      'help': 'List only series with seen episodes' },
 		'planned':           { 'name': ('-p', '--planned'),      'help': 'List only series without seen episodes' },
 		'all-episodes':      { 'name': ('-e', '--episodes'),     'help': 'Show all unseen episodes (not only first)' },
 		'future-episodes':   { 'name': ('-f', '--future'),       'help': 'Also shows (series with) future episodes' },
 		**__opt_series_sorting,  # type: ignore  # not sure how to convince mypy here
 	},
 	'refresh': {
-		'force':             { 'name': ('-f', '--force'),        'help': 'Refresh whether needed or not' },
+	    'force':             { 'name': ('-f', '--force'),        'help': 'Refresh whether needed or not' },
+		'all':               { 'name': ('-a', '--all'),          'help': 'Refresh regardless of state (e.g. archived)' },
 	},
 	'rate': {
-		'comment':           { 'name': ('-c', '--comment'), 'arg': str, 'help': 'Add comment to rating' },
+	    'comment':           { 'name': ('-c', '--comment'), 'arg': str, 'help': 'Add comment to rating' },
 	},
 	'add': {
-		'comment':           { 'name': ('-c', '--comment'), 'arg': str, 'help': 'Set comment when adding series' },
+	    'comment':           { 'name': ('-c', '--comment'), 'arg': str, 'help': 'Set comment when adding series' },
 		**__opt_max_hits,
 	},
 	'search': {
-		**__opt_max_hits,
+	    **__opt_max_hits,
 	},
 	'config': {
-		'command-args':      { 'name': '--args', 'arg': str,    'help': 'Set default arguments for <command>' },
+	    'command-args':      { 'name': '--args', 'arg': str,    'help': 'Set default arguments for <command>' },
 		'default-command':   { 'name': '--default', 'arg': str, 'validator': _valid_cmd, 'help': 'Set command to run by default' },
 		'default-arguments': { 'name': '--default-args', 'arg': str, 'help': 'Set arguments for the default command' },
 		'api-key':           { 'name': '--api-key', 'arg': str, 'help': 'Set API key for backend (TMDb)' },
@@ -1624,7 +1676,7 @@ def format_state_change(before:State, after:State) -> str:
 	return f'[\x1b[38;5;208m{before.name.lower()}{_0} ⯈ \x1b[38;5;113m{after.name.lower()}{_0}]'  # type: ignore  # todo: enum
 
 
-def find_idx_or_match(args, country:re.Pattern|None=None, director:re.Pattern|None=None, writer:re.Pattern|None=None, cast:re.Pattern|None=None, year:list[int]|None=None, match:Callable[[dict],bool]|None=None) -> tuple[int|None, Callable|None]:
+def find_idx_or_match(args, country:re.Pattern|None=None, director:re.Pattern|None=None, writer:re.Pattern|None=None, cast:re.Pattern|None=None, year:list[int]|None=None, match:Callable[[str,dict],bool]|None=None) -> tuple[int|None, Callable|None]:
 
 	# print('FILTER title/idx:', (_c + ' '.join(args) + _0fg) if args else 'NONE')
 	# print('          country:', (_c + country.pattern + _0fg) if country else 'NONE')
@@ -1634,7 +1686,7 @@ def find_idx_or_match(args, country:re.Pattern|None=None, director:re.Pattern|No
 	# print('            year:', (_c + '-'.join(year) + _0fg) if year else 'NONE')
 
 
-	if not args and country is None and director is None and writer is None and cast is None and year is None and match is None:
+	if not args and not country and not director and not writer and not cast and not year and not match:
 		return None, None
 
 	match_callback = match
@@ -1667,25 +1719,25 @@ def find_idx_or_match(args, country:re.Pattern|None=None, director:re.Pattern|No
 
 		# TODO: function should also take list index: (list_index, series) -> bool
 
-		def match(series):
+		def find_match(db:Database, series_id:str, meta:dict):
 			ok = True
 
 			if ok and title:
-				ok = title.search(series['title']) is not None
-			if ok and imdb_id:
-				ok = imdb_id == series.get('imdb_id')
-			if ok and country:
-				ok = country.search(series.get('country', '')) is not None
-			if ok and director:
-				ok = _match_names(series, 'director', director)
-			if ok and writer:
-				ok = _match_names(series, 'writer', writer)
-			if ok and cast:
-				ok = _match_names(series, 'cast', cast)
+				ok = title.search(meta.get('title', '')) is not None
 			if ok and year:
-				ok = _match_years(series, year)
+				ok = _match_years(meta, year)
+			if ok and imdb_id:
+				ok = imdb_id == db.series(series_id).get('imdb_id')
+			if ok and country:
+				ok = country.search(db.series(series_id).get('country', '')) is not None
+			if ok and director:
+				ok = _match_names(db.series(series_id), 'director', director)
+			if ok and writer:
+				ok = _match_names(db.series(series_id), 'writer', writer)
+			if ok and cast:
+				ok = _match_names(db.series(series_id), 'cast', cast)
 			if ok and match_callback:
-				ok = match_callback(series)
+				ok = match_callback(series_id, meta)
 
 			# if ok:
 			# 	print(f'    match {_g}%s{_0}' % series['title'])
@@ -1694,24 +1746,26 @@ def find_idx_or_match(args, country:re.Pattern|None=None, director:re.Pattern|No
 
 			return ok
 
-		filter_parts = {
-			'title': title.pattern if title else None,
+		filter_context = {
+		    'title': title.pattern if title else None,
 			'country': country.pattern if country else None,
 			'director': director.pattern if director else None,
 			'writer': writer.pattern if writer else None,
 			'cast': cast.pattern if cast else None,
 			'year': '-'.join(str(y) for y in year) if year else None,
 		}
-		setattr(match, 'description', ' '.join('%s=%s' % (n, v) for n, v in filter_parts.items() if v))
-		if filter_parts:
-			filter_parts =  list((n, v) for n, v in filter_parts.items() if v)
+		setattr(find_match, 'description', ' '.join('%s=%s' % (n, v) for n, v in filter_context.items() if v))
+
+		if filter_context:
+			filter_parts = list((n, v) for n, v in filter_context.items() if v)
+
 			if filter_parts:
-				setattr(match, 'styled_description', _c + ' '.join(f'%s{_g}={_0}{_b}%s{_0}' % (n, v) for n, v in filter_parts))
+				setattr(find_match, 'styled_description', _c + ' '.join(f'%s{_g}={_0}{_b}%s{_0}' % (n, v) for n, v in filter_parts))
 
-		return None, match
+		return None, find_match
 
 
-def _substr_re(s:str):
+def _substr_re(s:str) -> Pattern:
 	return re.compile('.*?' + re.escape(s.replace(' ', '.*?')) + '.*', re.IGNORECASE)
 
 
@@ -1726,8 +1780,8 @@ def _match_names(series:dict, attribute:str, pattern:re.Pattern):
 	return False
 
 
-def _match_years(series:dict, years:list[int]):
-	s_year = series.get('year')
+def _match_years(meta:dict, years:list[int]):
+	s_year = meta.get('year')
 	if not s_year:
 		# print(' "%s" no year' % series['title'])
 		return False
@@ -1760,14 +1814,14 @@ def episodes_by_key(series:dict, keys:list) -> list:
 		keys_to_index[episode_key(ep)] = idx
 
 	return [
-		episodes[keys_to_index[key]]
+        episodes[keys_to_index[key]]
 		for key in keys
 	]
 
 
-def no_series(db:dict, filtered:bool=False) -> Error:
+def no_series(db:Database, filtered:bool=False) -> Error:
 
-	if len(db) <= 1:
+	if not db:
 		return Error(f'No series added.  Use: {_b}%s add <title search...> [<year>]{_0}' % PRG)
 
 	precision = ' matched (try -a)' if filtered else ''
@@ -1775,25 +1829,25 @@ def no_series(db:dict, filtered:bool=False) -> Error:
 
 
 
-def last_update(series:dict) -> datetime:
-	updates = meta_get(series, meta_update_history_key)
+def last_update(meta:dict) -> datetime|None:
+	updates = meta.get(meta_update_history_key)
 	if updates:
 		return datetime.fromisoformat(updates[-1])
 
 	return None
 
 
-def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, affected:dict|None=None) -> tuple[int, int]:
+def refresh_series(db:Database, width:int, subset:list|None=None, force:bool=False, affected:dict|None=None) -> tuple[int, int]:
 	if not config.get_bool('refresh-enabled', True):
 		return 0, 0
 
-	subset = subset or m_db.all_ids(db)
+	subset = subset or list(series_id for series_id, _ in db.items())
 
 	if force:
 		to_refresh = subset
 	else:
-		def check_expired(_, series:dict) -> bool:
-			return m_db.should_update(series)
+		def check_expired(_, meta:dict) -> bool:
+			return m_db.should_update(meta)
 		to_refresh = list(m_db.filter_map(db, filter=check_expired, map=lambda sid, _: sid))
 
 	to_refresh = list(sorted(to_refresh, key=int))
@@ -1803,12 +1857,14 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, 
 
 	debug('to_refresh (maybe):', len(to_refresh))
 	for series_id in to_refresh:
-		debug('   %s [%s]' % (db[series_id]['title'], meta_get(db[series_id], meta_list_index_key)))
+		meta = db[series_id]
+		debug('   %s [%s]' % (meta['title'], meta.get(meta_list_index_key)))
 
 	# set time of last check (regardless whether there actually were any updates)
 	touched = 0
 	for series_id in to_refresh:
-		meta_set(db[series_id], meta_update_check_key, now_stamp())
+		meta = db[series_id]
+		meta[meta_update_check_key] = now_stamp()
 		touched += 1
 
 	def mk_prog(total):
@@ -1825,8 +1881,9 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, 
 		def show_ch_progress(completed:int, *_) -> None:
 			print(f'\r{_K}%s{_EOL}' % prog_bar(completed, text='Checking updates...'), end='', flush=True)
 
-		oldest_refresh = min(
-			last_update(db[sid])
+
+		oldest_refresh:datetime = min(
+		    last_update(db[sid]) or datetime.now()
 			for sid in to_refresh
 		)
 
@@ -1837,14 +1894,15 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, 
 		clrline()
 
 		for series_id, changes in zip(list(to_refresh), changes):
-			series = db[series_id]
-			debug(series_id, series['title'], 'changes:')
+			meta = db[series_id]
+
+			debug(series_id, meta['title'], 'changes:')
 			for ch in changes:
 				items = ch['items']
 				debug('  %s (%d items)' % (ch['key'], len(ch['items'])))
 
 			if not changes:
-				last_update_time = last_update(series)
+				last_update_time = last_update(meta)
 				if last_update_time:
 					update_age = datetime.now() - last_update_time
 					if update_age.total_seconds() < 2*m_db.WEEK:
@@ -1852,7 +1910,7 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, 
 						to_refresh.remove(series_id)
 
 					else:
-						debug('no changes, but update too old: %s [%s]  %s (%s days ago)' % (db[series_id]['title'], meta_get(db[series_id], meta_list_index_key), last_update_time.isoformat(' '), update_age.days))
+						debug('no changes, but update too old: %s [%s]  %s (%s days ago)' % (meta['title'], meta.get(meta_list_index_key), last_update_time.isoformat(' '), update_age.days))
 
 			else:
 				for chg in changes:
@@ -1883,7 +1941,7 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, 
 
 	# remember each series status before we do the refresh (to detect whether the status changed after)
 	previous_status = {
-		series_id: db[series_id].get('status')
+	    series_id: db[series_id].get(meta_active_status_key)
 		for series_id in to_refresh
 	}
 
@@ -1893,11 +1951,12 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, 
 	print(f'%s{_EOL}' % prog_bar('Refreshing %d series...' % len(to_refresh)), end='', flush=True)
 	# TODO: show 'spinner'
 
-	def show_up_progress(completed:int, *_) -> None:
+	def show_progress(completed:int, *_) -> None:
 		clrline()
 		print(f'%s{_EOL}' % prog_bar(completed, text='Refreshing...'), end='', flush=True)
 
-	result = tmdb.episodes(to_refresh, with_details=True, progress=show_up_progress)
+	# fetch updates to all eligible series and their episodes
+	result = tmdb.episodes(to_refresh, with_details=True, progress=show_progress)
 
 	clrline()
 
@@ -1906,34 +1965,35 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, 
 
 	debug('to_refresh (for real):', len(to_refresh))
 	for series_id in to_refresh:
-		debug('   %s [%s]' % (db[series_id]['title'], meta_get(db[series_id], meta_list_index_key)))
+		meta = db[series_id]
+		debug('   %s [%s]' % (meta['title'], meta.get(meta_list_index_key)))
 
-	for series_id, (details, episodes) in zip(to_refresh, result):
+	for series_id, (series, episodes) in zip(to_refresh, result):
 
 		changelog_add(db, 'Refreshed', series_id)
 
-		series = details
 		series['episodes'] = episodes
-		meta_copy(db[series_id], series)
+		# replace entry in DB
+		db.set_series(series_id, series)
 
+		# update meta
+		meta = db[series_id]
 		# keep a list of last N updates
-		update_history = meta_get(series, meta_update_history_key, [])
+		update_history = meta.get(meta_update_history_key, [])
 		update_history.append(latest_update_time_str)
 		if len(update_history) > max_history:
 			update_history.pop(0)
-		meta_set(series, meta_update_history_key, update_history)
+		meta[meta_update_history_key] = update_history
 
-		# replace entry in DB
-		db[series_id] = series
-
-		if series_state(series) & State.ARCHIVED == 0:
-			if previous_status[series_id] != 'ended' and series.get('status') == 'ended':
-				# status changed to 'ended', have we seen all episodes?
-				if len(series.get('episodes', [])) == len(meta_get(series, meta_seen_key, [])):
-					# allright then, we have no further business with this series
-					_do_archive(db, series_id, width=width)
-					if affected is not None:
-						affected[series_id] = State.ARCHIVED
+		# if series changed atatus to non-active; archive if all episodes are seen
+		if series_state(meta) & State.ARCHIVED == 0:
+			all_seen = len(episodes) == len(meta.get(meta_seen_key, []))
+			if all_seen and previous_status[series_id] == 'active' and meta.get(meta_active_status_key) != 'active':
+				# status changed to non-active, have we seen all episodes?
+				# allright then, we have no further business with this series
+				_do_archive(db, series_id, width=width)
+				if affected is not None:
+					affected[series_id] = State.ARCHIVED
 
 		num_episodes += len(episodes)
 
@@ -1942,15 +2002,15 @@ def refresh_series(db:dict, width:int, subset:list|None=None, force:bool=False, 
 
 
 
-def print_series_details(index:int, series:dict, width:int, gray:bool=False) -> None:
+def print_series_details(index:int, series:dict, meta:dict, width:int, gray:bool=False) -> None:
 
 	tail = None
 	if series.get('imdb_id'):
 		tail = imdb_url_tmpl % series["imdb_id"]
 		tail_style = f'{_o}{_u}'
-	print_series_title(index, series, width, gray=gray, tail=tail, tail_style=tail_style)
+	print_series_title(index, meta, width, gray=gray, tail=tail, tail_style=tail_style)
 
-	print_archive_status(series)
+	print_archive_status(meta)
 
 	overview = textwrap.wrap(series['overview'], width=width, initial_indent=' '*15)
 	print(f'    {_o}Overview:{_0}  {_i}{_c}', end='')
@@ -1999,16 +2059,16 @@ def print_series_details(index:int, series:dict, width:int, gray:bool=False) -> 
 	else:
 		print(f'       {_c}{_i}no episodes{_0}')
 
-	print(f'    {_o}Added:{_0}', meta_get(series, meta_added_key), end='')
-	if meta_get(series, meta_add_comment_key):
-		add_comment = meta_get(series, meta_add_comment_key)
+	print(f'    {_o}Added:{_0}', meta.get(meta_added_key), end='')
+	if meta_add_comment_key in meta:
+		add_comment = meta[meta_add_comment_key]
 		print(f'  {_g}{_i}"{add_comment}"{_0}')
 	else:
 		print()
 
-	if meta_get(series, meta_archived_key):
-		rating = meta_get(series, meta_rating_key)
-		comment = meta_get(series, meta_rating_comment_key)
+	if meta_archived_key in meta:
+		rating = meta.get(meta_rating_key)
+		comment = meta.get(meta_rating_comment_key)
 		if rating is not None:
 			print(f'    {_o}Rating:{_0}  {_i}{_c}{rating}{_0}', end='')
 		if comment:
@@ -2034,12 +2094,15 @@ def option_def(command:str|None, option:str|None=None):
 
 def print_cmd_usage(command:str, syntax:str='') -> None:
 	entry = known_commands[command]
+
 	summary = entry.get('help')
 	if summary:
 		print(f'{_b}{summary}{_0}')
+
 	aliases = entry.get('alias')
-	if aliases:
+	if isinstance(aliases, tuple):
 		print(f'{_b}Alias:{_0} %s' % ', '.join(aliases))
+
 	print(f'{_b}Usage:{_0} %s {_c}%s{_0} %s' % (PRG, command, syntax))
 
 
@@ -2050,7 +2113,7 @@ def print_cmd_option_help(command:str|None, print_label:bool=True) -> None:
 			print(f'{_b}Options:{_0}')
 
 		options = {
-			name: opts
+		    name: opts
 			for name, opts in options.items()
 			if opts.get('hidden') != True
 		}
@@ -2129,11 +2192,13 @@ def print_usage(exit_code:int=0) -> None:
 		print(f'  {_f}Using {_b}{utils.json_serializer()}{_0}{_f} for faster load/save.')
 	else:
 		print(f'  {_f}Install \'orjson\' for faster load/save{_0}')
-	if db.compressor():
-		print(f'  {_f}Using {_b}{db.compressor()}{_0}{_f} to compress database backups.')
+	from . import compression
+	if compression.method():
+		print(f'  {_f}Using {_b}{compression.compressor()}{_0}{_f} for compressing data files.')
 	if not tmdb.ok():
 		print(f'   {_c}NOTE: Need to set TMDb API key (TMDB_API_KEY environment){_0}')
 	sys.exit(exit_code)
+	return None
 
 
 def print_env_help() -> None:
@@ -2181,7 +2246,7 @@ def rgb(*args):
 
 # https://github.com/sindresorhus/cli-spinners/blob/main/spinners.json
 spinner_frames = [
-	"⢀⠀",
+    "⢀⠀",
 	"⡀⠀",
 	"⠄⠀",
 	"⢂⠀",
@@ -2242,7 +2307,7 @@ spinner_frames = [
 imdb_url_tmpl = 'https://www.imdb.com/title/%s'
 
 ignore_changes = (
-	'name',   # the name we want, in all likelyhood, already exists.
+    'name',   # the name we want, in all likelyhood, already exists.
 	'images',
 	'videos',
 	'production_companies',
@@ -2255,7 +2320,7 @@ ignore_changes = (
 	'languages',
 )
 include_changes = (
-	'season',
+    'season',
 	#'overview',
 )
 # TODO: also ignore changes that are not in a language we're interested in (e.g. english)

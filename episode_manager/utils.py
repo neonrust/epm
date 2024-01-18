@@ -7,7 +7,7 @@ from tempfile import mkstemp
 import sys
 import re
 
-from typing import Any, TypeVar
+from typing import Any, TypeVar, Optional
 from types import ModuleType as Module
 
 from .styles import _0, _00, _c, _b, _B, _f, _E, _o
@@ -204,7 +204,7 @@ class ListIndex:
 
 
 T = TypeVar('T')
-def cap(v:T, lower:T|None, upper:T|None) -> T:
+def cap(v:T, lower:Optional[T], upper:Optional[T]) -> T:
 	if lower is not None and v < lower:  # type: ignore
 		return lower
 	elif upper is not None and v > upper:  # type: ignore
@@ -216,7 +216,7 @@ def now_stamp() -> str:
 	return now_datetime().isoformat(' ', timespec='seconds')
 
 
-_now_datetime = None
+_now_datetime:Optional[datetime] = None
 _now_datetime_faked = False
 def now_datetime() -> datetime:
 	"""Only evaluates once; the same value will always be returned."""
@@ -231,11 +231,12 @@ now_datetime()
 
 def fake_now(value:date) -> None:
 	global _now_datetime
-	_now_datetime = _now_datetime.replace(year=value.year, month=value.month, day=value.day)
-	global _now_datetime_faked
-	_now_datetime_faked = True
-	global today_date
-	today_date = value
+	if _now_datetime is not None:
+		_now_datetime = _now_datetime.replace(year=value.year, month=value.month, day=value.day)
+		global _now_datetime_faked
+		_now_datetime_faked = True
+		global today_date
+		today_date = value
 
 
 def faked_now() -> bool:

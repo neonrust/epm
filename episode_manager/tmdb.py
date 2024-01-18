@@ -8,7 +8,7 @@ from requests import ReadTimeout, ConnectTimeout
 from urllib.parse import quote as url_escape
 from http import HTTPStatus
 import concurrent.futures as futures
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from collections.abc import Iterable
 from typing import Callable, Any
 
@@ -176,7 +176,7 @@ def search(search:str, type:str='series', year:int|None=None, page:int=1):
 __details:dict = {}
 _missing = object()
 
-def details(title_id:str|list[str]|Iterable, type='series') -> dict:
+def details(title_id:str|list[str]|Iterable, type='series') -> dict|None:
 
 	if not _api_key:
 		raise NoAPIKey()
@@ -265,11 +265,10 @@ def details(title_id:str|list[str]|Iterable, type='series') -> dict:
 		cast = credits.get('cast', [])
 		crew = credits.get('crew', [])
 
-		seasons = data.pop('seasons', [])
+		seasons:list[dict] = data.pop('seasons', [])
 		specials_info = list(filter(lambda season: season.get('season_number') == 0, seasons))
 		if specials_info:
-			specials_info = specials_info[0]
-			data['specials'] = specials_info.get('episode_count', 1)
+			data['specials'] = specials_info[0].get('episode_count', 1)
 
 		_set_values(data, {
 			'director': lambda ep: _job_people(crew, 'Director'),
@@ -282,7 +281,7 @@ def details(title_id:str|list[str]|Iterable, type='series') -> dict:
 	return data
 
 
-def episodes(series_id:str|list[str]|Iterable, with_details=False, progress:Callable|None=None) -> list:
+def episodes(series_id:str|list[str]|Iterable, with_details=False, progress:Callable|None=None) -> list|tuple[dict, list]:
 
 	if not _api_key:
 		raise NoAPIKey()
@@ -295,11 +294,11 @@ def episodes(series_id:str|list[str]|Iterable, with_details=False, progress:Call
 		return _parallel_query(episodes, wrapped_args, progress_callback=progress)
 
 	# unfortunately we must synchronously get the details first
-	ser_details = details(series_id, type='series')
+	ser_details = details(series_id, type='series') or {}
 
-	num_seasons = (ser_details or {}).get('total_seasons', 1)
+	num_seasons = ser_details.get('total_seasons', 1)
 	has_specials = bool(ser_details.get('specials'))
-	standard_ep_runtime = (ser_details or {}).get('episode_run_time')
+	standard_ep_runtime = ser_details.get('episode_run_time')
 
 	def fetch_season(season):
 		data = _query(_qurl('tv/%s/season/%d' % (series_id, season))) or {}
@@ -355,20 +354,21 @@ def episodes(series_id:str|list[str]|Iterable, with_details=False, progress:Call
 	]
 
 	last_season = 0
-	last_episode = None
+	last_episode:dict|None = None
 	season = None
 	for ep in all_episodes:
 		season = ep.get('season')
 		if season == 'S':
 			break
-		if last_season > 0 and season != last_season:
+		if last_episode and last_season > 0 and season != last_season:
 			last_episode['finale'] = 'season'
 		last_episode = ep
 		last_season = season
+
 	if ser_details.get('status') != 'active':
 		if last_episode and last_episode.get('finale') == 'finale':
 			last_episode['finale'] = 'series'
-	else:
+	elif last_episode:
 		last_episode.pop('finale', None)
 
 
@@ -384,7 +384,7 @@ def episodes(series_id:str|list[str]|Iterable, with_details=False, progress:Call
 	return all_episodes
 
 
-def changes(series_id:str|list[str], after:datetime, include:list|tuple|None=None, progress:Callable|None=None) -> list:
+def changes(series_id:str|list[str], after:datetime|None, include:list|tuple|None=None, progress:Callable|None=None) -> list:
 
 	if _qurl is None:
 		return []
@@ -393,8 +393,11 @@ def changes(series_id:str|list[str], after:datetime, include:list|tuple|None=Non
 		wrapped_args = map(lambda sid: ( (sid, after), {'include': include} ), series_id)
 		return _parallel_query(changes, wrapped_args, progress_callback=progress)
 
-	now = datetime.now().date().isoformat()
-	after_str = after.date().isoformat()
+	now = date.today().isoformat()
+	if after:
+		after_str = after.date().isoformat()
+	else:
+		after_str = (date.today() + timedelta(days=-14)).isoformat()
 
 	data = _query(_qurl('tv/%s/changes' % series_id, {'start_date': after_str, 'end_date': now}))
 	# TOOD: get all pages
@@ -414,48 +417,52 @@ def changes(series_id:str|list[str], after:datetime, include:list|tuple|None=Non
 	return change_list
 
 
-def posters(series_id:str, season:int|list[int]|tuple[int]|None, language:str|None=None) -> dict:
-	# 'season' = None: only main posters for the series
-	# 'season' = 1: all posters for the specified season
-	# 'season' = [2,3,4]: all posters for the specified seasons
+# def posters(series_id:str, season:int|list[int]|tuple[int]|None, language:str|None=None) -> dict:
+# 	# 'season' = None: only main posters for the series
+# 	# 'season' = 1: all posters for the specified season
+# 	# 'season' = [2,3,4]: all posters for the specified seasons
 
-	if _qurl is None:
-		return []
+# 	if _qurl is None:
+# 		return {}
 
-	query = {}
-	language = 'en'
-	if language:
-		query['language'] = language
+# 	query = {}
+# 	language = 'en'
+# 	if language:
+# 		query['language'] = language
 
-	if season is None:
-		data = _query(_qurl('tv/%s/images' % series_id, query))
-	elif isinstance(season, int):
-		data = _query(_qurl('tv/%s/season/%s/images' % (series_id, season), query))
-	elif isinstance(season, (tuple, list)):
-		wrapped_args = map(lambda season: ( (series_id, season), {'language': language} ), season)
-		return _parallel_query(posters, wrapped_args)
+# 	data:dict|None = {}
+# 	if season is None:
+# 		data = _query(_qurl('tv/%s/images' % series_id, query))
+# 	elif isinstance(season, int):
+# 		data = _query(_qurl('tv/%s/season/%s/images' % (series_id, season), query))
+# 	elif isinstance(season, (tuple, list)):
+# 		wrapped_args = map(lambda season: ( (series_id, season), {'language': language} ), season)
+# 		return _parallel_query(posters, wrapped_args)
 
-	images = data.get('posters')
+# 	if not data:
+# 		return {}
 
-	if not _raw_output:
-		_del_keys(images, [
-			'aspect_ratio',
-			'vote_count'
-		])
-		_rename_keys(images, {
-			'iso_639_1': 'language',
-		})
-		_set_values(images, {
-			'url': lambda poster: _image_url_prefix + poster['file_path'].lstrip('/'),
-		})
-		_del_keys(images, [
-			'file_path',
-		])
+# 	images = data.get('posters')
 
-	return images
+# 	if not _raw_output:
+# 		_del_keys(images, [
+# 			'aspect_ratio',
+# 			'vote_count'
+# 		])
+# 		_rename_keys(images, {
+# 			'iso_639_1': 'language',
+# 		})
+# 		_set_values(images, {
+# 			'url': lambda poster: _image_url_prefix + poster['file_path'].lstrip('/'),
+# 		})
+# 		_del_keys(images, [
+# 			'file_path',
+# 		])
+
+#	return images
 
 
-def find_imdb(imdb_id:str) -> dict:
+def find_imdb(imdb_id:str) -> dict|None:
 	data = _query(_qurl('find/%s' % imdb_id, {'external_source': 'imdb_id'}))
 
 	if not _raw_output:
@@ -624,16 +631,16 @@ def _self_test(args):
 		dt = datetime.now() - timedelta(days=int(next()))
 		info = changes(all_next(), after=dt, include=('overview', 'season'))
 
-	elif op == 'im':
-		print('IMAGES', file=sys.stderr)
-		series_id = next()
-		try: season = [int(n) for n in all_next()]
-		except ValueError as ve:
-			print('bad season:', ve, file=sys.stderr);
-			sys.exit(1)
-		if len(season) == 1:
-			season = season[0]
-		info = posters(series_id, season=season)
+	#elif op == 'im':
+	#	print('IMAGES', file=sys.stderr)
+	#	series_id = next()
+	#	try: season = [int(n) for n in all_next()]
+	#	except ValueError as ve:
+	#		print('bad season:', ve, file=sys.stderr);
+	#		sys.exit(1)
+	#	if len(season) == 1:
+	#		season = season[0]
+	#	info = posters(series_id, season=season)
 
 	else:
 		print('_self_test: <op> [args...]', file=sys.stderr)
