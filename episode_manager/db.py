@@ -685,7 +685,7 @@ def write_json_tmp(data:dict, dir:str) -> str|None:
 		return None
 
 	tmp_name2 = mkstemp(dir=dir)[1]
-	debug(f'db: compressing {tmp_name} -> {tmp_name2}')
+	#debug(f'db: compressing {tmp_name} -> {tmp_name2}')
 
 	if not compression.compress_file(tmp_name, tmp_name2):
 		os.remove(tmp_name)
@@ -740,21 +740,15 @@ def meta_del(meta:dict, key: str) -> None:
 
 
 def changelog_add(db:Database, message:str, series_id:str|None=None):
-	if series_id is None:
-		log = db.meta.get(meta_changes_log_key)
-	else:
-		log = db[series_id].get(meta_changes_log_key)
+	log = db.meta.get(meta_changes_log_key)
 
 	if not isinstance(log, list):
 		log = []
 
 	log.append((message, series_id))
 
-	if series_id is None:
-		db.meta[meta_changes_log_key] = log
-		set_dirty()
-	else:
-		meta_set(db[series_id], meta_changes_log_key, log)
+	db.meta[meta_changes_log_key] = log
+	set_dirty()
 
 	debug('Logged change:', message, series_id if series_id else '')
 
