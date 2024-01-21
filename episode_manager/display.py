@@ -142,7 +142,6 @@ def print_episodes(series:dict, meta:dict, episodes:list[dict], width:int, pre_p
 		bg_r = int(bg_blend_0*bg_alpha + bg_blend_1*(1 - bg_alpha))
 		bg_g = bg_b = bg_r
 		bg = f'48;2;{bg_r};{bg_g};{bg_b}'
-		debug(bg_alpha, '->', bg)
 
 		print(f'\x1b[{bg}m{_K}', end='')
 		if season != current_season:
