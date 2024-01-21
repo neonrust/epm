@@ -850,6 +850,11 @@ def indexed_series(db:Database, index=None, match=None, state:State|None=None, s
 	return list(filter_map(db, filter=flt, map=index_and_id, sort_key=sort_key))
 
 
+def title_match(title:str, find_title:str) -> bool:
+	# TODO: impelement something more "fuzzy"
+	return find_title in title.casefold()
+
+
 def find_single_series(db:Database, needle:str, filter_callback:Callable[[str,dict],bool]|None=None) -> tuple[int|None, str|None, str|list|None]:
 	nothing_found = None, None, f'Series not found: {needle}'
 
@@ -883,12 +888,12 @@ def find_single_series(db:Database, needle:str, filter_callback:Callable[[str,di
 			passed = meta.get(meta_list_index_key) == find_index
 
 		if passed and find_title is not None:
-			passed = find_title in meta.get('title', '').casefold()
+			passed = title_match(meta.get('title', ''), find_title)
 
 		if passed and imdb_id is not None:
 			series = db.series(series_id)
 			if series:
-				passed = series.get('imdb_id') == imdb_id
+				passed = meta.get('imdb_id') == imdb_id
 
 		if passed and filter_callback is not None:
 			passed = filter_callback(series_id, meta)
