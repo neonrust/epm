@@ -527,6 +527,13 @@ def _migrate(db:dict) -> Database:
 					meta[meta_update_history_key] = history
 				fixed_update_history_dups += mods
 
+		if db_version < 5:
+			last_used = meta.get('last-used')
+			if last_used:
+				meta[meta_last_used_key] = last_used
+
+
+	# ---------------------------------------------------------------
 
 	if db_version < 2:
 		# assign list index in added time order
@@ -1126,19 +1133,20 @@ def series_index(index_number:int):
 
 
 meta_key = 'epm:meta'
-meta_active_status_key = 'active-status'
+meta_active_status_key = 'active_status'
 meta_added_key = 'added'
 meta_seen_key = 'seen'
-meta_last_episode_key = 'last-episode'
-meta_next_episode_key = 'next-episode'
-meta_total_episodes_key = 'total-episodes'
-meta_total_seasons_key = 'total-seasons'
+meta_last_episode_key = 'last_episode'
+meta_next_episode_key = 'next_episode'
+meta_total_episodes_key = 'total_episodes'
+meta_total_seasons_key = 'total_seasons'
+meta_unseen_episodes_key = 'unseen_episodes'
 meta_archived_key = 'archived'
 meta_list_index_key = 'list_index'
 meta_next_list_index_key = 'next_list_index'
 meta_update_check_key = 'update_check'
 meta_update_history_key = 'update_history'
-meta_last_used_key = 'last-used'
+meta_last_used_key = 'last_used'
 meta_rating_key = 'rating'
 meta_rating_comment_key = 'rating_comment'
 meta_version_key = 'version'
