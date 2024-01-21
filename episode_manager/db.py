@@ -700,7 +700,7 @@ def save(db:Database) -> bool:
 	_rotate_backups(base_name)
 
 	os.rename(tmp_name, active_file())
-	debug(f'db: renamed new compressed {tmp_name} {active_file()}')
+	#debug(f'db: renamed new compressed {tmp_name} {active_file()}')
 
 	t1 = time.time()
 	ms = (t1 - t0)*1000
