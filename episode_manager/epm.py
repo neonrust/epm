@@ -889,13 +889,12 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 	def filter_callback(series_id:str, meta:dict) -> bool:
 		ser_state = series_state(meta)
 
-		# unmarking
-		if ser_state & (State.STARTED | State.COMPLETED) == 0:
+		if marking and (ser_state & State.ACTIVE) == 0:
+			return False
+		elif not marking and ser_state & (State.STARTED | State.COMPLETED) == 0:
 			return False
 
 		if marking:
-			if ser_state & (State.PLANNED | State.STARTED) == 0:
-				return False
 			_, num_unseen = series_num_seen_unseen(meta)
 			return num_unseen > 0
 
