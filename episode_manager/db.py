@@ -73,10 +73,6 @@ class SeriesCache:
 		self._path = path
 		os.makedirs(path, exist_ok=True)
 
-	def __contains__(self, title_id) -> bool:
-		return title_id in self._cache
-
-
 	def exists(self, title_id:str) -> bool:
 		try:
 			os.stat(self._series_file(title_id))
@@ -88,13 +84,20 @@ class SeriesCache:
 
 	def get(self, title_id:str) -> dict|None:
 		data = self._cache.get(title_id, _not_in_cache)
-
 		if data is _not_in_cache:
 			data = self._load_series(title_id)
-			if not data:
-				data = tmdb.details(title_id)
-			if data:
-				self._cache[title_id] = data
+			self._cache[title_id] = data
+
+		return data
+
+
+	def download(self, title_id:str) -> dict|None:
+		data = tmdb.episodes(title_id, with_details=True)
+		if data:
+			series, episodes = data
+			series['episodes'] = episodes
+			data = series
+			self.set(title_id, data)
 
 		return data
 
@@ -137,12 +140,11 @@ class SeriesCache:
 
 	def _load_series(self, title_id:str) -> dict|None:
 		try:
-			debug(f'loading series data from disk: {title_id}')
-			fp = compression.open(self._series_file(title_id))
+			filepath = self._series_file(title_id)
+			fp = compression.open(filepath)
 			return read_json_obj(fp)
 		except:
 			return None
-
 
 	def _save_series(self, title_id:str, data:dict) -> bool:
 		if s_mp_writer_pool:
@@ -218,17 +220,22 @@ class Database(UserDict):
 	def series(self, title_id:str) -> dict:
 		assert s_series_cache is not None, 'no series cache instance!?!'
 
-		exists = title_id in s_series_cache
 		data = s_series_cache.get(title_id)
+		if not data:
+			debug(f'[{title_id}] no cached data, downloading...')
+			data = s_series_cache.download(title_id)
+			if data:
+				debug(f'[{title_id}] downloaded')
+				# the entry was just (down)loaded; do the necessary post-processing
+				self[title_id][meta_update_check_key] = now_stamp()
+				self.add_updated_log(title_id, now_stamp())
+				self._update_meta(title_id, data)
+
 		if not data:
 			raise KeyError(title_id);
 
-		if not exists:
-			# the entry was just (down)loaded
-			self._update_meta(title_id, data)
-		else:
-			self[title_id][meta_last_used_key] = now_stamp()
-			set_dirty()
+		self[title_id][meta_last_used_key] = now_stamp()
+		set_dirty()
 
 		return data
 
@@ -245,6 +252,18 @@ class Database(UserDict):
 		assert s_series_cache is not None, 'no series cache instance!?!'
 
 		return s_series_cache.remove(title_id)
+
+
+	def add_updated_log(self, title_id:str, latest_update_stamp:str):
+		meta = self[title_id]
+		update_history = meta.get(meta_update_history_key, [])
+		update_history.append(latest_update_stamp)
+
+		max_history = config.get_int('num-update-history')
+		if len(update_history) > max_history:
+			update_history.pop(0)
+
+		meta[meta_update_history_key] = update_history
 
 
 	def recalc_meta(self, title_id:str):
@@ -277,8 +296,10 @@ class Database(UserDict):
 				#debug('seen non-ep:', seen_key, '(removing from seen list)')
 				del seen_set[seen_key]
 
+		if not data.get('episodes'):
+			debug('no episodes:', title_id)
 		meta[meta_total_episodes_key] = len(data.get('episodes', []))
-		meta[meta_total_seasons_key] = len(set(ep['season'] for ep in data['episodes']))
+		meta[meta_total_seasons_key] = len(set(ep['season'] for ep in data.get('episodes', [])))
 		_, unseen = series_seen_unseen(data, meta)
 		meta[meta_unseen_episodes_key] = len(unseen)
 
@@ -308,7 +329,7 @@ class Database(UserDict):
 			if 'date' in next_ep:
 				meta_next['date'] = next_ep['date']
 			meta[meta_next_episode_key] = meta_next
-			debug('  next:', meta_next['episode'])
+			#debug('  next:', meta_next['episode'])
 
 		meta[meta_last_used_key] = now_stamp()
 		#debug('  used:', now_stamp())
