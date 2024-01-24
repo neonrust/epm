@@ -254,7 +254,7 @@ class Database(UserDict):
 
 	def _update_meta(self, title_id:str, data:dict):
 		meta = self.get(title_id, {})
-		debug('meta update %s ---------------------' % title_id)
+		#debug('meta update %s ---------------------' % title_id)
 
 		meta['title'] = data['title']
 		if 'year' in data:
@@ -264,7 +264,7 @@ class Database(UserDict):
 
 		if data.get('status'):
 			meta[meta_active_status_key] = data.get('status')
-			debug('  active-status:', meta[meta_active_status_key])
+			#debug('  active-status:', meta[meta_active_status_key])
 
 		# check if there are episodes marked that doesn't exist (any more)
 		all_ep_keys = set(
@@ -274,7 +274,7 @@ class Database(UserDict):
 		seen_set = meta.get(meta_seen_key, {})
 		for seen_key, _ in sorted(seen_set.items()):
 			if seen_key not in all_ep_keys:
-				debug('seen non-ep:', seen_key, '(removing from seen list)')
+				#debug('seen non-ep:', seen_key, '(removing from seen list)')
 				del seen_set[seen_key]
 
 		meta[meta_total_episodes_key] = len(data.get('episodes', []))
@@ -282,9 +282,9 @@ class Database(UserDict):
 		_, unseen = series_seen_unseen(data, meta)
 		meta[meta_unseen_episodes_key] = len(unseen)
 
-		debug('  total sns:', meta[meta_total_seasons_key])
-		debug('  total eps:', meta[meta_total_episodes_key])
-		debug('  unseen:   ', meta[meta_unseen_episodes_key])
+		#debug('  total sns:', meta[meta_total_seasons_key])
+		#debug('  total eps:', meta[meta_total_episodes_key])
+		#debug('  unseen:   ', meta[meta_unseen_episodes_key])
 
 		last_ep, seen_time = last_seen_episode(data, meta)
 
@@ -297,7 +297,7 @@ class Database(UserDict):
 			}
 			meta_last['date'] = last_ep['date']
 			meta[meta_last_episode_key] = meta_last
-			debug('  last:', meta_last['episode'])
+			#debug('  last:', meta_last['episode'])
 
 		next_ep = next_unseen_episode(data, meta)
 		if next_ep:
@@ -311,11 +311,11 @@ class Database(UserDict):
 			debug('  next:', meta_next['episode'])
 
 		meta[meta_last_used_key] = now_stamp()
-		debug('  used:', now_stamp())
+		#debug('  used:', now_stamp())
 
 		# TODO: anything else?
 
-		debug('meta update END -----------------')
+		#debug('meta update END -----------------')
 
 
 	def clean_unused(self):
