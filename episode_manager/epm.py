@@ -1983,7 +1983,6 @@ def refresh_series(db:Database, width:int, subset:list|None=None, force:bool=Fal
 	clrline()
 
 	num_episodes = 0
-	max_history = config.get_int('num-update-history')
 
 	for series_id, (series, episodes) in zip(to_refresh, result):
 
@@ -1996,11 +1995,7 @@ def refresh_series(db:Database, width:int, subset:list|None=None, force:bool=Fal
 		# update meta
 		meta = db[series_id]
 		# keep a list of last N updates
-		update_history = meta.get(meta_update_history_key, [])
-		update_history.append(latest_update_time_str)
-		if len(update_history) > max_history:
-			update_history.pop(0)
-		meta[meta_update_history_key] = update_history
+		db.add_updated_log(latest_update_time_str)
 
 		# if series changed atatus to non-active; archive if all episodes are seen
 		if series_state(meta) & State.ARCHIVED == 0:
