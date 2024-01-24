@@ -1963,6 +1963,10 @@ def refresh_series(db:Database, width:int, subset:list|None=None, force:bool=Fal
 		for series_id in to_refresh
 	}
 
+	debug('to_refresh (for real):', len(to_refresh))
+	for series_id in to_refresh:
+		meta = db[series_id]
+		debug('   %s [%s]' % (meta['title'], meta.get(meta_list_index_key)))
 
 	prog_bar = mk_prog(len(to_refresh))
 	clrline()
@@ -1980,11 +1984,6 @@ def refresh_series(db:Database, width:int, subset:list|None=None, force:bool=Fal
 
 	num_episodes = 0
 	max_history = config.get_int('num-update-history')
-
-	debug('to_refresh (for real):', len(to_refresh))
-	for series_id in to_refresh:
-		meta = db[series_id]
-		debug('   %s [%s]' % (meta['title'], meta.get(meta_list_index_key)))
 
 	for series_id, (series, episodes) in zip(to_refresh, result):
 
@@ -2014,6 +2013,8 @@ def refresh_series(db:Database, width:int, subset:list|None=None, force:bool=Fal
 					affected[series_id] = State.ARCHIVED
 
 		num_episodes += len(episodes)
+
+		set_dirty()
 
 
 	return len(to_refresh), num_episodes
