@@ -1995,7 +1995,7 @@ def refresh_series(db:Database, width:int, subset:list|None=None, force:bool=Fal
 		# update meta
 		meta = db[series_id]
 		# keep a list of last N updates
-		db.add_updated_log(latest_update_time_str)
+		db.add_updated_log(series_id, latest_update_time_str)
 
 		# if series changed atatus to non-active; archive if all episodes are seen
 		if series_state(meta) & State.ARCHIVED == 0:
