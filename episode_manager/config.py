@@ -73,7 +73,7 @@ def load() -> bool:
 
 	if not pexists(app_config_file):
 		old_config_file = app_config_file.replace('/episode_manager/', '/epm/')
-		if pexists(old_config_file):
+		if old_config_file != app_config_file and pexists(old_config_file):
 			os.makedirs(dirname(app_config_file), exist_ok=True)
 			shutil.copy(old_config_file, app_config_file)
 			print(f'{_f}[config: imported from old location: {old_config_file}]')
