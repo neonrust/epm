@@ -366,7 +366,6 @@ class Database(UserDict):
 				if age > _REMOVE_DATA_AFTER:
 					self.remove_series(title_id)
 					removed += 1
-					print(title_id, meta)
 					debug(f'''{title_id:>8} "{meta['title']}" {age.days} days -> {_b}removed{_0}''')
 
 		if removed:
