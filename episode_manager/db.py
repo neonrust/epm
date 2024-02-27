@@ -334,8 +334,6 @@ class Database(UserDict):
 		meta[meta_last_used_key] = now_stamp()
 		#debug('  used:', now_stamp())
 
-		# TODO: anything else?
-
 		#debug('meta update END -----------------')
 
 

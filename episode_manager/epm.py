@@ -1073,6 +1073,8 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 	if not touched_episodes:
 		return Error(f'{_c}No episodes %smarked{_0}' % ('' if marking else 'un'))
 
+	meta[meta_seen_key] = seen_state
+
 	ctx.db.recalc_meta(series_id)
 	set_dirty()
 
