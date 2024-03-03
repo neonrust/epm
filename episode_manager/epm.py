@@ -1096,7 +1096,8 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 			msg += 's%de%02d' % (ep['season'], ep['episode'])
 
 		changelog_add(ctx.db, msg, series_id)
-		print('  %s' % format_episode_title(None, ep, width=width - 2))
+
+		print('    %s' % format_episode_title(None, ep, width=width - 4))
 
 
 	if not incremental:
