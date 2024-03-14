@@ -22,7 +22,7 @@ from .styles import _0, _00, _i, _b, _B, _c, _f, _K, _o, _g, _w, _EOL
 list_index_style = '\x1b[3;38;2;160;140;60m'
 
 
-def print_series_title(list_index:int|None, meta:dict, width:int=0, imdb_id:str|None=None, gray:bool=False, tail: str|None=None, tail_style:str|None=None, show_progress:bool=True) -> None:
+def print_series_title(list_index:int|None, meta:dict, width:int=0, imdb_id:str|None=None, grey:bool=False, tail: str|None=None, tail_style:str|None=None, show_progress:bool=True) -> None:
 
 	# this function should never touch the BG color (b/c the list might have alternating bg color)
 
@@ -30,19 +30,19 @@ def print_series_title(list_index:int|None, meta:dict, width:int=0, imdb_id:str|
 	right = ''   # parts relative to right edge (IMDbID, tail)
 	right_w = 0
 
-	if list_index is not None:
-		list_index_w = 5
+	list_index_w = 5
+	if list_index is not None and list_index_w < width:
 		width -= list_index_w
 
 		left = f'{list_index_style}{list_index:>{list_index_w}}{_0} '
 
-	if imdb_id:
-		id_w = 11
+	id_w = 11
+	if imdb_id and id_w < width:
 		right += f'  {_f}{imdb_id:<{id_w}}{_0}'
 		width -= 2 + id_w
 		right_w += 2 + id_w
 
-	if tail:
+	if tail and len(tail) < width:
 		tail_style = tail_style or ''
 		right += f'{tail_style}{tail}{_0}'
 		width -= len(tail)
@@ -51,20 +51,30 @@ def print_series_title(list_index:int|None, meta:dict, width:int=0, imdb_id:str|
 	left += format_title(meta, width=width)
 
 	series_status = meta.get(meta_active_status_key)
-	if series_status in ('ended', 'canceled'):
-		width -= 2 + 5
+	status_w = 2 + 5
+	if series_status in ('ended', 'canceled') and status_w < width:
+		width -= status_w
 		left += f'  {_w}{_i}{series_status}{_0}'
 
-	if show_progress and series_status in ('ended', 'canceled', 'concluded'):
-		num_episodes = meta.get(meta_total_episodes_key, 0)
-		num_seen = len(meta.get('seen', []))
-		if num_seen < num_episodes:
+	num_episodes = meta.get(meta_total_episodes_key, 0)
+	num_seen = len(meta.get('seen', []))
+	num_unseen = num_episodes - num_seen
+
+	if num_unseen:
+		progress_w = 5
+		if show_progress and series_status in ('ended', 'canceled', 'concluded') and progress_w < width:
 			percent = 100*num_seen / num_episodes
 			left += f'  {_f}{percent:2.0f}{_b}%{_0}'
-			width -= 5
+			width -= progress_w
 
-	if gray:
-		# remove all escape sequences and print in faint-ish gray
+		text = f'  {num_unseen} unseen'
+		debug(f'unseen: {len(text)} < {width}')
+		if len(text) < width:
+			left += text
+			width -= len(text)
+
+	if grey:
+		# remove all escape sequences and print in faint-ish grey
 		left = f'{_0}\x1b[38;5;246m%s' % strip_ansi(left)
 		right = f'{_0}\x1b[38;5;246m%s' % strip_ansi(right)
 
@@ -177,7 +187,7 @@ def print_archive_status(meta:dict) -> None:
 		print(f'{_0}')
 
 
-def print_seen_status(series:dict, meta:dict, gray:bool=False, summary:bool=True, next:bool=True, last:bool=True, include_future=False, width:int=0):
+def print_seen_status(series:dict, meta:dict, grey:bool=False, summary:bool=True, next:bool=True, last:bool=True, include_future=False, width:int=0):
 	ind = '       '
 
 	seen, unseen = series_seen_unseen(series, meta, before=now_datetime() if not include_future else None)
@@ -204,7 +214,7 @@ def print_seen_status(series:dict, meta:dict, gray:bool=False, summary:bool=True
 		if seen or unseen:
 			s += _0
 
-		if gray:
+		if grey:
 			print(f'{_f}{strip_ansi(s)}{_0}')
 		else:
 			print(s)
@@ -214,21 +224,20 @@ def print_seen_status(series:dict, meta:dict, gray:bool=False, summary:bool=True
 	if last and seen:  # and not all_seen:
 		# show the last *in sequence* episode marked as seen,
 		# NOT the episode last *marked* as seen
-		if gray:
+		if grey:
 			print(_f, end='')
 		header = f'{ind}Last: '
 		print(header, end='')
-		print(format_episode_title('', seen[-1], today=True, width=width - len(header), gray=gray))
+		print(format_episode_title('', seen[-1], today=True, width=width - len(header), grey=grey))
 
 	if next and unseen:
 		if not seen:
 			header = f'{ind}First:'
 		else:
 			header = f'{ind}Next: '
-		more = len(unseen) - 1
-		s = format_episode_title('', unseen[0], gray=gray, today=True, width=width - len(header), more=more)
+		s = format_episode_title('', unseen[0], grey=grey, today=True, width=width - len(header))
 		if s:
-			if gray:
+			if grey:
 				print(_f, end='')
 			print(f'{header}{s}')
 
@@ -259,17 +268,16 @@ def format_title(meta:dict, width:int|None=None):
 	return s
 
 
-def format_episode_title(prefix:str|None, episode:dict, include_season:bool=True, include_time:bool=True, width:int=0, gray:bool=False, seen:bool|None=None, today:bool=False, more:int=0, bg:str|None=None) -> str:
+def format_episode_title(prefix:str|None, episode:dict, include_season:bool=True, include_time:bool=True, width:int=0, grey:bool=False, seen:bool|None=None, today:bool=False, bg:str|None=None) -> str:
 
 	# this function should never touch the BG color (b/c the list might have alternating bg color)
 
-	#    A        B                        C        D       E
-	# <s__e__> <title>      - - -      [+N more] [NN min] <date>
-	# left-aligned --/                 \---------- right-aligned
+	#    A        B                                 C       D
+	# <s__e__> <title>      - - -                 [NN min] <date>
+	# left-aligned --/                            \----right-aligned
 	#
-	# C is an option
-	# D might be missing (no details available)
-	# collapsible columns (b/c limited width), in order: D, C, E
+	# C might be missing (no details available)
+	# collapsible columns (b/c limited width), in order: C, D
 
 	# TODO: see #33
 	#   print_series_title() is a bit better
@@ -369,11 +377,6 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=True
 		runtime_str = '      '
 	width -= len(runtime_str)
 
-	more_eps = ''
-	if more > 0:
-		more_eps = '+%d more    ' % more
-		width -= len(more_eps)
-
 	finale = ep.get('finale', '')
 	if finale == 'series':
 		finale = 'THE END'
@@ -400,12 +403,12 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=True
 		ep['title'] = ep['title'][:width] + '…'
 		# TODO: to fancy fade to black at the end ;)
 
-	s += f'{season_ep:}{" "*episode_title_margin}{_o}{ep["title"]:{width}}{_0}{finale}{_0+_f}{more_eps}{_o+_f}{runtime_str}{_0}{ep_time}'
+	s += f'{season_ep:}{" "*episode_title_margin}{_o}{ep["title"]:{width}}{_0}{finale}{_0+_f}{_o+_f}{runtime_str}{_0}{ep_time}'
 
-	if gray or seen:
+	if grey or seen:
 		s = f'{_0}\x1b[38;5;246m%s' % strip_ansi(s)
 
-	if bg is not None or gray or seen:
+	if bg is not None or grey or seen:
 		s += _0
 
 	return s
