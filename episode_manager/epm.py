@@ -476,10 +476,12 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 		if hilite:
 			print(f'\x1b[48;5;234m{_K}\r', end='')
 
+		grey_color = is_archived and not only_archived
+
 		if show_details:
-			print_series_details(index, series, meta, width=width, gray=is_archived and not only_archived)
+			print_series_details(index, series, meta, width=width, grey=grey_color)
 		else:
-			print_series_title(index, meta, width=width, gray=is_archived and not only_archived)
+			print_series_title(index, meta, width=width, grey=grey_color)
 			if not show_terse:
 				print_archive_status(meta)
 
@@ -493,7 +495,7 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 				next=show_next or not all_unseen_eps,
 				include_future=future_eps,
 				width=width,
-				gray=is_archived and not only_archived,
+				grey=is_archived and not only_archived,
 			)
 
 			seen, unseen = series_seen_unseen(series, meta, to_date)
@@ -708,7 +710,7 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> Error|None:
 				arch_tail = None
 
 			imdb_id = ctx.db[new_series['id']].get('imdb_id')
-			print_series_title(None, ctx.db[new_series['id']], imdb_id=imdb_id, gray=True, tail=arch_tail, width=width)
+			print_series_title(None, ctx.db[new_series['id']], imdb_id=imdb_id, grey=True, tail=arch_tail, width=width)
 
 		if add:
 			# exclude ones we already have in our config
@@ -1045,7 +1047,7 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 		else:
 			print(f'{_f}Not marked:{_0}')
 		for ep in already:
-			print(format_episode_title('  ', ep, include_time=False, width=width, gray=True))
+			print(format_episode_title('  ', ep, include_time=False, width=width, grey=True))
 
 
 	state_before = series_state(meta)
@@ -2019,13 +2021,13 @@ def refresh_series(db:Database, width:int, subset:list|None=None, force:bool=Fal
 
 
 
-def print_series_details(index:int, series:dict, meta:dict, width:int, gray:bool=False) -> None:
+def print_series_details(index:int, series:dict, meta:dict, width:int, grey:bool=False) -> None:
 
 	tail = None
 	if series.get('imdb_id'):
 		tail = imdb_url_tmpl % series["imdb_id"]
 		tail_style = f'{_o}{_u}'
-	print_series_title(index, meta, width, gray=gray, tail=tail, tail_style=tail_style)
+	print_series_title(index, meta, width, grey=grey, tail=tail, tail_style=tail_style)
 
 	print_archive_status(meta)
 
