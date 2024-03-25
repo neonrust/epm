@@ -68,7 +68,7 @@ def print_series_title(list_index:int|None, meta:dict, width:int=0, imdb_id:str|
 			width -= progress_w
 
 		text = f'  {num_unseen} unseen'
-		debug(f'unseen: {len(text)} < {width}')
+		#debug(f'unseen: {len(text)} < {width}')
 		if len(text) < width:
 			left += text
 			width -= len(text)
