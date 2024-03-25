@@ -1050,7 +1050,7 @@ def should_update(meta:dict) -> bool:
 		return False
 
 	last_check = datetime.fromisoformat(last_check)
-	simple_age_cap = 2*WEEK
+	simple_age_cap = WEEK
 
 	update_history = meta.get(meta_update_history_key)
 	if not update_history:
