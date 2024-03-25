@@ -697,9 +697,9 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> Error|None:
 
 	if exists_in_db:
 		if add:
-			print(f'{_f}Already added %d series:{_0}' % len(exists_in_db))
+			print(f'{_c}Already added series (%d):{_0}' % len(exists_in_db))
 		else:
-			print(f'{_f}Exists in the database: %d{_0}' % len(exists_in_db))
+			print(f'{_c}Exists in the database: %d{_0}' % len(exists_in_db))
 
 		for new_series in exists_in_db:
 			series_id = new_series['id']
@@ -710,7 +710,8 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> Error|None:
 				arch_tail = None
 
 			imdb_id = ctx.db[new_series['id']].get('imdb_id')
-			print_series_title(None, ctx.db[new_series['id']], imdb_id=imdb_id, grey=True, tail=arch_tail, width=width)
+			print('  ', end='')
+			print_series_title(None, ctx.db[new_series['id']], imdb_id=imdb_id, tail=arch_tail, width=width - 2)
 
 		if add:
 			# exclude ones we already have in our config
