@@ -354,8 +354,8 @@ def format_episode_title(prefix:str|None, episode:dict, include_season:bool=True
 			ep_time_w = 10
 
 	elif today:
-		ep_time = 'TODAY   '
-		ep_time_w = 16
+		ep_time = '  TODAY   '
+		ep_time_w = len(ep_time)
 		time_style = _g
 
 	elif isinstance(ep_date, str):
