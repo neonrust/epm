@@ -427,7 +427,7 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 					for ep in unseen:
 						ep_date = ep.get('date')
 						if ep_date and ep_date <= date_stamp:
-							debug('  ', meta['title'], 'unseen episode available:', ep['season'], ep['episode'])
+							debug(f'  {_c}', meta['title'], f'{_0}has unseen:', ep['season'], ep['episode'])
 							return True # at least one episode already released
 				return False  # no episodes already released
 
