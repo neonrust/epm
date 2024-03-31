@@ -491,6 +491,7 @@ def _migrate(db:dict) -> Database:
 				fixed_archived += 1
 
 		if db_version < 3:
+			series = meta
 			last_update = legacy_meta_get(series, 'updated')
 			if last_update:
 				legacy_meta_set(series, meta_update_check_key, last_update)
@@ -504,6 +505,7 @@ def _migrate(db:dict) -> Database:
 			series.pop('id', None)
 
 		if db_version < 4:
+			series = meta
 			def _del_empty(data):
 				nonlocal fixed_nulls
 				if isinstance(data, list):
@@ -538,8 +540,9 @@ def _migrate(db:dict) -> Database:
 					idx += 1
 
 			if mods > 0:
-				debug(f'Removed {mods} dup history items from %s' % (series['title']))
+				debug(f'Removed {mods} dup history items from %s' % (meta['title']))
 				if db_version < 5:
+					series = meta
 					legacy_meta_set(series, meta_update_history_key, history)
 				else:
 					meta[meta_update_history_key] = history
