@@ -62,8 +62,8 @@ from .db import \
 
 PRG = basename(sys.argv[0])
 
-VERSION = '0.22'
-VERSION_DATE = '2024-01-18'
+VERSION = '0.23'
+VERSION_DATE = '2024-05-03'
 
 
 def start():
