@@ -469,29 +469,29 @@ def menu_select(items:list[dict], width:int, item_print:Callable, force_selectio
 
 		_box = _o + _f
 
-		num_lines = 0
+		num_lines = 0  # including frame
 
 		print(f'{_box}┏%s{_0}' % ('━'*(width-1)), end=f'{_K}\n\r')
-		print(f'{_box}┃{_0} {_o}Overview:{_0} ', end='')
-		num_lines += 1  # overview lines counted below
+		num_lines += 1
 
 		if not item.get('overview'):
 			overview = [ f'{_i}{_f}no overview available{_0}' ]
-			num_lines += 1
 		else:
 			overview = textwrap.wrap(item['overview'], width=width - 3, initial_indent=' '*11)
 			if overview and len(overview[0]) > 11:
 				overview[0] = overview[0][11:]
 
+		# this prefix is on the first line of the overview text (not a separate line)
+		print(f'{_box}┃{_0} {_o}Overview:{_0} ', end='')
 		for idx, line in enumerate(overview):
-			num_lines += 1
 			if idx > 0:
 				print(f'{_box}┃{_0}  ', end='')
 			print(line, end=f'{_K}\n\r')
 
+		num_lines += len(overview)
+
 		if 'genre' in item:
-			print(f'{_box}┃{_0} {_o}Genre:{_0} ', end='')
-			print(item['genre'], end=f'{_K}\n\r')
+			print(f'{_box}┃{_0} {_o}Genre:{_0}', item['genre'], end=f'{_K}\n\r')
 			num_lines += 1
 
 		print(f'{_box}┃{_0} {_o}Episodes:{_0} ', end='')
@@ -513,18 +513,12 @@ def menu_select(items:list[dict], width:int, item_print:Callable, force_selectio
 		nonlocal last_info_lines
 		if last_info_lines is not None:
 			# move up to beginning of menu
-			print('\x1b[%dA' % (len(items) + last_info_lines), end='')
+			move_up = len(items) + last_info_lines
+			print('\x1b[%dA\x1b[J' % move_up, end='')
 
 		print_items(selected_index)
 
 		info_lines = print_info(items[selected_index])
-
-		if last_info_lines is not None and info_lines < last_info_lines:
-			# if the previous info box was longer, clear lines after this info box
-			print('\r', end='')
-			for n in range(info_lines, last_info_lines):
-				print(f'{_K}\r\x1b[1B', end='')
-			print('\x1b[%dA' % (last_info_lines - info_lines), end='', flush=True)
 
 		last_info_lines = info_lines
 
