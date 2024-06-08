@@ -281,8 +281,8 @@ class Database(UserDict):
 		if 'imdb_id' in data:
 			meta['imdb_id'] = data['imdb_id']
 
-		if data.get('status'):
-			meta[meta_active_status_key] = data.get('status')
+		if data.get('active_status'):
+			meta[meta_active_status_key] = data.get('active_status')
 			#debug('  active-status:', meta[meta_active_status_key])
 
 		# check if there are episodes marked that doesn't exist (any more)

@@ -246,15 +246,16 @@ def details(title_id:str|list[str]|Iterable, type='series') -> dict|None:
 			'adult',
 			'episode_run_time',
 		])
+		_rename_keys(data, {'status': 'active_status'})
 		_set_values(data, {
 			'year': lambda _: [int(data.get('date', [0]).split('-')[0])] if data.get('date') else None,
 			'country': lambda _: ', '.join(data.get('country')),
 			'genre': lambda _: ', '.join(map(lambda g: g.get('name'), data.get('genres'))),
-			'status': lambda _: _map_status(data.get('status')) if 'status' in data else None,
+			'active_status': lambda _: _map_status(data.get('active_status')) if 'active_status' in data else None,
 		})
 		_del_keys(data, ['genres'])
 
-		if data.get('status') in ('ended', 'canceled') and 'end_date' in data and 'year' in data:
+		if data.get('active_status') in ('ended', 'canceled') and 'end_date' in data and 'year' in data:
 			data['year'] = data['year'] + [ int(data.get('end_date').split('-')[0]) ]
 		else:
 			del data['end_date']
@@ -365,7 +366,7 @@ def episodes(series_id:str|list[str]|Iterable, with_details=False, progress:Call
 		last_episode = ep
 		last_season = season
 
-	if ser_details.get('status') != 'active':
+	if ser_details.get('active_status') != 'active':
 		if last_episode and last_episode.get('finale') == 'finale':
 			last_episode['finale'] = 'series'
 	elif last_episode:
