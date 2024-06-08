@@ -26,6 +26,8 @@ from .display import \
 	format_title, \
 	format_episode_title, \
 	format_duration, \
+	format_state, \
+	format_state_change, \
 	clrline, \
 	menu_select
 from .utils import \
@@ -792,7 +794,7 @@ def cmd_add(ctx:Context, width:int, add:bool=True) -> Error|None:
 	if max(modified) > 0:
 		ctx.save()
 
-	print(f'{_b}Series added:{_00}')
+	print(f'{_b}Series added:{_00} [{format_state(series_state(meta))}]')
 
 	# fetch the newly computed meta
 	meta = ctx.db[series_id]
@@ -1678,10 +1680,6 @@ command_options = {
 		'api-key':           { 'name': '--api-key', 'arg': str, 'help': 'Set API key for backend (TMDb)' },
 	},
 }
-
-
-def format_state_change(before:State, after:State) -> str:
-	return f'[\x1b[38;5;208m{before.name.lower()}{_0} ⯈ \x1b[38;5;113m{after.name.lower()}{_0}]'  # type: ignore  # todo: enum
 
 
 def find_idx_or_match(args, country:re.Pattern|None=None, director:re.Pattern|None=None, writer:re.Pattern|None=None, cast:re.Pattern|None=None, year:list[int]|None=None, match:Callable[[str,dict],bool]|None=None) -> tuple[int|None, Callable|None]:

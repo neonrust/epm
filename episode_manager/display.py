@@ -10,7 +10,8 @@ from .db import \
 	meta_total_episodes_key, \
 	series_seen_unseen, \
 	series_num_seen_unseen, \
-	episode_key
+	episode_key, \
+	State
 from .utils import \
     strip_ansi, \
 	now_datetime, \
@@ -453,6 +454,16 @@ def format_duration(seconds: int | float, roughly: bool=False):
 			parts.append(templ % (seconds, unit['s'], plural(seconds if roughly else 1)))
 
 	return ' '.join(parts)
+
+
+_now_state = '\x1b[38;5;113m'
+_prev_state = '\x1b[38;5;208m'
+
+def format_state(state:State) -> str:
+	return f'{_now_state}{state.name.lower()}{_0}'
+
+def format_state_change(before:State, after:State) -> str:
+	return f'[{_prev_state}{before.name.lower()}{_0} ⯈ {format_state(after)}]'  # type: ignore  # todo: enum
 
 
 def menu_select(items:list[dict], width:int, item_print:Callable, force_selection:int|None=None) -> int|None:
