@@ -28,6 +28,7 @@ from .display import \
 	format_duration, \
 	format_state, \
 	format_state_change, \
+	format_year_range, \
 	clrline, \
 	menu_select
 from .utils import \
@@ -864,7 +865,7 @@ def cmd_delete(ctx:Context, width:int) -> Error|None:
 	# delete it, permanently
 	ctx.db.remove(series_id)
 
-	changelog_add(ctx.db, 'Deleted series "%s" (%d)' % (meta['title'], meta['year']))
+	changelog_add(ctx.db, 'Deleted series "%s" (%s)' % (meta['title'], format_year_range(meta['year'])))
 
 	# niche case: if we happened to delete the last series, we can easily re-use its list index by "rolling back
 	next_index = ctx.db.next_list_index
