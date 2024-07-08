@@ -55,7 +55,8 @@ def print_series_title(list_index:int|None, meta:dict, width:int=0, imdb_id:str|
 	status_w = 2 + 5
 	if series_status in ('ended', 'canceled') and status_w < width:
 		width -= status_w
-		left += f'  {_w}{_i}{series_status}{_0}'
+		status_color = _w if series_status == 'canceled' else _c
+		left += f'  {status_color}{_i}{series_status}{_0}'
 
 	num_episodes = meta.get(meta_total_episodes_key, 0)
 	num_seen = len(meta.get('seen', []))
