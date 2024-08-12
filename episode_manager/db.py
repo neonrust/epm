@@ -85,7 +85,12 @@ class SeriesCache:
 	def get(self, title_id:str) -> dict|None:
 		data = self._cache.get(title_id, _not_in_cache)
 		if data is _not_in_cache:
+			t0 = time.time()
 			data = self._load_series(title_id)
+			t1 = time.time()
+			ms = (t1 - t0)*1000
+			debug(f'{_f}db: read series %s in %.1fms{_0}' % (title_id, ms))
+
 			self._cache[title_id] = data
 
 		return data
