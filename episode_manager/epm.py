@@ -440,6 +440,9 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 	modified = refresh_series(ctx.db, width=width)
 
 	find_idx, match = find_idx_or_match(ctx.command_arguments, country=filter_country, director=filter_director, writer=filter_writer, cast=filter_cast, year=filter_year, match=match_series)
+
+	if find_idx is not None:
+		find_state = State.ALL
 	series_list = db.indexed_series(ctx.db, state=find_state, index=find_idx, match=match, sort_key=sort_key)
 
 	if not series_list:
