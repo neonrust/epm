@@ -1008,7 +1008,7 @@ def series_state(meta:dict) -> State:
 	is_archived = meta_archived_key in meta
 	is_ended = meta.get(meta_active_status_key) in ('ended', 'canceled')
 
-	num_seen, num_unseen = series_num_seen_unseen(meta)
+	num_seen, num_unseen = series_num_seen_unseen(meta, before=now_datetime())
 
 	if is_archived:
 		if num_unseen > 0:  # partially seen
@@ -1099,9 +1099,11 @@ def should_update(meta:dict) -> bool:
 	return expired
 
 
-def series_num_seen_unseen(meta:dict) -> tuple[int, int]:
+def series_num_seen_unseen(meta:dict, before:datetime|None=None) -> tuple[int, int]:
 	num_seen = len(meta.get(meta_seen_key, []))
 	num_unseen = meta.get(meta_unseen_episodes_key, 0)
+
+	# TODO: take 'before' into account
 
 	return num_seen, num_unseen
 
@@ -1170,6 +1172,7 @@ meta_next_episode_key = 'next_episode'
 meta_total_episodes_key = 'total_episodes'
 meta_total_seasons_key = 'total_seasons'
 meta_unseen_episodes_key = 'unseen_episodes'
+meta_episode_dates_key = 'episode_dates'
 meta_archived_key = 'archived'
 meta_list_index_key = 'list_index'
 meta_next_list_index_key = 'next_list_index'
