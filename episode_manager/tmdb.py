@@ -294,7 +294,7 @@ def episodes(series_id:str|list[str]|Iterable, with_details=False, progress:Call
 		wrapped_args = map(lambda sid: ( (sid,), {'with_details': with_details} ), series_id)
 		return _parallel_query(episodes, wrapped_args, progress_callback=progress)
 
-	# unfortunately we must synchronously get the details first
+	# unfortunately we must synchronously get the main details first
 	ser_details = details(series_id, type='series') or {}
 
 	num_seasons = ser_details.get('total_seasons', 1)
