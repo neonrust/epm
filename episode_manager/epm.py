@@ -489,6 +489,8 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 				print_archive_status(meta)
 
 		if not show_terse:
+			if only_planned:
+				no_summary = True
 			# don't print "next" if we're printing all unseen episodes anyway
 			print_seen_status(
 			    series,
