@@ -1123,7 +1123,7 @@ def cmd_mark(ctx:Context, width:int, marking:bool=True) -> Error|None:
 		# all seen?
 		if len(seen_state) == len(series['episodes']):
 			print()
-			print(f'{_c}Last episode marked of an {series["status"]} series:{_0} {format_state_change(state_before, State.ARCHIVED)}')
+			print(f'{_c}Last episode marked of an {series["active_status"]} series:{_0} {format_state_change(state_before, State.ARCHIVED)}')
 			ctx.command_arguments = [str(index)]
 			return cmd_archive(ctx, width, print_state_change=False)
 
