@@ -794,6 +794,9 @@ def meta_set(meta:dict, key: str, value) -> None:
 	set_dirty()
 	meta[key] = value
 
+	if value == [] or value == {}:
+		del meta[key]
+
 
 def meta_del(meta:dict, key: str) -> None:
 	if key in meta:
