@@ -349,7 +349,7 @@ class Database(UserDict):
 
 		removed = 0
 		for title_id, meta in self.items():
-			if series_state(meta) & State.ARCHIVED:
+			if series_state(meta) & State.ARCHIVED and self.has_data(title_id):
 				last_used = meta.get(meta_last_used_key)
 
 				if not last_used:
