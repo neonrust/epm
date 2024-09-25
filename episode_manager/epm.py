@@ -1672,7 +1672,7 @@ known_commands:dict[str,dict[str,tuple|Callable|str]] = {
     'search':  {
 	    'alias': ('s', ),
 		'handler': cmd_search,
-		'help': 'Search for a series.',
+		'help': 'Search for a series using internet lookup.',
 	},
 	'add': {
 	    'alias': ('a', ),
@@ -2430,7 +2430,7 @@ def print_usage(exit_code:int=0) -> None:
 	print()
 	print(f'Where {_b}<command>{_0} is:  {_f}(one-letter alias highlighted){_0}')
 	print_cmd_help_table()
-	print(f'  (none)  ▶  {_b}%s{_0}' % default_command)
+	print(f'  (none)  ▶  {_b}%s{_0}    {_f}Default command{_0}' % default_command)
 	print()
 	print(f'See: %s {_b}<command> --help{_0} for command-specific help.' % PRG)
 	print()
