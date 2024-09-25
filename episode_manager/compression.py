@@ -18,14 +18,12 @@ def compress_file(source:str, destination:str) -> bool:
 	if not _compressor:
 		os.rename(source, destination)
 		return True
-
 	return _compressor['compress'](_compressor, source, destination)
 
 
 def open(source:str) -> BinaryIO:
 	if not _compressor:
 		return io.open(source, 'rb')
-
 	return _compressor['open'](_compressor, source)
 
 
@@ -176,7 +174,7 @@ _compressors:list[dict] = [
 	{
 	    'detect': _detect_external('zstd'),
 		'compress': _compress_external,
-		'': _open_external,
+		'open': _open_external,
 		'args': [ f'-{ZSTD_LEVEL}', '--quiet', '--threads=0' ],
 		'unargs': [ '--decompress', '--quiet', '--threads=0' ],
 		'pipe': [ '--stdout' ],
