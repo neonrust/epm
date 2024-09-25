@@ -80,7 +80,7 @@ def start():
 	atexit.register(config.save)
 
 	api_key = config.get('lookup/api-key') or tmdb.key_from_env()
-	if api_key:
+	if isinstance(api_key, str):
 		tmdb.set_api_key(api_key)
 
 	# we set these functions to avoid import cycle
@@ -1996,7 +1996,7 @@ def _substr_re(s:str) -> Pattern:
 	return re.compile('.*?' + re.escape(s.replace(' ', '.*?')) + '.*', re.IGNORECASE)
 
 
-def _match_names(series:dict, attribute:str, pattern:re.Pattern):
+def _match_names(series:dict, attribute:str, pattern:re.Pattern) -> bool:
 	# print('match %s of "%s": %s' % (attribute, series['title'], pattern.pattern))
 	for name in series.get(attribute, []):
 		# print(' ?', name)
@@ -2007,7 +2007,7 @@ def _match_names(series:dict, attribute:str, pattern:re.Pattern):
 	return False
 
 
-def _match_years(meta:dict, years:list[int]):
+def _match_years(meta:dict, years:list[int]) -> bool:
 	s_year = meta.get('year')
 	if not s_year:
 		# print(' "%s" no year' % series['title'])
