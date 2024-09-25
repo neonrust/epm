@@ -5,6 +5,7 @@ import sys
 import shlex
 import time
 import atexit
+import string
 from datetime import datetime, date, timedelta
 from os.path import basename
 from calendar import Calendar, day_name, month_name, MONDAY, SUNDAY
@@ -29,8 +30,11 @@ from .display import \
 	format_state, \
 	format_state_change, \
 	format_year_range, \
+	format_tag, \
 	clrline, \
-	menu_select
+	menu_select, \
+	user_confirm, \
+	set_bg_color
 from .utils import \
     term_size, \
 	warning_prefix, \
@@ -43,6 +47,7 @@ from .db import \
 	meta_set, \
 	meta_del, \
 	meta_seen_key, \
+	meta_tags_key, \
 	meta_archived_key, \
 	meta_added_key, \
 	meta_total_episodes_key, \
@@ -65,8 +70,8 @@ from .db import \
 
 PRG = basename(sys.argv[0])
 
-VERSION = '0.23'
-VERSION_DATE = '2024-05-03'
+VERSION = '0.24'
+VERSION_DATE = '2024-09-26'
 
 
 def start():
@@ -291,7 +296,6 @@ def _unseen_help() -> None:
 
 setattr(cmd_unseen, 'help', _unseen_help)
 
-
 def cmd_show(ctx:Context, width:int) -> Error|None:
 	# TODO: print header/columns
 
@@ -353,6 +357,7 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 	filter_writer = ctx.option('writer')
 	filter_cast = ctx.option('cast')
 	filter_year = ctx.option('year')
+	filter_tags = ctx.option('tags')
 
 	# NOTE: in the future, might support RE directly from the user
 	if filter_country:
@@ -370,6 +375,16 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 			filter_year = [int(y) for y in filter_year.split('-')]
 		except:
 			return Error('Bad year filter: %s (use: <start year>[-<end year>])' % filter_year)
+	if filter_tags:
+		tags = []
+		for tag in filter_tags.split(','):
+			tag_def = config.tag(tag)
+			if isinstance(tag_def, dict):
+				tag = tag_def['name']
+				tags.append(tag)
+			else:
+				print(f'Unknown tag {_o}{tag}{_0} (ignored)')
+		filter_tags = tags
 
 	sort_key:Callable[[tuple[str,dict]],Any]|None = None
 
@@ -439,7 +454,7 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 	# refresh everything
 	modified = refresh_series(ctx.db, width=width)
 
-	find_idx, match = find_idx_or_match(ctx.command_arguments, country=filter_country, director=filter_director, writer=filter_writer, cast=filter_cast, year=filter_year, match=match_series)
+	find_idx, match = find_idx_or_match(ctx.command_arguments, country=filter_country, director=filter_director, writer=filter_writer, cast=filter_cast, year=filter_year, tags=filter_tags, match=match_series)
 
 	if find_idx is not None:
 		find_state = State.ALL
@@ -480,14 +495,15 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 		# alternate styling odd/even rows
 		hilite = (num_shown % 2) == 0
 		if hilite:
+			set_bg_color('\x1b[48;5;234m')
 			print(f'\x1b[48;5;234m{_K}\r', end='')
 
 		grey_color = is_archived and not only_archived
 
 		if show_details:
-			print_series_details(index, series, meta, width=width, grey=grey_color)
+			print_series_details(index, series, meta, width=width, grey=grey_color, show_tags=True)
 		else:
-			print_series_title(index, meta, width=width, grey=grey_color)
+			print_series_title(index, meta, width=width, grey=grey_color, show_tags=True)
 			if not show_terse:
 				print_archive_status(meta)
 
@@ -515,6 +531,7 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 
 		if hilite:
 			print(f'{_00}{_K}', end='')
+			set_bg_color(None)
 
 	if max(modified) > 0:
 		ctx.save()
@@ -1409,6 +1426,176 @@ def _audit_help() -> None:
 setattr(cmd_audit, 'help', _audit_help)
 
 
+def cmd_tag(ctx:Context, *args, width:int, mode='tag', **kw) -> Error|None:
+	if len(ctx.command_arguments) < 2:
+		return Error('<tag> and <series> arguments are required')
+
+	tag_name = ctx.command_arguments.pop(0)
+	tag = config.tag(tag_name)
+	if not tag:
+		return Error(f'Unknown tag: {tag_name}')
+	tag_name = tag['name']
+
+	states = State.ACTIVE
+	find_idx, match = find_idx_or_match(ctx.command_arguments)
+	found_series = db.indexed_series(ctx.db, state=states, index=find_idx, match=match)
+
+	modified = []
+	for index, series_id in found_series:
+		meta = ctx.db[series_id]
+		all_tags = meta.get( meta_tags_key, [])
+		if mode == 'tag':
+			if tag_name not in all_tags:
+				modified.append(series_id)
+				all_tags.append(tag_name)
+				meta_set(meta, meta_tags_key, all_tags)
+		elif tag_name in all_tags:
+			modified.append(series_id)
+			del all_tags[all_tags.index(tag_name)]
+			meta_set(meta, meta_tags_key, all_tags)
+
+	print(format_tag(tag), 'Series %sged:' % mode, len(modified))
+
+	for series_id in modified:
+		print_series_title(None, ctx.db[series_id], width=width, show_progress=False)
+
+	if modified:
+		ctx.save()
+
+
+def _tag_help() -> None:
+	print_cmd_usage('tag', '<tag> <series>')
+
+setattr(cmd_tag, 'help', _tag_help)
+
+
+def cmd_untag(ctx:Context, *args, **kw) -> Error|None:
+	return cmd_tag(ctx, *args, mode='untag', **kw)
+
+def _untag_help() -> None:
+	print_cmd_usage('untag', '<tag> <series>')
+
+setattr(cmd_untag, 'help', _untag_help)
+
+
+TAG_MAX_LENGTH = 10
+
+def list_tags(ctx:Context, width:int|None=None):
+	tags = config.get('tags')
+	if not tags:
+		print('No tags defined.')
+		print(f'Try: {_b}tags{_0} {_o}<name> <color> {_f}[<description>]{_0}')
+		return
+
+	if not isinstance(tags, dict):
+		return Error('Bad config: "tags"; not dict: %s' % type(tags).__name__)
+
+	print('Listing %d tag%s:' % (len(tags), 's' if len(tags) != 1 else ''))
+	def by_name(item):
+		return item[0].lower()
+
+	for tag_name, tag_def in sorted(tags.items(), key=by_name):
+		pad = TAG_MAX_LENGTH - len(tag_name)
+		print('  %s%s' % (format_tag(tag_def, tag_name), ' '*pad), end='')
+		if tag_def.get('description'):
+			print(f' {_f}%s{_0}' % tag_def.get('description'), end='')
+
+		tagged_series = db.indexed_series(ctx.db, tags=[tag_name], state=State.ALL)
+		if tagged_series:
+			print(' %d series' % len(tagged_series), end='')
+		print()
+
+
+def cmd_tags(ctx:Context, *args, width:int|None=None, **kw) -> Error|None:
+	if not ctx.command_arguments or ctx.command_arguments[0] == 'list':
+		if ctx.command_arguments:
+			ctx.command_arguments.pop(0)
+		return list_tags(ctx, width=width)
+
+	sub_cmd = ctx.command_arguments.pop(0)
+
+	if sub_cmd == 'delete':
+		# delete tag
+		use_force = ctx.has_option('-f')
+		name = ctx.command_arguments[0]
+		existing = config.tag(name)
+		if not existing:
+			return Error('No such tag: %s' % name)
+
+		name = existing['name']  # get the correct name
+
+		tagged_series = db.indexed_series(ctx.db, tags=[name], state=State.ALL)
+		if tagged_series:
+			print('%d series has this tag (tag will be removed)' % len(tagged_series))
+
+		if not user_confirm(f'Delete tag {_b}{name}{_0}?'):
+			return Error('Cancelled')
+
+		for index, series_id in tagged_series:
+			meta = ctx.db[series_id]
+			all_tags = meta.get(meta_tags_key)
+			del all_tags[all_tags.index(name)]
+			meta_set(meta, meta_tags_key, all_tags)
+
+		config.remove(f'tags/{name}')
+
+		if tagged_series:
+			ctx.save()
+
+	elif sub_cmd == 'set':
+		# add/replace tag
+		if len(ctx.command_arguments) < 2:
+			return Error('<name> and <color> arguments are required.')
+
+		name = ctx.command_arguments.pop(0)
+		color = ctx.command_arguments.pop(0)
+		description = ctx.command_arguments.pop(0) if ctx.command_arguments else None
+
+		if not name or len(name) > TAG_MAX_LENGTH:
+			return Error(f'Tag name "{name}" is not valid. (length: 1 - {TAG_MAX_LENGTH})')
+		for c in name:
+			if not c.isalnum():
+				return Error(f'Tag name "{name}" is not valid. (only letters and numbers)')
+
+		existing = config.tag(name)
+		if existing and isinstance(existing, dict):
+			name = existing['name']
+			if not description:
+				description = existing.get('description')
+
+		action_verb = 'Added' if not existing else 'Updated'
+
+		if len(color) != 6:
+			return Error(f'Tag color {color}" is invalid (rrggbb).')
+		for c in color:
+			if c not in string.hexdigits:
+				return Error(f'Tag color {color}" is invalid (rrggbb).')
+
+		tag_config = {
+			'color': color,
+			**({'description': description} if description else {})
+		}
+		config.set(f'tags/{name}', tag_config)
+
+		print('%s tag -> %s' % (action_verb, format_tag(tag_config, name)), end='')
+		if description:
+			print(f' {_f}%s{_0}' % description, end='')
+		print()
+
+	else:
+		return Error("Unknown sub command: %s" % sub_cmd)
+
+
+def _tags_help() -> None:
+	print_cmd_usage('tags', [
+		'[list]',
+		'set <tag> [rrggbb] [description]',
+		'delete <tag>'
+	])
+
+setattr(cmd_tags, 'help', _tags_help)
+
+
 def cmd_rate(ctx:Context, *args, **kw) -> Error|None:
 	if len(ctx.command_arguments) < 2:
 		return Error('Required arguments missing')
@@ -1562,6 +1749,21 @@ known_commands:dict[str,dict[str,tuple|Callable|str]] = {
 		'handler': cmd_audit,
 		'help': 'List recent changes.'
 	},
+	'tag': {
+		'alias': ('t', ),
+		'handler': cmd_tag,
+		'help': 'Add a tag to one or more series'
+	},
+	'untag': {
+		'alias': ('T',),
+		'handler': cmd_untag,
+		'help': 'Remove a tag from one or more series'
+	},
+	'tags': {
+		'alias': (),
+		'handler': cmd_tags,
+		'help': 'Manage defined tags'
+	},
 	'help': {
 	    'alias': (),
 		'handler': cmd_help,
@@ -1627,6 +1829,14 @@ __opt_series_sorting = {
 	},
 }
 
+__opt_tags = {
+	'tags': {
+		'name': '--tags',
+		'arg': str,
+		'help': 'Filter by tags'
+	}
+ }
+
 # TODO: merge with 'known_commands' ?  (at least for the command-specific options)
 
 command_options = {
@@ -1657,13 +1867,15 @@ command_options = {
 		'cast':              { 'name': '--cast',    'arg': str,  'help': 'Filter by cast, substring match' },
 		'year':              { 'name': '--year',    'arg': str,  'help': 'Filter by year, <start>[-<end>]' },
 		'country':           { 'name': '--country', 'arg': str,  'help': 'Filter by country (two letters; ISO 3166)' },
+		**__opt_tags,
 	},
 	'unseen': {
 	    'started':           { 'name': ('-s', '--started'),      'help': 'List only series with seen episodes' },
 		'planned':           { 'name': ('-p', '--planned'),      'help': 'List only series without seen episodes' },
 		'all-episodes':      { 'name': ('-e', '--episodes'),     'help': 'Show all unseen episodes (not only first)' },
 		'future-episodes':   { 'name': ('-f', '--future'),       'help': 'Also shows (series with) future episodes' },
-		**__opt_series_sorting,  # type: ignore  # not sure how to convince mypy here
+		**__opt_series_sorting,  # type: ignore  # how to convince mypy here?
+		**__opt_tags,
 	},
 	'refresh': {
 	    'force':             { 'name': ('-f', '--force'),        'help': 'Refresh whether needed or not' },
@@ -1688,7 +1900,7 @@ command_options = {
 }
 
 
-def find_idx_or_match(args, country:re.Pattern|None=None, director:re.Pattern|None=None, writer:re.Pattern|None=None, cast:re.Pattern|None=None, year:list[int]|None=None, match:Callable[[str,dict],bool]|None=None) -> tuple[int|None, Callable|None]:
+def find_idx_or_match(args, country:re.Pattern|None=None, director:re.Pattern|None=None, writer:re.Pattern|None=None, cast:re.Pattern|None=None, year:list[int]|None=None, tags:list[str]|None=None, match:Callable[[str,dict],bool]|None=None) -> tuple[int|None, Callable|None]:
 
 	# print('FILTER title/idx:', (_c + ' '.join(args) + _0fg) if args else 'NONE')
 	# print('          country:', (_c + country.pattern + _0fg) if country else 'NONE')
@@ -1728,6 +1940,7 @@ def find_idx_or_match(args, country:re.Pattern|None=None, director:re.Pattern|No
 		# print('          writer:', (_c + writer.pattern + _0) if writer else 'NONE')
 		# print('            cast:', (_c + cast.pattern + _0) if cast else 'NONE')
 		# print('            year:', (_c + '-'.join(year) + _0) if year else 'NONE')
+		# print('            tags:', (_c + ', '.join(tags) + _0) if tags else 'NONE')
 
 		# TODO: function should also take list index: (list_index, series) -> bool
 
@@ -1738,6 +1951,8 @@ def find_idx_or_match(args, country:re.Pattern|None=None, director:re.Pattern|No
 				ok = title.search(meta.get('title', '')) is not None
 			if ok and year:
 				ok = _match_years(meta, year)
+			if ok and tags:
+				ok = _match_tags(meta, tags)
 			if ok and imdb_id:
 				ok = imdb_id == db.series(series_id).get('imdb_id')
 			if ok and country:
@@ -1817,7 +2032,14 @@ def _match_years(meta:dict, years:list[int]):
 	# print(' "%s" %s-%s overlaps %s-%s -> %s' % (series['title'], s_year[0], s_year[1], years[0], years[1], bool(overlap)))
 	return bool(overlap)
 
+def _match_tags(meta:dict, tags:list[str]) -> bool:
+	series_tags = meta.get(meta_tags_key)
+	if isinstance(series_tags, list):
+		for tag in tags:
+			if tag in series_tags:
+				return True
 
+	return False
 
 def episodes_by_key(series:dict, keys:list) -> list:
 	keys_to_index:dict[str, int] = {}
@@ -2026,13 +2248,13 @@ def refresh_series(db:Database, width:int, subset:list|None=None, force:bool=Fal
 
 
 
-def print_series_details(index:int, series:dict, meta:dict, width:int, grey:bool=False) -> None:
+def print_series_details(index:int, series:dict, meta:dict, width:int, grey:bool=False, show_tags:bool=False) -> None:
 
 	tail = None
 	if series.get('imdb_id'):
 		tail = imdb_url_tmpl % series["imdb_id"]
 		tail_style = f'{_o}{_u}'
-	print_series_title(index, meta, width, grey=grey, tail=tail, tail_style=tail_style)
+	print_series_title(index, meta, width, grey=grey, tail=tail, tail_style=tail_style, show_tags=show_tags)
 
 	print_archive_status(meta)
 
@@ -2116,7 +2338,7 @@ def option_def(command:str|None, option:str|None=None):
 	return None
 
 
-def print_cmd_usage(command:str, syntax:str='') -> None:
+def print_cmd_usage(command:str, syntax:str|list[str]='') -> None:
 	entry = known_commands[command]
 
 	summary = entry.get('help')
@@ -2124,10 +2346,14 @@ def print_cmd_usage(command:str, syntax:str='') -> None:
 		print(f'{_b}{summary}{_0}')
 
 	aliases = entry.get('alias')
-	if isinstance(aliases, tuple):
+	if aliases and isinstance(aliases, tuple):
 		print(f'{_b}Alias:{_0} %s' % ', '.join(aliases))
 
-	print(f'{_b}Usage:{_0} %s {_c}%s{_0} %s' % (PRG, command, syntax))
+	if isinstance(syntax, str):
+		syntax = [syntax]
+
+	for stx in syntax:
+		print(f'{_b}Usage:{_0} %s {_c}%s{_0} %s' % (PRG, command, stx))
 
 
 def print_cmd_option_help(command:str|None, print_label:bool=True) -> None:

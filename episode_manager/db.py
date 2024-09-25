@@ -821,11 +821,12 @@ def changelog_clear(db:Database):
 class State(enum.IntFlag):
 	PLANNED   = 0x01  # added but nothing seen (yet)
 	STARTED   = 0x02  # some episodes seen
-	COMPLETED = 0x04  # all episodes seen and manually restored
+	COMPLETED = 0x04  # all episodes seen (and manually restored)
 	ARCHIVED  = 0x08  # all episodes seen (automatically archived)
 	ABANDONED = 0x10 | ARCHIVED  # manually archived when not all episodes seen
 
 	ACTIVE    = PLANNED | STARTED
+	ALL       = ACTIVE | COMPLETED | ARCHIVED
 
 
 T = TypeVar('T')
@@ -851,7 +852,7 @@ def _sortkey_title_and_year(sid_meta:tuple[str,dict]) -> Any:
 	series_id, meta = sid_meta
 	return meta['title'].casefold(), meta.get('year', [])
 
-def indexed_series(db:Database, index=None, match=None, state:State|None=None, sort_key:Callable|None=None) -> list[tuple[int, str]]:
+def indexed_series(db:Database, index=None, match=None, state:State|None=None, tags:list[str]|None=None, sort_key:Callable|None=None) -> list[tuple[int, str]]:
 	"""Return a list with a predictable sorting, optionally filtered."""
 
 	def flt(series_id:str, meta:dict) -> bool:
@@ -862,6 +863,9 @@ def indexed_series(db:Database, index=None, match=None, state:State|None=None, s
 
 		if passed and state is not None:
 			passed = (series_state(meta) & state) > 0
+
+		if passed and tags is not None:
+			passed = any(tag in tags for tag in meta.get(meta_tags_key, []))
 
 		if passed and match is not None:
 			passed = match(db, series_id, meta)
@@ -1167,6 +1171,7 @@ meta_key = 'epm:meta'
 meta_active_status_key = 'active_status'
 meta_added_key = 'added'
 meta_seen_key = 'seen'
+meta_tags_key = 'tags'
 meta_last_episode_key = 'last_episode'
 meta_next_episode_key = 'next_episode'
 meta_total_episodes_key = 'total_episodes'

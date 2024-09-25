@@ -4,7 +4,7 @@
 
 [tool.poetry]
 name = "episode-manager"
-version = "0.14-1"
+version = "0.24-1"
 description = "Keep track of your episode viewing and schedule."
 readme = "README.md"
 authors = [

@@ -6,7 +6,7 @@ import shutil
 from typing import Any
 
 from .utils import read_json, write_json, print_json, warning_prefix, pexpand
-from .styles import _00, _f, _E
+from .styles import _00, _f, _o, _0, _E
 
 
 default_max_refresh_age = 2  # days
@@ -138,6 +138,46 @@ def print_current():
 	print_json(_app_config)
 
 
+def remove(path:str) -> bool:
+	# from high to low priority
+	configs:list[ValueType] = [_memory_config, _app_config]
+	scope:list[ValueType|None] = configs
+
+	keys = path.split('/')
+
+	del_key = keys.pop()
+
+	current:list[str] = []
+	for key in keys:
+		# print(f'cfg: %s {_o}/{_0} %s' % ('/'.join(current), key))
+
+		for n in range(len(scope)):
+			scope[n] = scope[n].get(key)  # type: ignore  # non-dicts already discarded above
+			if not isinstance(scope[n], dict):
+				scope[n] = None
+
+		if not any(scope):
+			# all leads have dried up
+			return False
+
+		current.append(key)
+
+	# print('remove: scopes: %s' % scope)
+
+	deleted = [False]*len(scope)
+	missing = object()
+	for idx, sc in enumerate(scope):
+		if sc and sc.pop(del_key, missing) is not missing:
+			# TODO: ideally, if the dict now became empty,
+			#  it should be removed from its parent as well
+			deleted[idx] = True
+
+	if deleted[1]:  # i.e. _app_config
+		global _app_config_dirty
+		_app_config_dirty = True
+
+	return any(deleted)
+
 def get(path:str, default_value:ValueType|None=None, convert=None) -> ValueType|None:
 	# path: key/key/...
 	keys = path.split('/')
@@ -199,7 +239,6 @@ def get_list(path:str, default_value:list|None=None) -> list|None:
 	return default_value
 
 
-
 def set(path:str, value:Any, store:Store|None=Store.Persistent) -> None:
 	# path: key/key/key
 	keys = path.split('/')
@@ -245,6 +284,23 @@ def set(path:str, value:Any, store:Store|None=Store.Persistent) -> None:
 	if store == Store.Persistent:
 		global _app_config_dirty
 		_app_config_dirty = True
+
+
+def tag(tag_name:str) -> dict[str, Any]|None:
+	all_tags = _app_config.get('tags', {})
+	assert(isinstance(all_tags, dict))
+
+	# try direct hit first
+	config = all_tags.get(tag_name)
+	if config:
+		return { 'name': tag_name, **config }
+
+	# then case-insensitive search
+	for name, config in all_tags.items():
+		if name.lower() == tag_name:
+			return { 'name': name, **config }
+
+	return None
 
 
 def _init():

@@ -1,10 +1,11 @@
 
 from datetime import date
-from typing import Callable
+from typing import Callable, Any
 import textwrap
 
-from .config import debug
+from .config import debug, tag as tag_config
 from .db import \
+	meta_tags_key, \
 	meta_archived_key, \
 	meta_active_status_key, \
 	meta_total_episodes_key, \
@@ -22,10 +23,16 @@ from .styles import _0, _00, _i, _b, _B, _c, _f, _K, _o, _g, _w, _EOL
 
 list_index_style = '\x1b[3;38;2;160;140;60m'
 
+_current_bg_color = ''
+def set_bg_color(bg:str|None):
+	global _current_bg_color
+	_current_bg_color = bg or '\x1b[40m'
 
-def print_series_title(list_index:int|None, meta:dict, width:int=0, imdb_id:str|None=None, grey:bool=False, tail: str|None=None, tail_style:str|None=None, show_progress:bool=True) -> None:
+
+def print_series_title(list_index:int|None, meta:dict, width:int=0, imdb_id:str|None=None, grey:bool=False, tail: str|None=None, tail_style:str|None=None, show_progress:bool=True, show_tags:bool=False) -> None:
 
 	# this function should never touch the BG color (b/c the list might have alternating bg color)
+	#  OR use '_current_bg_color' to restore bg color
 
 	left = ''    # parts relative to left edge (num, title, years)
 	right = ''   # parts relative to right edge (IMDbID, tail)
@@ -49,7 +56,7 @@ def print_series_title(list_index:int|None, meta:dict, width:int=0, imdb_id:str|
 		width -= len(tail)
 		right_w += len(tail)
 
-	left += format_title(meta, width=width)
+	left += format_title(meta, width=width, show_tags=show_tags)
 
 	series_status = meta.get(meta_active_status_key)
 	status_w = 2 + 5
@@ -244,7 +251,7 @@ def print_seen_status(series:dict, meta:dict, grey:bool=False, summary:bool=True
 			print(f'{header}{s}')
 
 
-def format_title(meta:dict, width:int|None=None):
+def format_title(meta:dict, width:int|None=None, show_tags:bool=False):
 
 	title = meta['title']
 	if width is not None and len(title) > width: # title is too wide
@@ -261,6 +268,13 @@ def format_title(meta:dict, width:int|None=None):
 		s += f' {_0}{_punct}({_year}'
 		s += format_year_range(years)
 		s += f'{_punct}){_0}'
+
+	tags = meta.get(meta_tags_key)
+	if show_tags and tags:
+		s += ''.join(
+			format_tag(tag_config(tag_name))
+			for tag_name in tags
+		)
 
 	s += _0
 
@@ -635,6 +649,20 @@ def menu_select(items:list[dict], width:int, item_print:Callable, force_selectio
 	return selected_index
 
 
+def user_confirm(question:str, may_cancel:bool=False) -> bool|None:
+	cancel_choise = '/Cancel' if may_cancel else ''
+	try:
+		answer = input(f'{question} [No/Yes%s] ' % cancel_choise).lower()
+		# TODO: require only single-key press (no need for return)
+		return answer in ('y', 'yes')
+
+	except KeyboardInterrupt:
+		print('No')
+		if may_cancel:
+			return None
+		return False
+
+
 def is_released(target, fallback=True):
 	release_date = target.get('date')
 	if release_date is None:
@@ -642,6 +670,26 @@ def is_released(target, fallback=True):
 
 	# already released or will be today
 	return date.fromisoformat(release_date) <= today_date
+
+
+def format_tag(tag:dict[str, Any], name:str|None=None) -> str:
+	if not name:
+		name = tag['name']
+	color = tag['color']
+	r = int(color[:2], 16)
+	g = int(color[2:4], 16)
+	b = int(color[4:], 16)
+	bg = f'\x1b[48;2;{r};{g};{b}m'
+	bar_fg = f'\x1b[38;2;{r};{g};{b}m'
+	bar_bg = bar_fg + '\x1b[7m'
+
+	luminance = r*0.2126 + g*0.7152 + b*0.0722
+	if luminance < 140:
+		fg = '\x1b[38;2;255;255;255m'  # white
+	else:
+		fg = '\x1b[30m'  # black
+
+	return f'{bar_bg}▌\x1b[27m{_current_bg_color}{bg}{fg}{name}{_00}{bar_fg}▌{_0}{_current_bg_color}'
 
 
 def clrline():
