@@ -29,7 +29,7 @@ def set_bg_color(bg:str|None):
 	_current_bg_color = bg or '\x1b[40m'
 
 
-def print_series_title(list_index:int|None, meta:dict, width:int=0, imdb_id:str|None=None, grey:bool=False, tail: str|None=None, tail_style:str|None=None, show_progress:bool=True, show_tags:bool=False) -> None:
+def print_series_title(list_index:int|None, meta:dict, width:int=0, imdb_id:str|None=None, grey:bool=False, tail: str|None=None, tail_style:str|None=None, show_progress:bool=True, show_tags:bool=True) -> None:
 
 	# this function should never touch the BG color (b/c the list might have alternating bg color)
 	#  OR use '_current_bg_color' to restore bg color
