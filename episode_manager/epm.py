@@ -378,9 +378,15 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 	if filter_tags:
 		tags = []
 		for tag in filter_tags.split(','):
+			exclude = False
+			if tag[0] == '-':
+				exclude = True
+				tag = tag[1:]
 			tag_def = config.tag(tag)
 			if isinstance(tag_def, dict):
 				tag = tag_def['name']
+				if exclude:
+					tag = '-%s' % tag
 				tags.append(tag)
 			else:
 				print(f'Unknown tag {_o}{tag}{_0} (ignored)')
@@ -1833,7 +1839,7 @@ __opt_tags = {
 	'tags': {
 		'name': '--tags',
 		'arg': str,
-		'help': 'Filter by tags'
+		'help': 'Filter by tags (-<tag> to exclude)'
 	}
  }
 
@@ -1862,9 +1868,9 @@ command_options = {
 		'details':           { 'name': ('-I', '--details'),      'help': 'Show more details' },
 		'terse':             { 'name': '-T',                     'help': 'Show less details' },
 
-		'director':          { 'name': '--director', 'arg': str, 'help': 'Filter by director, substring match' },
-		'writer':            { 'name': '--writer',  'arg': str,  'help': 'Filter by writer, substring match' },
-		'cast':              { 'name': '--cast',    'arg': str,  'help': 'Filter by cast, substring match' },
+		'director':          { 'name': '--director', 'arg': str, 'help': 'Filter by director (substring)' },
+		'writer':            { 'name': '--writer',  'arg': str,  'help': 'Filter by writer (substring)' },
+		'cast':              { 'name': '--cast',    'arg': str,  'help': 'Filter by cast (substring)' },
 		'year':              { 'name': '--year',    'arg': str,  'help': 'Filter by year, <start>[-<end>]' },
 		'country':           { 'name': '--country', 'arg': str,  'help': 'Filter by country (two letters; ISO 3166)' },
 		**__opt_tags,
@@ -2034,12 +2040,20 @@ def _match_years(meta:dict, years:list[int]) -> bool:
 
 def _match_tags(meta:dict, tags:list[str]) -> bool:
 	series_tags = meta.get(meta_tags_key)
-	if isinstance(series_tags, list):
-		for tag in tags:
-			if tag in series_tags:
-				return True
+	has_inclusion = any(tag[0] != '-' for tag in tags)
+	if not isinstance(series_tags, list):
+		return not has_inclusion
 
-	return False
+	for tag in tags:
+		exclude  = False
+		if tag[0] == '-':
+			exclude = True
+			tag = tag[1:]
+		if tag in series_tags:
+			debug(f'%s by tag {tag}: %s' % ('excluded' if exclude else 'included', meta['title']))
+			return not exclude
+
+	return not has_inclusion
 
 def episodes_by_key(series:dict, keys:list) -> list:
 	keys_to_index:dict[str, int] = {}
