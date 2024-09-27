@@ -44,6 +44,14 @@ def print_series_title(list_index:int|None, meta:dict, width:int=0, imdb_id:str|
 
 		left = f'{list_index_style}{list_index:>{list_index_w}}{_0} '
 
+	all_tags = meta.get(meta_tags_key)
+	if show_tags and all_tags:
+		for tag in all_tags:
+			tag_info = tag_config(tag)
+			if isinstance(tag_info, dict):
+				right_w += 2 + len(tag_info['name'])
+				right += format_tag(tag_info)
+
 	id_w = 11
 	if imdb_id and id_w < width:
 		right += f'  {_f}{imdb_id:<{id_w}}{_0}'
@@ -56,7 +64,7 @@ def print_series_title(list_index:int|None, meta:dict, width:int=0, imdb_id:str|
 		width -= len(tail)
 		right_w += len(tail)
 
-	left += format_title(meta, width=width, show_tags=show_tags)
+	left += format_title(meta, width=width)
 
 	series_status = meta.get(meta_active_status_key)
 	status_w = 2 + 5
@@ -272,7 +280,7 @@ def format_title(meta:dict, width:int|None=None, show_tags:bool=False):
 	tags = meta.get(meta_tags_key)
 	if show_tags and tags:
 		s += ''.join(
-			format_tag(tag_config(tag_name))
+			format_tag(tag_config(tag_name))  # type: ignore
 			for tag_name in tags
 		)
 
