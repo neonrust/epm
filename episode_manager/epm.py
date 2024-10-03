@@ -472,6 +472,9 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 	if len(series_list) == 1:
 		all_unseen_eps = True
 
+	header_footer_bg = '\x1b[48;2;20;50;40m'
+
+	print(f'{header_footer_bg}{_K}\r', end='')
 	print('Listing ', end='')
 	if only_started: print(f'{_u}started{_0} ', end='')
 	elif only_planned: print(f'{_u}planned{_0} ', end='')
@@ -481,7 +484,7 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 	print('series', end='')
 	if with_unseen_eps: print(f' with {_u}unseen{_0} episodes', end='')
 	if match and getattr(match, 'styled_description', None): print(', matching: %s' % getattr(match, 'styled_description'), end='')
-	print(f'{_0}.')
+	print(f'{_0}.{_00}')
 
 	num_shown = 0
 	num_archived = 0
@@ -547,7 +550,7 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 			return Error('Nothing matched')
 
 	print(f'{_00}{_K}', end='')
-	print(f'{_b}\x1b[48;2;20;50;20m{_K}\r%d series {_fi} Total: %d   Archived: %d{_0}' % (num_shown, len(series_list), num_archived))
+	print(f'{_b}{header_footer_bg}{_K}\r%d series {_fi} Total: %d   Archived: %d{_0}' % (num_shown, len(series_list), num_archived))
 
 	return None
 
