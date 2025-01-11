@@ -38,7 +38,7 @@ def print_series_title(list_index:int|None, meta:dict, width:int=0, imdb_id:str|
 	right = ''   # parts relative to right edge (IMDbID, tail)
 	right_w = 0
 
-	list_index_w = 5
+	list_index_w = 4
 	if list_index is not None and list_index_w < width:
 		width -= list_index_w
 
