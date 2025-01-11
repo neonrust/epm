@@ -44,13 +44,10 @@ def print_series_title(list_index:int|None, meta:dict, width:int=0, imdb_id:str|
 
 		left = f'{list_index_style}{list_index:>{list_index_w}}{_0} '
 
-	all_tags = meta.get(meta_tags_key)
-	if show_tags and all_tags:
-		for tag in all_tags:
-			tag_info = tag_config(tag)
-			if isinstance(tag_info, dict):
-				right_w += 2 + len(tag_info['name'])
-				right += format_tag(tag_info)
+	if show_tags:
+		for tag_info in sorted_tags(meta.get(meta_tags_key)):
+			right_w += 2 + len(tag_info['name'])
+			right += format_tag(tag_info)
 
 	id_w = 11
 	if imdb_id and id_w < width:
@@ -101,6 +98,16 @@ def print_series_title(list_index:int|None, meta:dict, width:int=0, imdb_id:str|
 
 	print(_K)
 
+
+def sorted_tags(all_tags) -> list[dict]:
+	ordered : list[dict] = []
+
+	for tag in all_tags:
+		tag_info = tag_config(tag)
+		if isinstance(tag_info, dict):
+			ordered.append(tag_info)
+
+	return sorted(ordered, key=lambda T: T['name'].lower())
 
 def print_episodes(series:dict, meta:dict, episodes:list[dict], width:int, pre_print:Callable|None=None, also_future:bool=False, limit:int|None=None) -> list[str]:
 
