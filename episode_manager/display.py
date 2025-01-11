@@ -99,8 +99,11 @@ def print_series_title(list_index:int|None, meta:dict, width:int=0, imdb_id:str|
 	print(_K)
 
 
-def sorted_tags(all_tags) -> list[dict]:
+def sorted_tags(all_tags: list[dict]|None) -> list[dict]:
 	ordered : list[dict] = []
+
+	if not all_tags:
+		return []
 
 	for tag in all_tags:
 		tag_info = tag_config(tag)
