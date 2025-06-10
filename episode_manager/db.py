@@ -336,6 +336,28 @@ class Database(UserDict):
 			meta[meta_next_episode_key] = meta_next
 			#debug('  next:', meta_next['episode'])
 
+		ep_dates_by_season = {}
+		last_season = -1
+		for ep in unseen:
+			date = ep.get('date')
+			if not date:
+				continue
+			season = ep.get('season')
+			episode = ep.get('episode')
+			ep_dates = ep_dates_by_season.get(season)
+			if ep_dates == None:
+				ep_dates = {}
+			ep_dates[str(episode)] = date
+			ep_dates_by_season[str(season)] = ep_dates
+
+		if ep_dates_by_season:
+			meta[meta_episode_dates_key] = ep_dates_by_season
+		else:
+			try:
+				del meta[meta_episode_dates_key]
+			except KeyError:
+				pass
+
 		meta[meta_last_used_key] = now_stamp()
 		#debug('  used:', now_stamp())
 

@@ -579,9 +579,9 @@ def menu_select(items:list[dict], width:int, item_print:Callable, force_selectio
 			print(f' {_B}🠕🠗{_0} Select   ', end='')
 
 		if force_selection is None:
-			print(f'{_B}Return{_0} Add   {_B}Escape{_0} Cancel', end='')
+			print(f'{_B}↲{_0} Add   {_B}Esc{_0} Cancel', end='')
 		else:
-			print(f'{_B}Return{_0}/{_B}Escape{_0} Exit', end='')
+			print(f'{_B}↲{_0}/{_B}Esc{_0} Exit', end='')
 		print(f'{_K}{_00}', end='\r')
 
 	draw_menu()
