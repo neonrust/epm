@@ -2,14 +2,14 @@
 "Homepage" = "https://github.com/neonrust/epm"
 "Bug Tracker" = "https://github.com/neonrust/epm/issues"
 
-[tool.poetry]
+[project]
 name = "episode-manager"
 version = "0.24-1"
 description = "Keep track of your episode viewing and schedule."
-readme = "README.md"
 authors = [
-  "André Jonsson <episode-manager@0x1.se>"
+  { name = "André Jonsson", email = "episode-manager@0x1.se>" },
 ]
+readme = "README.md"
 license = "MIT"
 classifiers = [
   "Development Status :: 4 - Beta",
@@ -21,19 +21,17 @@ classifiers = [
   "Topic :: Games/Entertainment",
   "Topic :: Utilities"
 ]
+requires-python = "^3.9"
+dependencies = [
+	"requests>=2.32.4",
+	"urllib3==2.5.0",
+]
 
-
-[tool.poetry.dependencies]
-python = "^3.9"
-requests = "^2.32.4"
-urllib3 = "2.5.0"
-
-[tool.poetry.dev-dependencies]
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
-[tool.poetry.scripts]
+[project.scripts]
 epm = "episode_manager.epm:main"
 test = 'test:run'
