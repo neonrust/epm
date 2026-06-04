@@ -28,7 +28,7 @@ class Context:
 		if load_db:
 			self.load()
 
-		debug('[ctx] command:', self.command)
+		debug('[ctx] invoke command:', self.command)
 		debug('      ARGS:', self.command_arguments)
 		debug('      OPTS:', self.command_options)
 
@@ -51,12 +51,16 @@ class Context:
 
 		default_command = str(config.get('commands/default', 'unseen'))
 
-		command_options = self.command_options
+		self.command_options = self.command_options
 		if default:
-			command_options = self.default_command_options
+			self.command_options = self.default_command_options
 		command_arguments = self.command_arguments
 		if default:
 			command_arguments =self.default_command_arguments
+
+		debug('default_command:', default_command)
+		debug('command_options:', self.command_options)
+		debug('command_arguments:', command_arguments)
 
 		while args:
 			arg = args.pop(0)
@@ -65,7 +69,7 @@ class Context:
 
 			if arg.startswith('-'):
 				if not self.command:
-					if arg in '--help':
+					if arg in ('-h', '--help'):
 						raise BadUsageError()
 
 					# attempt to interpret as a global option
@@ -79,7 +83,8 @@ class Context:
 
 				debug('  opt:', arg, '(cmd: %s)' % self.command)
 
-				self._eat_option(self.command, arg, args, command_options)  # will exit if not correct
+				self._eat_option(self.command, arg, args, self.command_options)  # will exit if not correct
+				debug('command_options:', self.command_options)
 				continue
 
 			if not self.command and not arg.startswith('.'):
