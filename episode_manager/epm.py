@@ -24,6 +24,7 @@ from .display import \
 	print_archive_status, \
 	print_seen_status, \
 	list_index_style, \
+	is_released, \
 	format_title, \
 	format_episode_title, \
 	format_duration, \
@@ -180,6 +181,9 @@ def eat_option(command:str|None, option:str, args:list[str], options:dict, unkno
 			bad_opt_arg(command, option, option_arg, None)
 
 		set_func(True, key, options)
+		if clear := opt_def.get('clear', []):
+			for opt_key in clear:
+				options.pop(opt_key, None)
 
 	else:
 		if m:
@@ -207,6 +211,9 @@ def eat_option(command:str|None, option:str, args:list[str], options:dict, unkno
 				err = set_func(d, key, options)
 				if err:
 					bad_opt_arg(command, option, arg_str, arg_type, explain=err)
+				if clear := opt_def.get('clear', []):
+					for opt_key in clear:
+						options.pop(opt_key, None)
 			except ValueError:
 				bad_opt_arg(command, option, arg_str, arg_type, explain=validator_explain)
 
@@ -307,6 +314,7 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 	with_unseen_eps = ctx.has_option('with-unseen')
 	all_unseen_eps = ctx.has_option('all-episodes')
 	future_eps = ctx.has_option('future-episodes')
+	future_ep_hint = ctx.has_option('future-episode-hint')
 	seen_eps = ctx.has_option('seen-episodes')
 	show_next = ctx.has_option('next-episode')
 	no_summary =  ctx.has_option('no-seen-summary')
@@ -334,6 +342,7 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 	debug('  with_unseen_eps:', _bool_color(with_unseen_eps))
 	debug('  all_unseen_eps: ', _bool_color(all_unseen_eps))
 	debug('  future_eps:     ', _bool_color(future_eps))
+	debug('  future_ep_hint: ', _bool_color(future_ep_hint))
 	debug('  seen_eps:       ', _bool_color(seen_eps))
 	debug('  show_next:      ', _bool_color(show_next))
 	debug('  show_details:   ', _bool_color(show_details))
@@ -430,8 +439,7 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 
 	now_dt = now_datetime()
 
-	to_date = now_dt if not future_eps else None
-	#to_date = new_datetime() if not future_eps else None
+	to_date = now_dt if not (future_eps or future_ep_hint) else None
 	debug('  ep_limit:', ep_limit)
 	debug('  episodes up to date:', to_date)
 
@@ -535,8 +543,17 @@ def cmd_show(ctx:Context, width:int) -> Error|None:
 			if seen_eps:
 				print_episodes(series, meta, seen, width=width)
 
-			if all_unseen_eps or (future_eps and not show_next):
+			if future_ep_hint:
+				# Print only released unseen episodes, then show a hint for future ones
+				_, unseen_released = series_seen_unseen(series, meta, now_dt)
+				num_future = sum(1 for ep in unseen if not is_released(ep))
+				if not show_next:
+					print_episodes(series, meta, unseen_released, width=width, limit=ep_limit, also_future=False)
+				if num_future:
+					print(f'{" "*12}{_i}{_f}+{_0}{_i}{num_future}{_f} future episodes{_0}')
+			elif all_unseen_eps or (future_eps and not show_next):
 				print_episodes(series, meta, unseen, width=width, limit=ep_limit, also_future=future_eps)
+
 
 		if hilite:
 			print(f'{_00}{_K}', end='')
@@ -1863,7 +1880,8 @@ command_options = {
 		**__opt_series_sorting,
 
 		'all-episodes':      { 'name': ('-e', '--episodes'),     'help': 'Show all unseen (released) episodes' },
-		'future-episodes':   { 'name': ('-f', '--future'),       'help': 'Also show future episodes' },
+		'future-episodes':   { 'name': ('-f', '--future'),       'help': 'Also show future episodes',            'clear': ['future-episode-hint'] },
+		'future-episode-hint': { 'name': ('-F', '--future-hint'),  'help': 'Also shows hint of future episodes', 'clear': ['future-episodes'] },
 		'seen-episodes':     { 'name': ('-S', '--seen'),         'help': 'Show seen episodes' },
 		'next-episode':      { 'name': ('-N', '--next'),         'help': 'Show only next episode, no summary' },
 		'no-seen-summary':   { 'name': '--no-summary',           'help': "Don't show seen summary" },
@@ -1879,10 +1897,10 @@ command_options = {
 		**__opt_tags,
 	},
 	'unseen': {
-	    'started':           { 'name': ('-s', '--started'),      'help': 'List only series with seen episodes' },
-		'planned':           { 'name': ('-p', '--planned'),      'help': 'List only series without seen episodes' },
-		'all-episodes':      { 'name': ('-e', '--episodes'),     'help': 'Show all unseen episodes (not only first)' },
-		'future-episodes':   { 'name': ('-f', '--future'),       'help': 'Also shows (series with) future episodes' },
+		'started':             { 'name': ('-s', '--started'),      'help': 'List only series with seen episodes' },
+		'planned':             { 'name': ('-p', '--planned'),      'help': 'List only series without seen episodes' },
+		'all-episodes':        { 'name': ('-e', '--episodes'),     'help': 'Show all unseen episodes (not only first)' },
+		'future-episodes':     { 'name': ('-f', '--future'),       'help': 'Also shows (series with) future episodes' },
 		**__opt_series_sorting,  # type: ignore  # how to convince mypy here?
 		**__opt_tags,
 	},
@@ -2239,7 +2257,13 @@ def refresh_series(db:Database, width:int, subset:list|None=None, force:bool=Fal
 
 		series['episodes'] = episodes
 		# replace entry in DB
-		db.set_series(series_id, series)
+		try:
+			db.set_series(series_id, series)
+		except Exception as e:
+			print('DATA ERROR: series_id = %s' % series_id, file=sys.stderr)
+			import json
+			print(json.dumps(series, indent=2), file=sys.stderr)
+			raise
 
 		# update meta
 		meta = db[series_id]
@@ -2339,7 +2363,7 @@ def print_series_details(index:int, series:dict, meta:dict, width:int, grey:bool
 		else:
 			print()
 
-def option_def(command:str|None, option:str|None=None):
+def option_def(command:str|None, option:str|None=None) -> dict|None:
 	cmd_opts = command_options.get(command)
 
 	if not isinstance(cmd_opts, dict) or not cmd_opts:
